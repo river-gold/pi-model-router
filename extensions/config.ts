@@ -29,6 +29,7 @@ export const THINKING_LEVELS: readonly ThinkingLevel[] = [
   'medium',
   'high',
   'xhigh',
+  'max',
 ];
 export const ROUTER_PIN_VALUES = ['auto', 'high', 'medium', 'low'] as const;
 
@@ -307,14 +308,15 @@ export const normalizeTierConfig = (
     if (tierThinkingLevels.length === 0) tierThinkingLevels = undefined;
   }
 
+  const explicitThinkingLevels = tierThinkingLevels ?? aliasDefinition?.thinkingLevels;
   const baseThinkingLevels: ThinkingLevel[] =
-    tierThinkingLevels ??
-    aliasDefinition?.thinkingLevels ??
+    explicitThinkingLevels ??
     (effectiveReasoning === false ? [] : [...DEFAULT_THINKING_LEVELS]);
 
-  // Auto-add the tier's thinking value if it's not 'off' and not already present
+  // Auto-add the tier's thinking value if it's not 'off' and not already present,
+  // but only if the user didn't explicitly constrain the thinkingLevels array.
   const resolvedThinkingLevels: ThinkingLevel[] = [...baseThinkingLevels];
-  if (thinking !== 'off' && !resolvedThinkingLevels.includes(thinking)) {
+  if (!explicitThinkingLevels && thinking !== 'off' && !resolvedThinkingLevels.includes(thinking)) {
     resolvedThinkingLevels.push(thinking);
   }
 
@@ -593,4 +595,26 @@ export const getUnsupportedTiers = (
     }
   }
   return unsupported;
+};
+
+/**
+ * Clamps a requested thinking level to the highest supported level
+ * in the provided array of supported levels.
+ */
+export const clampThinkingLevel = (
+  requested: ThinkingLevel,
+  supported: ThinkingLevel[] | undefined,
+): ThinkingLevel => {
+  if (requested === 'off' || !supported || supported.length === 0) {
+    return 'off';
+  }
+  
+  const reqIdx = THINKING_LEVELS.indexOf(requested);
+  for (let i = reqIdx; i >= 0; i--) {
+    if (supported.includes(THINKING_LEVELS[i])) {
+      return THINKING_LEVELS[i];
+    }
+  }
+  
+  return 'off';
 };

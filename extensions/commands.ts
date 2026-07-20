@@ -638,7 +638,7 @@ export const registerCommands = (
               '  status                      Show current status, profile, pin, cost, and last decision.',
               '  profile [name]              Switch to a profile (enables router if off). Lists available if no name.',
               '  pin <tier|auto>             Force a tier (high|medium|low) or set to auto.',
-              '  thinking [tier] <level>     Override thinking level (off|minimal|...|xhigh|auto). Not all tier models may support every level.',
+              '  thinking [tier] <level>     Override thinking level (off|minimal|...|max|auto). Not all tier models may support every level.',
               '  disable                     Disable the router and restore the last used non-router model.',
               '  fix <tier>                  Correct the last routing decision and pin that tier for the current profile.',
               '  widget <on|off|toggle>      Control the persistent status widget visibility.',

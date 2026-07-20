@@ -83,7 +83,7 @@ Copy the example config to one of:
 | `/router profile [name]`    | Switch to a profile or list available ones (enables router if off).             |
 | `/router pin <t\|a>`        | Pin a tier (high/medium/low/auto) for the active profile.                      |
 | `/router fix <tier>`        | Correct the _last_ decision and pin that tier for the current profile.          |
-| `/router thinking <level>`  | Override thinking level for all tiers (e.g. `/router thinking xhigh`). Not all tier models may support every level. |
+| `/router thinking <level>`  | Override thinking level for all tiers (e.g. `/router thinking max`). Not all tier models may support every level. |
 | `/router thinking <tier> <level>` | Override thinking level for a specific tier (e.g. `/router thinking low off`). |
 | `/router disable`           | Disable the router and switch back to the last non-router model.                |
 | `/router widget <on\|off>`  | Toggle the persistent state widget (supports `toggle`).                         |

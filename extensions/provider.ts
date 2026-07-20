@@ -28,6 +28,8 @@ import {
   resolveContextWindow,
   resolveMaxTokens,
   collectProfileThinkingLevels,
+  THINKING_LEVELS,
+  clampThinkingLevel,
 } from './config';
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from './constants';
 const REGISTRY_WAIT_TIMEOUT_MS = 5000;
@@ -213,11 +215,14 @@ export const registerRouterProvider = (
     const hasReasoning = supportsReasoning(profile, state.currentModelRegistry);
     const profileLevels = collectProfileThinkingLevels(profile);
     // Build thinkingLevelMap from the union of all tier models' declared levels.
-    // Only needed if xhigh is in the set (pi supports all others by default).
-    const thinkingLevelMap: Record<string, string> | undefined =
-      hasReasoning && profileLevels.has('xhigh')
-        ? { xhigh: 'xhigh' }
-        : undefined;
+    // Only needed if xhigh or max are in the set (pi supports all others by default).
+    let thinkingLevelMap: Record<string, string> | undefined;
+    if (hasReasoning) {
+      const map: Record<string, string> = {};
+      if (profileLevels.has('xhigh')) map.xhigh = 'xhigh';
+      if (profileLevels.has('max')) map.max = 'max';
+      if (Object.keys(map).length > 0) thinkingLevelMap = map;
+    }
 
     return {
       id: name,
@@ -469,10 +474,21 @@ export const registerRouterProvider = (
                 model.id,
                 decision.tier,
               );
+              let requestedReasoning = (thinkingOverride ?? decision.thinking);
+              
+              if (requestedReasoning !== 'off' && targetModel.reasoning) {
+                const tierConfig = profile[decision.tier];
+                if (tierConfig?.resolvedThinkingLevels) {
+                  requestedReasoning = clampThinkingLevel(
+                    requestedReasoning as ThinkingLevel,
+                    tierConfig.resolvedThinkingLevels,
+                  ) as typeof requestedReasoning;
+                }
+              }
+
               const delegatedReasoning =
-                targetModel.reasoning &&
-                (thinkingOverride ?? decision.thinking) !== 'off'
-                  ? (thinkingOverride ?? decision.thinking) as SimpleStreamOptions['reasoning']
+                targetModel.reasoning && requestedReasoning !== 'off'
+                  ? requestedReasoning as SimpleStreamOptions['reasoning']
                   : undefined;
 
               try {
