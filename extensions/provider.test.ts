@@ -181,6 +181,55 @@ describe('provider.ts', () => {
       expect(mockActions.persistState).toHaveBeenCalled();
     });
 
+    it('clamps the requested thinking level using the target model', async () => {
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(
+        stream as unknown as AssistantMessageEventStream,
+      );
+      vi.mocked(streamSimple).mockReturnValue(
+        (async function* () {
+          yield { type: 'done', message: { usage: { cost: { total: 0 } } } };
+        })() as unknown as ReturnType<typeof streamSimple>,
+      );
+
+      mockState.pinnedTierByProfile['balanced'] = 'high';
+      mockActions.getThinkingOverride = vi.fn().mockReturnValue(
+        'max' as unknown as ThinkingLevel,
+      );
+      mockState.currentModelRegistry!.find = (
+        provider: string,
+        modelId: string,
+      ) => ({
+        provider,
+        id: modelId,
+        reasoning: true,
+        thinkingLevelMap: {
+          off: null,
+          minimal: null,
+          low: 'low',
+          medium: 'medium',
+          high: 'high',
+          xhigh: null,
+          max: null,
+        },
+        input: ['text'] as const,
+      } as unknown as Model<Api>);
+
+      const model = {
+        id: 'balanced',
+        api: 'router-api' as Api,
+        provider: 'router',
+      } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const delegatedOptions = vi.mocked(streamSimple).mock.calls[0]?.[2];
+      expect(delegatedOptions?.reasoning).toBe('max');
+    });
+
     it('should try fallbacks if the primary model fails', async () => {
       registerRouterProvider(mockPi, mockState, mockActions);
       const stream = new MockEventStream();

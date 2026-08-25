@@ -40,7 +40,6 @@ describe('commands.ts', () => {
 
   const buildDefaultState = () => {
     const config: RouterConfig = {
-      phaseBias: 0.5,
       profiles: {
         balanced: {
           high: { model: 'openai/gpt-4o' },
@@ -215,9 +214,12 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking high xhigh', ctx as any);
-      expect(state.thinkingByProfile.balanced?.high).toBe('xhigh');
-      expect(actions.persistState).toHaveBeenCalled();
-      expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
+      // Router is fixed-thinking — no override is stored
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining('fixed thinking'),
+        'info',
+      );
+      expect(state.thinkingByProfile.balanced).toBeUndefined();
     });
 
     it('should handle /router disable', async () => {
@@ -525,7 +527,7 @@ describe('commands.ts', () => {
 
       await cmd.handler('thinking', ctx as any);
       expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Thinking overrides:'),
+        expect.stringContaining('fixed thinking'),
         'info',
       );
     });
@@ -541,8 +543,8 @@ describe('commands.ts', () => {
 
       await cmd.handler('thinking high medium low', ctx as any);
       expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Too many arguments for /router thinking.',
-        'error',
+        expect.stringContaining('fixed thinking'),
+        'info',
       );
     });
 
@@ -557,8 +559,8 @@ describe('commands.ts', () => {
 
       await cmd.handler('thinking badtier high', ctx as any);
       expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid tier: badtier'),
-        'error',
+        expect.stringContaining('fixed thinking'),
+        'info',
       );
     });
 
@@ -573,8 +575,8 @@ describe('commands.ts', () => {
 
       await cmd.handler('thinking badlevel', ctx as any);
       expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid thinking level: badlevel'),
-        'error',
+        expect.stringContaining('fixed thinking'),
+        'info',
       );
     });
 
@@ -589,10 +591,12 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking auto', ctx as any);
-      // All tier overrides should be cleared, and the profile entry deleted
-      expect(state.thinkingByProfile.balanced).toBeUndefined();
-      expect(actions.persistState).toHaveBeenCalled();
-      expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining('fixed thinking'),
+        'info',
+      );
+      // No override is cleared — router is fixed
+      expect(state.thinkingByProfile.balanced).toEqual({ high: 'xhigh', medium: 'medium' });
     });
 
     it('should apply thinking level to specific tier', async () => {
@@ -605,8 +609,11 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking low minimal', ctx as any);
-      expect(state.thinkingByProfile.balanced?.low).toBe('minimal');
-      expect(actions.persistState).toHaveBeenCalled();
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining('fixed thinking'),
+        'info',
+      );
+      expect(state.thinkingByProfile.balanced?.low).toBeUndefined();
     });
 
     it('should clear specific tier with auto', async () => {
@@ -620,9 +627,11 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking high auto', ctx as any);
-      // The profile entry should be cleaned up since it's empty
-      expect(state.thinkingByProfile.balanced).toBeUndefined();
-      expect(actions.persistState).toHaveBeenCalled();
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining('fixed thinking'),
+        'info',
+      );
+      expect(state.thinkingByProfile.balanced).toEqual({ high: 'xhigh' });
     });
 
     it('should sync pi thinking level when setting a level', async () => {
@@ -635,7 +644,11 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking high', ctx as any);
-      expect(actions.syncPiThinkingLevel).toHaveBeenCalledWith('high');
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining('fixed thinking'),
+        'info',
+      );
+      expect(actions.syncPiThinkingLevel).not.toHaveBeenCalled();
     });
 
     it('should restore last decision thinking when setting auto', async () => {
@@ -648,22 +661,22 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking auto', ctx as any);
-      // lastDecision.thinking is 'medium'
-      expect(actions.syncPiThinkingLevel).toHaveBeenCalledWith('medium');
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining('fixed thinking'),
+        'info',
+      );
+      expect(actions.syncPiThinkingLevel).not.toHaveBeenCalled();
     });
 
     it('should warn about unsupported tiers', async () => {
       const pi = buildMockPi();
       const state = buildDefaultState();
-      // Set up profile with resolvedThinkingLevels that exclude 'xhigh'
       state.currentConfig.profiles.balanced = {
         high: {
           model: 'openai/gpt-4o',
-          resolvedThinkingLevels: ['high', 'medium', 'low'],
         },
         medium: {
           model: 'openai/gpt-4o-mini',
-          resolvedThinkingLevels: ['high', 'medium', 'low'],
         },
       };
       const actions = buildMockActions();
@@ -673,10 +686,9 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking xhigh', ctx as any);
-      // Should warn that tiers don't support xhigh
       expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("may not support 'xhigh'"),
-        'warning',
+        expect.stringContaining('fixed thinking'),
+        'info',
       );
     });
 
@@ -686,7 +698,6 @@ describe('commands.ts', () => {
       state.currentConfig.profiles.balanced = {
         high: {
           model: 'openai/gpt-4o',
-          resolvedThinkingLevels: ['high', 'medium'],
         },
       };
       const actions = buildMockActions();
@@ -713,10 +724,11 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       await cmd.handler('thinking all high', ctx as any);
-      expect(state.thinkingByProfile.balanced?.high).toBe('high');
-      expect(state.thinkingByProfile.balanced?.medium).toBe('high');
-      expect(state.thinkingByProfile.balanced?.low).toBe('high');
-      expect(actions.persistState).toHaveBeenCalled();
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining('fixed thinking'),
+        'info',
+      );
+      expect(state.thinkingByProfile.balanced).toBeUndefined();
     });
   });
 
@@ -1005,11 +1017,8 @@ describe('commands.ts', () => {
       const cmd = pi.getRegisteredCommand();
 
       const completions = cmd.getArgumentCompletions('thinking ');
-      expect(completions).toBeDefined();
-      const values = completions!.map((c: any) => c.value);
-      // Should have levels and tiers
-      expect(values).toContain('thinking auto');
-      expect(values).toContain('thinking high');
+      // Router is fixed-thinking — no completions
+      expect(completions).toBeNull();
     });
 
     it('should return null when thinking first arg is a level-tier overlap', () => {

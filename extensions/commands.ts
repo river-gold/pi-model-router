@@ -13,11 +13,9 @@ import type {
 } from './types';
 import {
   profileNames,
-  THINKING_LEVELS,
   ROUTER_PIN_VALUES,
   ROUTER_TIERS,
   parseCanonicalModelRef,
-  getUnsupportedTiers,
 } from './config';
 import {
   formatPinSummary,
@@ -106,54 +104,13 @@ export const registerCommands = (
   };
 
   const getThinkingCompletions = (
-    args: string[],
+    _args: string[],
   ): AutocompleteItem[] | null => {
-    // thinking [tier] <level|auto>
-    const tierValues = [...ROUTER_TIERS];
-    const levelValues = ['auto', ...THINKING_LEVELS];
-
-    if (args.length <= 1) {
-      const token = args[0] ?? '';
-      return [
-        ...levelValues
-          .filter((v) => v.startsWith(token))
-          .map((v) => ({
-            value: v,
-            label: v,
-            description: v === 'auto'
-              ? 'Restore default thinking level'
-              : `Set thinking level to ${v}`,
-          })),
-        ...tierValues
-          .filter((v) => v.startsWith(token))
-          .map((v) => ({
-            value: v,
-            label: v,
-            description: `Override thinking for ${v} tier`,
-          })),
-      ];
-    }
-
-    if (levelValues.includes(args[0])) {
-      return null;
-    }
-
-    if ((tierValues as string[]).includes(args[0])) {
-      const tier = args[0];
-      const levelPrefix = args[1] ?? '';
-      return levelValues
-        .filter((v) => v.startsWith(levelPrefix))
-        .map((v) => ({
-          value: `${tier} ${v}`,
-          label: `${tier} ${v}`,
-          description: v === 'auto'
-            ? `Restore default thinking level for ${tier} tier`
-            : `Set thinking level to ${v} for ${tier} tier`,
-        }));
-    }
-
+    // Router models are fixed-thinking — no effort completions.
     return null;
   };
+
+
 
 
   const handleStatus = async (args: string[], ctx: ExtensionContext) => {
@@ -170,7 +127,6 @@ export const registerCommands = (
       `Pins by profile: ${formatPinSummary(state.pinnedTierByProfile)}`,
       `Thinking overrides: ${formatThinkingSummary(state.thinkingByProfile)}`,
       `Widget: ${state.widgetEnabled ? 'on' : 'off'}`,
-      `Phase bias: ${state.currentConfig.phaseBias}`,
       `Session cost: $${state.accumulatedCost.toFixed(4)}` +
         (state.currentConfig.maxSessionBudget
           ? ` / $${state.currentConfig.maxSessionBudget.toFixed(2)}`
@@ -274,111 +230,18 @@ export const registerCommands = (
     );
   };
 
-  const handleThinking = async (args: string[], ctx: ExtensionContext) => {
+  const handleThinking = async (_args: string[], ctx: ExtensionContext) => {
     const currentProfile = state.selectedProfile;
     if (!currentProfile) {
       ctx.ui.notify('No router profile is active. Select a router model first.', 'error');
       return;
     }
-    if (args.length === 0) {
-      ctx.ui.notify(
-        [
-          `Profile: ${currentProfile}`,
-          `Thinking overrides: ${JSON.stringify(state.thinkingByProfile[currentProfile] ?? {})}`,
-          'Usage: /router thinking <level|auto>           (applies to all tiers)',
-          '   or: /router thinking <tier> <level|auto>    (applies to one tier)',
-          'Note: not all tier models may support every thinking level.',
-        ].join('\n'),
-        'info',
-      );
-      return;
-    }
-
-    if (args.length > 2) {
-      ctx.ui.notify('Too many arguments for /router thinking.', 'error');
-      return;
-    }
-
-    let tier: RouterTier | 'all' | undefined = undefined;
-    let levelValue = '';
-
-    const tierValues = ['high', 'medium', 'low'];
-    const levelValues = ['auto', ...THINKING_LEVELS];
-
-    if (args.length === 1) {
-      levelValue = args[0];
-      tier = 'all';
-    } else if (args.length === 2) {
-      if (tierValues.includes(args[0]) || args[0] === 'all') {
-        tier = args[0] as RouterTier | 'all';
-        levelValue = args[1];
-      } else {
-        ctx.ui.notify(
-          `Invalid tier: ${args[0]}. Use high, medium, or low.`,
-          'error',
-        );
-        return;
-      }
-    }
-
-    if (tier !== 'all' && !tierValues.includes(tier as string)) {
-      ctx.ui.notify(
-        `Invalid tier: ${tier}. Use high, medium, or low.`,
-        'error',
-      );
-      return;
-    }
-    if (!levelValues.includes(levelValue)) {
-      ctx.ui.notify(
-        `Invalid thinking level: ${levelValue}. Use auto or: ${THINKING_LEVELS.join(', ')}`,
-        'error',
-      );
-      return;
-    }
-
-    const nextLevel = levelValue === 'auto' ? undefined : (levelValue as any);
-    if (tier === 'all') {
-      for (const t of ROUTER_TIERS) {
-        if (!state.thinkingByProfile[currentProfile])
-          state.thinkingByProfile[currentProfile] = {};
-        if (nextLevel) state.thinkingByProfile[currentProfile]![t] = nextLevel;
-        else delete state.thinkingByProfile[currentProfile]![t];
-      }
-    } else {
-      if (!state.thinkingByProfile[currentProfile])
-        state.thinkingByProfile[currentProfile] = {};
-      if (nextLevel)
-        state.thinkingByProfile[currentProfile]![tier as RouterTier] = nextLevel;
-      else delete state.thinkingByProfile[currentProfile]![tier as RouterTier];
-    }
-    if (
-      state.thinkingByProfile[currentProfile] &&
-      Object.keys(state.thinkingByProfile[currentProfile]!).length === 0
-    ) {
-      delete state.thinkingByProfile[currentProfile];
-    }
-
-    actions.persistState();
-    actions.updateStatus(ctx);
-    if (nextLevel) {
-      actions.syncPiThinkingLevel(nextLevel);
-    } else if (state.lastDecision) {
-      actions.syncPiThinkingLevel(state.lastDecision.thinking);
-    }
-    // Only warn when the level isn't supported by some tiers; skip for 'off' and 'auto'
-    if (nextLevel && nextLevel !== 'off') {
-      const unsupported = getUnsupportedTiers(
-        state.currentConfig.profiles[currentProfile],
-        nextLevel,
-      );
-      if (unsupported.length > 0) {
-        ctx.ui.notify(
-          `Router thinking (${tier}) set to ${nextLevel}. ` +
-            `${unsupported.join(', ')} tier${unsupported.length > 1 ? 's' : ''} may not support '${nextLevel}'.`,
-          'warning',
-        );
-      }
-    }
+    // Router models are fixed-thinking (reasoning:false) — effort overrides disabled.
+    ctx.ui.notify(
+      'Router profiles have fixed thinking (no effort). Tier thinking is from model-router.json and clamped per target model.',
+      'info',
+    );
+    return;
   };
 
   const handleDisable = async (args: string[], ctx: ExtensionContext) => {

@@ -18,7 +18,6 @@ import {
   resolveProfileName,
   parseCanonicalModelRef,
   ROUTER_TIERS,
-  getUnsupportedTiers,
 } from './config';
 import { MAX_DEBUG_HISTORY } from './constants';
 import { isRouterPersistedState, buildPersistedState } from './state';
@@ -510,34 +509,12 @@ const routerExtension = (pi: ExtensionAPI) => {
     actions.updateStatus(ctx);
   });
 
-  pi.on('thinking_level_select', (event, ctx) => {
+  pi.on('thinking_level_select', (_event, ctx) => {
     ensureInitializedFromContext(ctx);
     if (!isInitialized || !routerEnabled || !selectedProfile) return;
     if (isInternalThinkingChange) return;
-
-    // User changed pi's thinking level (e.g. via shift+tab).
-    // Apply as an all-tier thinking override for the active router profile.
-    if (!thinkingByProfile[selectedProfile]) {
-      thinkingByProfile[selectedProfile] = {};
-    }
-    for (const t of ROUTER_TIERS) {
-      thinkingByProfile[selectedProfile]![t] = event.level;
-    }
-    persistState();
-    actions.updateStatus(ctx);
-    if (event.level !== 'off') {
-      const unsupported = getUnsupportedTiers(
-        currentConfig.profiles[selectedProfile],
-        event.level,
-      );
-      if (unsupported.length > 0) {
-        ctx.ui.notify(
-          `Router thinking (all) set to ${event.level}. ` +
-            `${unsupported.join(', ')} tier${unsupported.length > 1 ? 's' : ''} may not support '${event.level}'.`,
-          'warning',
-        );
-      }
-    }
+    // Router models are fixed-thinking (reasoning:false) — shift+tab is ignored.
+    // Tier effort comes from model-router.json and is clamped per target model.
   });
 };
 

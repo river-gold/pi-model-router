@@ -13,14 +13,6 @@ export interface RoutingRule {
   reason?: string;
 }
 
-export interface ModelDefinition {
-  model: string;
-  contextWindow?: number;
-  maxTokens?: number;
-  reasoning?: boolean;
-  thinkingLevels?: ThinkingLevel[];
-}
-
 export interface ClassifierConfig {
   model: string;
   thinking?: ThinkingLevel;
@@ -33,10 +25,8 @@ export interface RoutedTierConfig {
   contextWindow?: number;
   maxTokens?: number;
   reasoning?: boolean;
-  thinkingLevels?: ThinkingLevel[];
   resolvedContextWindow?: number;
   resolvedMaxTokens?: number;
-  resolvedThinkingLevels?: ThinkingLevel[];
 }
 
 export interface RouterProfile {
@@ -48,11 +38,9 @@ export interface RouterProfile {
 export interface RouterConfig {
   debug?: boolean;
   classifierModel?: ClassifierConfig;
-  phaseBias?: number;
   maxSessionBudget?: number;
   rules?: RoutingRule[];
   profiles: Record<string, RouterProfile>;
-  models?: Record<string, ModelDefinition>;
 }
 
 export interface RoutingDecision {

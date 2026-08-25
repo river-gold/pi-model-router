@@ -1,10 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   parseConfigFile,
-  resolveModelRef,
   mergeConfig,
   parseCanonicalModelRef,
-  normalizeModelsMap,
   normalizeTierConfig,
   normalizeConfig,
   loadRouterConfig,
@@ -12,13 +10,12 @@ import {
   resolveProfileName,
   resolveContextWindow,
   resolveMaxTokens,
-  collectProfileThinkingLevels,
-  getUnsupportedTiers,
+  resolveDelegatedReasoning,
   isObjectRecord,
-  isThinkingLevel,
   isRouterTier,
 } from './config';
-import type { RouterConfig, RouterProfile, ModelDefinition, RoutedTierConfig } from './types';
+import type { Api, Model } from '@earendil-works/pi-ai';
+import type { RouterConfig, RouterProfile, RoutedTierConfig } from './types';
 
 vi.mock('@earendil-works/pi-coding-agent', () => ({
   getAgentDir: () => '/mock/agent/dir',
@@ -74,14 +71,6 @@ describe('config.ts', () => {
       expect(isObjectRecord([])).toBe(false);
     });
 
-    it('isThinkingLevel should validate thinking levels', () => {
-      expect(isThinkingLevel('off')).toBe(true);
-      expect(isThinkingLevel('high')).toBe(true);
-      expect(isThinkingLevel('xhigh')).toBe(true);
-      expect(isThinkingLevel('invalid')).toBe(false);
-      expect(isThinkingLevel(123)).toBe(false);
-    });
-
     it('isRouterTier should validate tiers', () => {
       expect(isRouterTier('high')).toBe(true);
       expect(isRouterTier('medium')).toBe(true);
@@ -119,35 +108,14 @@ describe('config.ts', () => {
     });
   });
 
-  describe('resolveModelRef', () => {
-    const models: Record<string, ModelDefinition> = {
-      gpt4: { model: 'openai/gpt-4o', contextWindow: 128000 },
-    };
-
-    it('should resolve defined alias', () => {
-      const resolved = resolveModelRef('gpt4', models);
-      expect(resolved.canonicalRef).toBe('openai/gpt-4o');
-      expect(resolved.definition).toBe(models.gpt4);
-    });
-
-    it('should return canonical ref if not an alias', () => {
-      const resolved = resolveModelRef('anthropic/claude-3-opus', models);
-      expect(resolved.canonicalRef).toBe('anthropic/claude-3-opus');
-      expect(resolved.definition).toBeUndefined();
-    });
-  });
-
   describe('mergeConfig', () => {
-    it('should merge profiles and models override', () => {
+    it('should merge profiles override', () => {
       const base: RouterConfig = {
         debug: false,
         profiles: {
           balanced: {
             medium: { model: 'openai/gpt-4o-mini' },
           },
-        },
-        models: {
-          gpt4: { model: 'openai/gpt-4o' },
         },
       };
 
@@ -161,9 +129,6 @@ describe('config.ts', () => {
             low: { model: 'openai/gpt-4o-mini' },
           },
         },
-        models: {
-          claude: { model: 'anthropic/claude-3.5-sonnet' },
-        },
       };
 
       const merged = mergeConfig(base, override);
@@ -171,8 +136,6 @@ describe('config.ts', () => {
       expect(merged.profiles.balanced.medium?.model).toBe('openai/gpt-4o-mini');
       expect(merged.profiles.balanced.high?.model).toBe('openai/gpt-4o');
       expect(merged.profiles.cheap?.low?.model).toBe('openai/gpt-4o-mini');
-      expect(merged.models?.gpt4.model).toBe('openai/gpt-4o');
-      expect(merged.models?.claude.model).toBe('anthropic/claude-3.5-sonnet');
     });
   });
 
@@ -201,33 +164,7 @@ describe('config.ts', () => {
     });
   });
 
-  describe('normalizeModelsMap', () => {
-    it('should extract valid models and log warnings', () => {
-      const warnings: string[] = [];
-      const raw = {
-        valid: { model: 'openai/gpt-4o', contextWindow: 100000 },
-        invalidType: 'not-an-object',
-        missingModel: { contextWindow: 100 },
-        invalidRef: { model: 'gpt4' },
-      };
-      const result = normalizeModelsMap(
-        raw as unknown as Record<string, unknown>,
-        warnings,
-      );
-      expect(result.valid).toEqual({
-        model: 'openai/gpt-4o',
-        contextWindow: 100000,
-        maxTokens: undefined,
-      });
-      expect(warnings.length).toBe(3);
-    });
-  });
-
   describe('normalizeTierConfig', () => {
-    const models = {
-      gpt4: { model: 'openai/gpt-4o', contextWindow: 80000 },
-    };
-
     it('should return undefined if input is not object', () => {
       const warnings: string[] = [];
       expect(
@@ -245,13 +182,13 @@ describe('config.ts', () => {
     it('should resolve and normalize details', () => {
       const warnings: string[] = [];
       const raw = {
-        model: 'gpt4',
+        model: 'openai/gpt-4o',
         thinking: 'high',
         fallbacks: ['google/gemini-1.5-flash', 'invalid-fallback'],
         contextWindow: 50000,
         maxTokens: 2000,
       };
-      const result = normalizeTierConfig(raw, 'p', 'high', warnings, models);
+      const result = normalizeTierConfig(raw, 'p', 'high', warnings);
       expect(result).toBeDefined();
       expect(result?.model).toBe('openai/gpt-4o');
       expect(result?.thinking).toBe('high');
@@ -264,12 +201,11 @@ describe('config.ts', () => {
   });
 
   describe('normalizeConfig', () => {
-    it('should normalize rules, profiles, phaseBias, budget, classifierModel', () => {
+    it('should normalize rules, profiles, budget, classifierModel', () => {
       const raw = {
         debug: true,
-        phaseBias: 0.8,
         maxSessionBudget: 5.5,
-        classifierModel: 'gpt4',
+        classifierModel: 'openai/gpt-4o',
         rules: [
           { matches: 'test', tier: 'high', reason: 'Rule reason' },
           { matches: ['foo', 'bar'], tier: 'low' },
@@ -279,9 +215,6 @@ describe('config.ts', () => {
             high: { model: 'google/gemini-2.5-pro' },
           },
         },
-        models: {
-          gpt4: { model: 'openai/gpt-4o' },
-        },
       };
 
       const { config, warnings } = normalizeConfig(
@@ -289,7 +222,6 @@ describe('config.ts', () => {
       );
       expect(warnings).toEqual([]);
       expect(config.debug).toBe(true);
-      expect(config.phaseBias).toBe(0.8);
       expect(config.maxSessionBudget).toBe(5.5);
       expect(config.classifierModel?.model).toBe('openai/gpt-4o');
       expect(config.rules?.length).toBe(2);
@@ -415,72 +347,24 @@ describe('config.ts', () => {
     });
   });
 
-  describe('collectProfileThinkingLevels', () => {
-    it('should collect thinking levels from all tiers', () => {
-      const profile: RouterProfile = {
-        high: { model: 'openai/gpt-4o', resolvedThinkingLevels: ['high', 'xhigh'] },
-        medium: { model: 'openai/gpt-4o-mini', resolvedThinkingLevels: ['medium', 'low'] },
-      };
-      const levels = collectProfileThinkingLevels(profile);
-      expect(levels.has('high')).toBe(true);
-      expect(levels.has('xhigh')).toBe(true);
-      expect(levels.has('medium')).toBe(true);
-      expect(levels.has('low')).toBe(true);
-      expect(levels.size).toBe(4);
-    });
+  describe('thinking level resolution', () => {
+    it('resolves against the target model capabilities', () => {
+      const model = {
+        reasoning: true,
+        thinkingLevelMap: {
+          off: null,
+          minimal: null,
+          low: 'low',
+          medium: 'medium',
+          high: 'high',
+          xhigh: null,
+          max: null,
+        },
+      } as unknown as Model<Api>;
 
-    it('should return empty set for profile with no tiers', () => {
-      const profile: RouterProfile = {};
-      const levels = collectProfileThinkingLevels(profile);
-      expect(levels.size).toBe(0);
-    });
-
-    it('should skip tiers without resolvedThinkingLevels', () => {
-      const profile: RouterProfile = {
-        high: { model: 'openai/gpt-4o', resolvedThinkingLevels: ['high'] },
-        medium: { model: 'openai/gpt-4o-mini' },
-      };
-      const levels = collectProfileThinkingLevels(profile);
-      expect(levels.size).toBe(1);
-      expect(levels.has('high')).toBe(true);
-    });
-  });
-
-  describe('getUnsupportedTiers', () => {
-    it('should return tiers that do not include the requested thinking level', () => {
-      const profile: RouterProfile = {
-        high: { model: 'openai/gpt-4o', resolvedThinkingLevels: ['high', 'xhigh'] },
-        medium: { model: 'openai/gpt-4o-mini', resolvedThinkingLevels: ['medium', 'low'] },
-        low: { model: 'openai/gpt-4o-micro', resolvedThinkingLevels: ['low'] },
-      };
-      const unsupported = getUnsupportedTiers(profile, 'xhigh');
-      expect(unsupported).toEqual(['medium', 'low']);
-    });
-
-    it('should return empty array if all tiers support the level', () => {
-      const profile: RouterProfile = {
-        high: { model: 'openai/gpt-4o', resolvedThinkingLevels: ['high', 'medium'] },
-        medium: { model: 'openai/gpt-4o-mini', resolvedThinkingLevels: ['medium'] },
-      };
-      const unsupported = getUnsupportedTiers(profile, 'medium');
-      expect(unsupported).toEqual([]);
-    });
-
-    it('should skip missing tiers (undefined tier config)', () => {
-      const profile: RouterProfile = {
-        high: { model: 'openai/gpt-4o', resolvedThinkingLevels: ['high'] },
-      };
-      const unsupported = getUnsupportedTiers(profile, 'low');
-      expect(unsupported).toEqual(['high']);
-    });
-
-    it('should treat tiers with undefined resolvedThinkingLevels as unsupported', () => {
-      const profile: RouterProfile = {
-        high: { model: 'openai/gpt-4o' },
-        medium: { model: 'openai/gpt-4o-mini', resolvedThinkingLevels: ['medium'] },
-      };
-      const unsupported = getUnsupportedTiers(profile, 'medium');
-      expect(unsupported).toEqual(['high']);
+      expect(resolveDelegatedReasoning(model, 'max')).toBe('max');
+      expect(resolveDelegatedReasoning(model, 'off')).toBeUndefined();
+      expect(resolveDelegatedReasoning({ reasoning: false } as unknown as Model<Api>, 'high')).toBeUndefined();
     });
   });
 
@@ -507,9 +391,8 @@ describe('config.ts', () => {
       };
       const { config, warnings } = normalizeConfig(raw as unknown as RouterConfig);
       expect(config.classifierModel?.model).toBe('openai/gpt-4o');
-      expect(config.classifierModel?.thinking).toBeUndefined();
-      expect(warnings.length).toBe(1);
-      expect(warnings[0]).toContain('invalid thinking level');
+      expect(config.classifierModel?.thinking).toBe('super-invalid');
+      expect(warnings.length).toBe(0);
     });
 
     it('should warn when classifierModel object is missing model field', () => {

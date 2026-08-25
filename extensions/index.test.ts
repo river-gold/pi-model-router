@@ -22,8 +22,6 @@ vi.mock('./config', () => ({
   }),
   resolveContextWindow: () => 100000,
   resolveMaxTokens: () => 4000,
-  collectProfileThinkingLevels: () => new Set<string>(),
-  getUnsupportedTiers: () => [] as string[],
   ROUTER_TIERS: ['high', 'medium', 'low'] as const,
   ROUTER_PIN_VALUES: ['auto', 'high', 'medium', 'low'] as const,
   THINKING_LEVELS: [
@@ -250,30 +248,20 @@ describe('index.ts (orchestrator)', () => {
 
       const mockCtx = buildMockCtx();
 
-      // Initialize via session_start (sets routerEnabled=true, selectedProfile='balanced')
       const sessionStartHandlers = eventListeners['session_start'] || [];
       for (const handler of sessionStartHandlers) {
         await handler({}, mockCtx);
       }
 
-      // Clear appendEntry calls from initialization
       mockPi.appendEntry.mockClear();
 
-      // Trigger thinking_level_select
       const thinkingHandlers = eventListeners['thinking_level_select'] || [];
       for (const handler of thinkingHandlers) {
         handler({ level: 'high' }, mockCtx);
       }
 
-      // Should persist state with thinking overrides for all tiers
-      expect(mockPi.appendEntry).toHaveBeenCalledWith(
-        'router-state',
-        expect.objectContaining({
-          thinkingByProfile: {
-            balanced: { high: 'high', medium: 'high', low: 'high' },
-          },
-        }),
-      );
+      // Router is fixed-thinking — shift+tab is ignored
+      expect(mockPi.appendEntry).not.toHaveBeenCalled();
     });
 
     it('should be ignored when router is not enabled', async () => {

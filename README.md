@@ -6,14 +6,13 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 
 - **Logical Router Provider**: Registers a `router` provider that exposes stable profiles (e.g., `router/balanced`) as models.
 - **Per-Turn Routing**: Intelligently chooses between `high`, `medium`, and `low` tiers for every turn based on task intent and complexity.
-- **Task-Aware Heuristics**: Detects planning vs. implementation vs. lightweight tasks using keyword analysis, word count, and conversation history.
+- **Rule-Based Routing**: Routes via pinned tier, custom `rules`, or `classifierModel` — no built-in keyword heuristics.
 - **Advanced Controls**: Includes built-in support for:
   - **LLM Intent Classifier**: Optionally use a fast model to categorize intent (overrides heuristics).
   - **Custom Rules**: Define keyword-based tier overrides for specific patterns (e.g., `deploy` → `high`).
   - **Cost Budgeting**: Set a session spend limit; high tier downgrades to medium once exceeded.
   - **Fallback Chains**: Automatic retry with alternative models if the primary choice fails.
-- **Phase Memory**: Biased stickiness to keep you in the same tier during multi-turn planning or implementation work.
-- **Thinking Control**: Full control over reasoning/thinking levels per tier and profile. Changing pi's thinking level (e.g. via `shift+tab`) automatically applies as an all-tier override for the active router profile.
+- **Thinking Control**: Fixed per-tier `thinking` from `model-router.json` (no effort UI); delegated reasoning is clamped per target model.
 - **Persistent State**: Pins, profiles, costs, and debug history are remembered across agent restarts and conversation branches.
 
 ## Installation
@@ -67,12 +66,10 @@ Copy the example config to one of:
 
 | Field                   | Description                                                                       |
 | ----------------------- | --------------------------------------------------------------------------------- |
-| `classifierModel`       | (Optional) Model used to categorize intent. Supports model aliases. If omitted, fast heuristics are used. |
+| `classifierModel`       | (Optional) Model used to categorize intent. Supports model aliases. If omitted, defaults to `medium` when no `rules` or `pin` matches. |
 | `maxSessionBudget`      | (Optional) USD budget for the session. Forces `medium` tier once exceeded.        |
-| `phaseBias`             | (0.0 - 1.0) Stickiness of the current phase. Higher = more stable. Default `0.5`. |
 | `rules`                 | List of custom keyword rules (e.g. `{ "matches": "deploy", "tier": "high" }`).    |
-| `models`                | (Optional) Map of model aliases to definitions with `model`, `contextWindow`, `maxTokens`. |
-| `profiles`              | Map of profile definitions, each containing optional `high`, `medium`, and `low` tiers (at least one required). Tier models can reference aliases from `models`. |
+| `profiles`              | Map of profile definitions, each containing optional `high`, `medium`, and `low` tiers (at least one required). |
 
 ## Commands
 

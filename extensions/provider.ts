@@ -27,9 +27,7 @@ import {
   ROUTER_TIERS,
   resolveContextWindow,
   resolveMaxTokens,
-  collectProfileThinkingLevels,
-  THINKING_LEVELS,
-  clampThinkingLevel,
+  resolveDelegatedReasoning,
 } from './config';
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from './constants';
 const REGISTRY_WAIT_TIMEOUT_MS = 5000;
@@ -137,28 +135,6 @@ const truncateContext = (context: Context, limit: number): Context => {
   return { ...context, messages: finalMessages };
 };
 
-const supportsReasoning = (
-  profile: RouterConfig['profiles'][string],
-  modelRegistry: ExtensionContext['modelRegistry'] | undefined,
-): boolean => {
-  if (!modelRegistry) return false;
-
-  for (const tier of ROUTER_TIERS) {
-    const tierConfig = profile[tier];
-    if (!tierConfig) continue;
-    try {
-      const { provider, modelId } = parseCanonicalModelRef(tierConfig.model);
-      if (modelRegistry.find(provider, modelId)?.reasoning) {
-        return true;
-      }
-    } catch (_error) {
-      // ignore invalid model refs here; config normalization handles warnings
-    }
-  }
-
-  return false;
-};
-
 export const registerRouterProvider = (
   pi: ExtensionAPI,
   state: {
@@ -212,23 +188,13 @@ export const registerRouterProvider = (
       if (mot > maxMaxTokens) maxMaxTokens = mot;
     }
 
-    const hasReasoning = supportsReasoning(profile, state.currentModelRegistry);
-    const profileLevels = collectProfileThinkingLevels(profile);
-    // Build thinkingLevelMap from the union of all tier models' declared levels.
-    // Only needed if xhigh or max are in the set (pi supports all others by default).
-    let thinkingLevelMap: Record<string, string> | undefined;
-    if (hasReasoning) {
-      const map: Record<string, string> = {};
-      if (profileLevels.has('xhigh')) map.xhigh = 'xhigh';
-      if (profileLevels.has('max')) map.max = 'max';
-      if (Object.keys(map).length > 0) thinkingLevelMap = map;
-    }
-
+    // Router models are fixed-thinking: never expose thinking levels.
+    // Tier thinking comes from model-router.json; delegated reasoning is
+    // clamped per-target model via resolveDelegatedReasoning.
     return {
       id: name,
       name: `Router ${name}`,
-      reasoning: hasReasoning,
-      ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
+      reasoning: false,
       input: ['text', 'image'] as ('text' | 'image')[],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: maxContextWindow,
@@ -284,7 +250,6 @@ export const registerRouterProvider = (
             state.lastDecision,
             pinnedTier,
             state.thinkingByProfile[model.id],
-            state.currentConfig.phaseBias,
             state.currentConfig.rules,
             isBudgetExceeded,
           );
@@ -474,22 +439,10 @@ export const registerRouterProvider = (
                 model.id,
                 decision.tier,
               );
-              let requestedReasoning = (thinkingOverride ?? decision.thinking);
-              
-              if (requestedReasoning !== 'off' && targetModel.reasoning) {
-                const tierConfig = profile[decision.tier];
-                if (tierConfig?.resolvedThinkingLevels) {
-                  requestedReasoning = clampThinkingLevel(
-                    requestedReasoning as ThinkingLevel,
-                    tierConfig.resolvedThinkingLevels,
-                  ) as typeof requestedReasoning;
-                }
-              }
-
-              const delegatedReasoning =
-                targetModel.reasoning && requestedReasoning !== 'off'
-                  ? requestedReasoning as SimpleStreamOptions['reasoning']
-                  : undefined;
+              const delegatedReasoning = resolveDelegatedReasoning(
+                targetModel,
+                thinkingOverride ?? decision.thinking,
+              ) as SimpleStreamOptions['reasoning'] | undefined;
 
               try {
                 if (state.lastExtensionContext) {

@@ -262,7 +262,6 @@ describe('routing.ts', () => {
         undefined,
         undefined,
         undefined,
-        0.5,
         rules,
       );
       expect(decision.tier).toBe('high');
@@ -290,7 +289,6 @@ describe('routing.ts', () => {
         undefined,
         undefined,
         undefined,
-        0.5,
         rulesWithCapitalCase,
       );
       expect(decision.tier).toBe('high');
@@ -319,7 +317,6 @@ describe('routing.ts', () => {
         undefined,
         undefined,
         undefined,
-        0.5,
         rulesWithMultipleMatches,
       );
       expect(decision.tier).toBe('high');
@@ -328,6 +325,7 @@ describe('routing.ts', () => {
     });
 
     it('should route explicit high/low hints', () => {
+      // Heuristics removed: explicit hints no longer change tier without a custom rule.
       const contextHigh: Context = {
         messages: [
           {
@@ -338,7 +336,7 @@ describe('routing.ts', () => {
         ],
       };
       const decisionHigh = decideRouting(contextHigh, 'p', profile, undefined);
-      expect(decisionHigh.tier).toBe('high');
+      expect(decisionHigh.tier).toBe('medium');
 
       const contextLow: Context = {
         messages: [
@@ -346,23 +344,23 @@ describe('routing.ts', () => {
         ],
       };
       const decisionLow = decideRouting(contextLow, 'p', profile, undefined);
-      expect(decisionLow.tier).toBe('low');
+      expect(decisionLow.tier).toBe('medium');
     });
 
     it('should downgrade high to medium if budget is exceeded', () => {
       const context: Context = {
         messages: [
-          { role: 'user', content: 'think hard', timestamp: Date.now() },
+          { role: 'user', content: 'hello', timestamp: Date.now() },
         ],
       };
+      // Force high tier via pinned tier so budget logic can trigger
       const decision = decideRouting(
         context,
         'p',
         profile,
         undefined,
+        'high',
         undefined,
-        undefined,
-        0.5,
         undefined,
         true,
       );
@@ -371,6 +369,7 @@ describe('routing.ts', () => {
     });
 
     it('should maintain planning phase bias (stickiness)', () => {
+      // Heuristics removed: previous planning phase is retained as phase but tier defaults to medium.
       const context: Context = {
         messages: [
           {
@@ -394,7 +393,7 @@ describe('routing.ts', () => {
         'Initial plan',
       );
       const decision = decideRouting(context, 'p', profile, previous);
-      expect(decision.tier).toBe('high');
+      expect(decision.tier).toBe('medium');
       expect(decision.phase).toBe('planning');
     });
 
@@ -415,10 +414,10 @@ describe('routing.ts', () => {
         'planning',
         'Previous planning',
       );
-      const decision = decideRouting(context, 'p', profile, previous, undefined, undefined, 0.5);
-      expect(decision.tier).toBe('high');
+      const decision = decideRouting(context, 'p', profile, previous);
+      expect(decision.tier).toBe('medium');
       expect(decision.phase).toBe('planning');
-      expect(decision.reasoning).toContain('planning-phase bias');
+      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
     it('should detect implementation from previous implementation phase', () => {
@@ -441,7 +440,7 @@ describe('routing.ts', () => {
       const decision = decideRouting(context, 'p', profile, previous);
       expect(decision.tier).toBe('medium');
       expect(decision.phase).toBe('implementation');
-      expect(decision.reasoning).toContain('implementation');
+      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
     it('should detect implementation from toolResultCount > 0', () => {
@@ -470,7 +469,7 @@ describe('routing.ts', () => {
       const decision = decideRouting(context, 'p', profile, undefined);
       expect(decision.tier).toBe('medium');
       expect(decision.phase).toBe('implementation');
-      expect(decision.reasoning).toContain('implementation');
+      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
     it('should detect implementation from recent conversation containing plan:', () => {
@@ -491,7 +490,7 @@ describe('routing.ts', () => {
       const decision = decideRouting(context, 'p', profile, undefined);
       expect(decision.tier).toBe('medium');
       expect(decision.phase).toBe('implementation');
-      expect(decision.reasoning).toContain('implementation');
+      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
     it('should default to medium tier when no heuristic rules match for moderate-length prompts', () => {

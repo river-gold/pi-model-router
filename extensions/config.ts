@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getAgentDir } from '@earendil-works/pi-coding-agent';
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import type {
   RouterConfig,
   RouterProfile,
@@ -10,7 +11,6 @@ import type {
   ParsedConfigFile,
   RouterTier,
   RoutingRule,
-  ModelDefinition,
   ClassifierConfig,
 } from './types';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
@@ -21,27 +21,12 @@ import {
 
 export const ROUTER_TIERS = ['high', 'medium', 'low'] as const;
 
-
-export const THINKING_LEVELS: readonly ThinkingLevel[] = [
-  'off',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-];
 export const ROUTER_PIN_VALUES = ['auto', 'high', 'medium', 'low'] as const;
-
-export const DEFAULT_THINKING_LEVELS: readonly ThinkingLevel[] = ['high', 'medium', 'low'] as const;
 
 export const isObjectRecord = (
   value: unknown,
 ): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-
-export const isThinkingLevel = (value: unknown): value is ThinkingLevel =>
-  typeof value === 'string' && THINKING_LEVELS.includes(value as ThinkingLevel);
 
 export const isRouterTier = (value: unknown): value is RouterTier =>
   value === 'high' || value === 'medium' || value === 'low';
@@ -70,22 +55,6 @@ export const parseConfigFile = (path: string): ParsedConfigFile => {
   }
 };
 
-/**
- * Resolve a model reference: if it matches a key in the models map,
- * return the canonical ref and definition; otherwise treat it as a
- * canonical "provider/model" ref.
- */
-export const resolveModelRef = (
-  ref: string,
-  models: Record<string, ModelDefinition> | undefined,
-): { canonicalRef: string; definition?: ModelDefinition } => {
-  const definition = models?.[ref];
-  if (definition) {
-    return { canonicalRef: definition.model, definition };
-  }
-  return { canonicalRef: ref };
-};
-
 const mergeTier = (
   existing?: RoutedTierConfig,
   next?: Partial<RoutedTierConfig>,
@@ -111,19 +80,12 @@ export const mergeConfig = (
     };
   }
 
-  const mergedModels: Record<string, ModelDefinition> = {
-    ...(base.models ?? {}),
-    ...(override.models ?? {}),
-  };
-
   return {
     debug: override.debug ?? base.debug,
     classifierModel: override.classifierModel ?? base.classifierModel,
-    phaseBias: override.phaseBias ?? base.phaseBias,
     maxSessionBudget: override.maxSessionBudget ?? base.maxSessionBudget,
     rules: override.rules ?? base.rules,
     profiles: mergedProfiles,
-    models: Object.keys(mergedModels).length > 0 ? mergedModels : undefined,
   };
 };
 
@@ -146,87 +108,17 @@ export const parseCanonicalModelRef = (
   return { provider, modelId };
 };
 
-/**
- * Validate and normalize the models map from config.
- */
-export const normalizeModelsMap = (
-  raw: Record<string, unknown> | undefined,
-  warnings: string[],
-): Record<string, ModelDefinition> => {
-  const result: Record<string, ModelDefinition> = {};
-  if (!raw || !isObjectRecord(raw)) return result;
-
-  for (const [alias, entry] of Object.entries(raw)) {
-    if (!isObjectRecord(entry)) {
-      warnings.push(`Ignored invalid model definition "${alias}": expected an object.`);
-      continue;
-    }
-
-    const model = typeof entry.model === 'string' ? entry.model.trim() : '';
-    if (!model) {
-      warnings.push(`Model definition "${alias}" is missing the "model" field. Skipped.`);
-      continue;
-    }
-
-    try {
-      parseCanonicalModelRef(model);
-    } catch (error) {
-      warnings.push(
-        `Model definition "${alias}": ${error instanceof Error ? error.message : String(error)}`,
-      );
-      continue;
-    }
-
-    const contextWindow =
-      typeof entry.contextWindow === 'number' && entry.contextWindow > 0
-        ? entry.contextWindow
-        : undefined;
-    if (entry.contextWindow !== undefined && !contextWindow) {
-      warnings.push(
-        `Model definition "${alias}" has invalid contextWindow. Ignored.`,
-      );
-    }
-
-    const maxTokens =
-      typeof entry.maxTokens === 'number' && entry.maxTokens > 0
-        ? entry.maxTokens
-        : undefined;
-    if (entry.maxTokens !== undefined && !maxTokens) {
-      warnings.push(
-        `Model definition "${alias}" has invalid maxTokens. Ignored.`,
-      );
-    }
-
-    const reasoning =
-      typeof entry.reasoning === 'boolean' ? entry.reasoning : undefined;
-
-    let thinkingLevels: ThinkingLevel[] | undefined;
-    if (Array.isArray(entry.thinkingLevels)) {
-      thinkingLevels = entry.thinkingLevels.filter(
-        (l): l is ThinkingLevel => isThinkingLevel(l),
-      );
-      if (thinkingLevels.length === 0) thinkingLevels = undefined;
-    }
-
-    result[alias] = { model, contextWindow, maxTokens, reasoning, thinkingLevels };
-  }
-
-  return result;
-};
-
 export const normalizeTierConfig = (
   value: unknown,
   profileName: string,
   tier: RouterTier,
   warnings: string[],
-  models?: Record<string, ModelDefinition>,
 ): RoutedTierConfig | undefined => {
   if (!isObjectRecord(value)) {
     return undefined;
   }
 
   const rawModel = typeof value.model === 'string' ? value.model.trim() : '';
-  let aliasDefinition: ModelDefinition | undefined;
 
   if (!rawModel) {
     warnings.push(
@@ -235,13 +127,10 @@ export const normalizeTierConfig = (
     return undefined;
   }
 
-  // Try to resolve as an alias first
-  const resolved = resolveModelRef(rawModel, models);
-  aliasDefinition = resolved.definition;
   let parsedModel: string;
   try {
-    parseCanonicalModelRef(resolved.canonicalRef);
-    parsedModel = resolved.canonicalRef;
+    parseCanonicalModelRef(rawModel);
+    parsedModel = rawModel;
   } catch (error) {
     warnings.push(
       `Profile "${profileName}" ${tier} tier: ${error instanceof Error ? error.message : String(error)} Tier disabled.`,
@@ -249,25 +138,18 @@ export const normalizeTierConfig = (
     return undefined;
   }
 
-  const thinking = isThinkingLevel(value.thinking)
-    ? value.thinking
+  const thinking = typeof value.thinking === 'string' && value.thinking.length > 0
+    ? (value.thinking as ThinkingLevel)
     : 'medium';
-  if (value.thinking !== undefined && !isThinkingLevel(value.thinking)) {
-    warnings.push(
-      `Profile "${profileName}" ${tier} tier has invalid thinking level. Defaulting to medium.`,
-    );
-  }
 
   let fallbacks: string[] | undefined = undefined;
   if (Array.isArray(value.fallbacks)) {
     fallbacks = [];
     for (const f of value.fallbacks) {
       if (typeof f === 'string') {
-        // Resolve aliases in fallbacks too
-        const resolvedFallback = resolveModelRef(f, models);
         try {
-          parseCanonicalModelRef(resolvedFallback.canonicalRef);
-          fallbacks.push(resolvedFallback.canonicalRef);
+          parseCanonicalModelRef(f);
+          fallbacks.push(f);
         } catch (error) {
           warnings.push(
             `Invalid fallback model "${f}" in profile "${profileName}" ${tier} tier: ${error instanceof Error ? error.message : String(error)}`,
@@ -277,48 +159,20 @@ export const normalizeTierConfig = (
     }
   }
 
-  // Resolve contextWindow: tier config > alias > hardcoded default
   const tierContextWindow =
     typeof value.contextWindow === 'number' && value.contextWindow > 0
       ? value.contextWindow
       : undefined;
-  const resolvedContextWindow =
-    tierContextWindow ?? aliasDefinition?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+  const resolvedContextWindow = tierContextWindow ?? DEFAULT_CONTEXT_WINDOW;
 
-  // Resolve maxTokens: tier config > alias > hardcoded default
   const tierMaxTokens =
     typeof value.maxTokens === 'number' && value.maxTokens > 0
       ? value.maxTokens
       : undefined;
-  const resolvedMaxTokens =
-    tierMaxTokens ?? aliasDefinition?.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const resolvedMaxTokens = tierMaxTokens ?? DEFAULT_MAX_TOKENS;
 
-  // Resolve reasoning: tier config > alias > undefined (assumed true)
   const tierReasoning =
     typeof value.reasoning === 'boolean' ? value.reasoning : undefined;
-  const effectiveReasoning = tierReasoning ?? aliasDefinition?.reasoning;
-
-  // Resolve thinkingLevels: tier config > alias > default
-  // Validate tier-level thinkingLevels array
-  let tierThinkingLevels: ThinkingLevel[] | undefined;
-  if (Array.isArray(value.thinkingLevels)) {
-    tierThinkingLevels = (value.thinkingLevels as unknown[]).filter(
-      (l): l is ThinkingLevel => isThinkingLevel(l),
-    );
-    if (tierThinkingLevels.length === 0) tierThinkingLevels = undefined;
-  }
-
-  const explicitThinkingLevels = tierThinkingLevels ?? aliasDefinition?.thinkingLevels;
-  const baseThinkingLevels: ThinkingLevel[] =
-    explicitThinkingLevels ??
-    (effectiveReasoning === false ? [] : [...DEFAULT_THINKING_LEVELS]);
-
-  // Auto-add the tier's thinking value if it's not 'off' and not already present,
-  // but only if the user didn't explicitly constrain the thinkingLevels array.
-  const resolvedThinkingLevels: ThinkingLevel[] = [...baseThinkingLevels];
-  if (!explicitThinkingLevels && thinking !== 'off' && !resolvedThinkingLevels.includes(thinking)) {
-    resolvedThinkingLevels.push(thinking);
-  }
 
   return {
     model: parsedModel,
@@ -327,47 +181,20 @@ export const normalizeTierConfig = (
     contextWindow: tierContextWindow,
     maxTokens: tierMaxTokens,
     reasoning: tierReasoning,
-    thinkingLevels: tierThinkingLevels,
     resolvedContextWindow,
     resolvedMaxTokens,
-    resolvedThinkingLevels,
   };
 };
 
 export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   const warnings: string[] = [];
 
-  // Normalize models map first so aliases are available during tier normalization
-  const normalizedModels = normalizeModelsMap(
-    raw.models as Record<string, unknown> | undefined,
-    warnings,
-  );
-  const hasModels = Object.keys(normalizedModels).length > 0;
-
   const normalizedProfiles: Record<string, RouterProfile> = {};
 
   for (const [name, profile] of Object.entries(raw.profiles ?? {})) {
-    const high = normalizeTierConfig(
-      profile?.high,
-      name,
-      'high',
-      warnings,
-      hasModels ? normalizedModels : undefined,
-    );
-    const medium = normalizeTierConfig(
-      profile?.medium,
-      name,
-      'medium',
-      warnings,
-      hasModels ? normalizedModels : undefined,
-    );
-    const low = normalizeTierConfig(
-      profile?.low,
-      name,
-      'low',
-      warnings,
-      hasModels ? normalizedModels : undefined,
-    );
+    const high = normalizeTierConfig(profile?.high, name, 'high', warnings);
+    const medium = normalizeTierConfig(profile?.medium, name, 'medium', warnings);
+    const low = normalizeTierConfig(profile?.low, name, 'low', warnings);
 
     if (!high && !medium && !low) {
       warnings.push(
@@ -378,11 +205,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 
     normalizedProfiles[name] = { high, medium, low };
   }
-
-  const phaseBias =
-    typeof raw.phaseBias === 'number'
-      ? Math.max(0, Math.min(1, raw.phaseBias))
-      : 0.5;
 
   const maxSessionBudget =
     typeof raw.maxSessionBudget === 'number' && raw.maxSessionBudget > 0
@@ -413,17 +235,12 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     }
   }
 
-  // Resolve classifierModel — accepts string or { model, thinking } object
   let classifierModel: ClassifierConfig | undefined;
   const rawClassifier = raw.classifierModel as unknown;
   if (typeof rawClassifier === 'string' && rawClassifier.trim()) {
-    const resolved = resolveModelRef(
-      rawClassifier.trim(),
-      hasModels ? normalizedModels : undefined,
-    );
     try {
-      parseCanonicalModelRef(resolved.canonicalRef);
-      classifierModel = { model: resolved.canonicalRef };
+      parseCanonicalModelRef(rawClassifier.trim());
+      classifierModel = { model: rawClassifier.trim() };
     } catch (error) {
       warnings.push(
         `Invalid classifierModel: ${error instanceof Error ? error.message : String(error)}`,
@@ -432,21 +249,12 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   } else if (isObjectRecord(rawClassifier)) {
     const modelRef = typeof rawClassifier.model === 'string' ? rawClassifier.model.trim() : '';
     if (modelRef) {
-      const resolved = resolveModelRef(
-        modelRef,
-        hasModels ? normalizedModels : undefined,
-      );
       try {
-        parseCanonicalModelRef(resolved.canonicalRef);
-        const thinking = isThinkingLevel(rawClassifier.thinking)
-          ? rawClassifier.thinking
+        parseCanonicalModelRef(modelRef);
+        const thinking = typeof rawClassifier.thinking === 'string' && rawClassifier.thinking.length > 0
+          ? (rawClassifier.thinking as ThinkingLevel)
           : undefined;
-        if (rawClassifier.thinking !== undefined && !thinking) {
-          warnings.push(
-            `classifierModel has invalid thinking level "${String(rawClassifier.thinking)}". Ignored.`,
-          );
-        }
-        classifierModel = { model: resolved.canonicalRef, thinking };
+        classifierModel = { model: modelRef, thinking };
       } catch (error) {
         warnings.push(
           `Invalid classifierModel: ${error instanceof Error ? error.message : String(error)}`,
@@ -461,11 +269,9 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     config: {
       debug: typeof raw.debug === 'boolean' ? raw.debug : false,
       classifierModel,
-      phaseBias,
       maxSessionBudget,
       rules: rules.length > 0 ? rules : undefined,
       profiles: normalizedProfiles,
-      models: hasModels ? normalizedModels : undefined,
     },
     warnings,
   };
@@ -560,61 +366,13 @@ export const resolveMaxTokens = (
   return tierConfig.resolvedMaxTokens ?? DEFAULT_MAX_TOKENS;
 };
 
-/**
- * Collect the union of all tier models' resolved thinking levels for a profile.
- * Returns a Set of ThinkingLevel values.
- */
-export const collectProfileThinkingLevels = (
-  profile: RouterProfile,
-): Set<ThinkingLevel> => {
-  const levels = new Set<ThinkingLevel>();
-  for (const tier of ROUTER_TIERS) {
-    const tierConfig = profile[tier];
-    if (!tierConfig?.resolvedThinkingLevels) continue;
-    for (const level of tierConfig.resolvedThinkingLevels) {
-      levels.add(level);
-    }
-  }
-  return levels;
-};
 
-/**
- * Returns tier names whose models don't include the given thinking level
- * in their resolvedThinkingLevels.
- */
-export const getUnsupportedTiers = (
-  profile: RouterProfile,
-  level: ThinkingLevel,
-): string[] => {
-  const unsupported: string[] = [];
-  for (const tier of ROUTER_TIERS) {
-    const tierConfig = profile[tier];
-    if (!tierConfig) continue;
-    if (!tierConfig.resolvedThinkingLevels?.includes(level)) {
-      unsupported.push(tier);
-    }
-  }
-  return unsupported;
-};
 
-/**
- * Clamps a requested thinking level to the highest supported level
- * in the provided array of supported levels.
- */
-export const clampThinkingLevel = (
-  requested: ThinkingLevel,
-  supported: ThinkingLevel[] | undefined,
-): ThinkingLevel => {
-  if (requested === 'off' || !supported || supported.length === 0) {
-    return 'off';
-  }
-  
-  const reqIdx = THINKING_LEVELS.indexOf(requested);
-  for (let i = reqIdx; i >= 0; i--) {
-    if (supported.includes(THINKING_LEVELS[i])) {
-      return THINKING_LEVELS[i];
-    }
-  }
-  
-  return 'off';
+export const resolveDelegatedReasoning = (
+  model: Model<Api>,
+  requested: string | undefined,
+): string | undefined => {
+  if (!requested || !model.reasoning) return undefined;
+  if (requested === 'off') return undefined;
+  return requested;
 };
