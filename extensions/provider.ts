@@ -30,7 +30,12 @@ import {
   resolveDelegatedReasoning,
   resolveEffectiveClassifier,
 } from './config';
-import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from './constants';
+import {
+  DEFAULT_CONTEXT_WINDOW,
+  DEFAULT_MAX_TOKENS,
+  resolveDelegatedModel,
+  type RegistryWithProviderAuth,
+} from './constants';
 const REGISTRY_WAIT_TIMEOUT_MS = 5000;
 const REGISTRY_WAIT_INITIAL_DELAY_MS = 50;
 const REGISTRY_WAIT_MAX_DELAY_MS = 500;
@@ -428,6 +433,17 @@ export const registerRouterProvider = (
             const apiKey = auth.apiKey;
             const headers = auth.headers;
 
+            // getApiKeyAndHeaders() only resolves { apiKey, headers } — it does
+            // not surface a credential-specific baseUrl. Some OAuth providers
+            // (e.g. GitHub Copilot business/enterprise tenants) resolve a
+            // per-token proxy endpoint that differs from the model's static
+            // baseUrl. Without applying it here, delegated requests are sent
+            // to the wrong host and fail with 421 Misdirected Request.
+            const requestModel = await resolveDelegatedModel(
+              registry as unknown as RegistryWithProviderAuth,
+              targetModel,
+            );
+
             try {
               // HONESTY CHECK & AUTO-TRUNCATION
               // If the picked model has a smaller context than what we reported, truncate now.
@@ -469,7 +485,7 @@ export const registerRouterProvider = (
                 options ?? {};
 
               const delegatedStream = streamSimple(
-                targetModel,
+                requestModel,
                 effectiveContext,
                 {
                   ...delegationOptions,
