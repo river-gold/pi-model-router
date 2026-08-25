@@ -28,6 +28,7 @@ import {
   resolveContextWindow,
   resolveMaxTokens,
   resolveDelegatedReasoning,
+  resolveEffectiveClassifier,
 } from './config';
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from './constants';
 const REGISTRY_WAIT_TIMEOUT_MS = 5000;
@@ -256,18 +257,23 @@ export const registerRouterProvider = (
 
           // Classifier Override — skip when budget is already exceeded since the
           // result would be downgraded anyway, saving an unnecessary LLM call.
+          // Priority: profile classifierModel > global classifierModel > profile low model
+          const effectiveClassifier = resolveEffectiveClassifier(
+            profile,
+            state.currentConfig.classifierModel,
+          );
           if (
-            state.currentConfig.classifierModel &&
+            effectiveClassifier &&
             !pinnedTier &&
             !decision.isRuleMatched &&
             !isBudgetExceeded
           ) {
             const classifierResult = await runClassifier(
-              state.currentConfig.classifierModel.model,
+              effectiveClassifier.model,
               registry,
               context,
               state.lastDecision?.phase,
-              state.currentConfig.classifierModel.thinking,
+              effectiveClassifier.thinking,
             );
             if (classifierResult) {
               decision = buildRoutingDecision(

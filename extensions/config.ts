@@ -65,6 +65,55 @@ const mergeTier = (
   return { ...existing, ...next };
 };
 
+export const normalizeClassifierConfig = (
+  raw: unknown,
+  warnings: string[],
+  contextLabel: string,
+): ClassifierConfig | undefined => {
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      parseCanonicalModelRef(raw.trim());
+      return { model: raw.trim() };
+    } catch (error) {
+      warnings.push(
+        `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
+  }
+  if (isObjectRecord(raw)) {
+    const modelRef = typeof raw.model === 'string' ? raw.model.trim() : '';
+    if (modelRef) {
+      try {
+        parseCanonicalModelRef(modelRef);
+        const thinking =
+          typeof raw.thinking === 'string' && raw.thinking.length > 0
+            ? (raw.thinking as ThinkingLevel)
+            : undefined;
+        return { model: modelRef, thinking };
+      } catch (error) {
+        warnings.push(
+          `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return undefined;
+      }
+    }
+    warnings.push(`${contextLabel} object is missing the "model" field. Ignored.`);
+    return undefined;
+  }
+  return undefined;
+};
+
+export const resolveEffectiveClassifier = (
+  profile: RouterProfile,
+  globalClassifier: ClassifierConfig | undefined,
+): ClassifierConfig | undefined => {
+  if (profile.classifierModel) return profile.classifierModel;
+  if (globalClassifier) return globalClassifier;
+  if (profile.low) return { model: profile.low.model, thinking: profile.low.thinking };
+  return undefined;
+};
+
 export const mergeConfig = (
   base: RouterConfig,
   override: Partial<RouterConfig>,
@@ -77,6 +126,7 @@ export const mergeConfig = (
       high: mergeTier(existing?.high, nextProfile.high),
       medium: mergeTier(existing?.medium, nextProfile.medium),
       low: mergeTier(existing?.low, nextProfile.low),
+      classifierModel: (nextProfile.classifierModel as ClassifierConfig | undefined) ?? existing?.classifierModel,
     };
   }
 
@@ -203,7 +253,13 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       continue;
     }
 
-    normalizedProfiles[name] = { high, medium, low };
+    const classifierModel = normalizeClassifierConfig(
+      (profile as Record<string, unknown>)?.classifierModel,
+      warnings,
+      `Profile "${name}" classifierModel`,
+    );
+
+    normalizedProfiles[name] = { high, medium, low, ...(classifierModel ? { classifierModel } : {}) };
   }
 
   const maxSessionBudget =
@@ -235,35 +291,11 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     }
   }
 
-  let classifierModel: ClassifierConfig | undefined;
-  const rawClassifier = raw.classifierModel as unknown;
-  if (typeof rawClassifier === 'string' && rawClassifier.trim()) {
-    try {
-      parseCanonicalModelRef(rawClassifier.trim());
-      classifierModel = { model: rawClassifier.trim() };
-    } catch (error) {
-      warnings.push(
-        `Invalid classifierModel: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else if (isObjectRecord(rawClassifier)) {
-    const modelRef = typeof rawClassifier.model === 'string' ? rawClassifier.model.trim() : '';
-    if (modelRef) {
-      try {
-        parseCanonicalModelRef(modelRef);
-        const thinking = typeof rawClassifier.thinking === 'string' && rawClassifier.thinking.length > 0
-          ? (rawClassifier.thinking as ThinkingLevel)
-          : undefined;
-        classifierModel = { model: modelRef, thinking };
-      } catch (error) {
-        warnings.push(
-          `Invalid classifierModel: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    } else {
-      warnings.push('classifierModel object is missing the "model" field. Ignored.');
-    }
-  }
+  const classifierModel = normalizeClassifierConfig(
+    raw.classifierModel as unknown,
+    warnings,
+    'classifierModel',
+  );
 
   return {
     config: {

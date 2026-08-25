@@ -33,6 +33,7 @@ export interface RouterProfile {
   high?: RoutedTierConfig;
   medium?: RoutedTierConfig;
   low?: RoutedTierConfig;
+  classifierModel?: ClassifierConfig;
 }
 
 export interface RouterConfig {
