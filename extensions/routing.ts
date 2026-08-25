@@ -266,6 +266,8 @@ ${currentPhase === 'implementation' ? 'Consider that the conversation is current
 
     const classifierContext: Context = {
       ...context,
+      systemPrompt: undefined,
+      tools: undefined,
       messages: [{ role: 'user', content: classifierPrompt, timestamp: Date.now() }],
     };
 
