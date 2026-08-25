@@ -31,13 +31,114 @@ export const isObjectRecord = (
 export const isRouterTier = (value: unknown): value is RouterTier =>
   value === 'high' || value === 'medium' || value === 'low';
 
+export const stripJsonc = (text: string): string => {
+  let result = '';
+  let inString = false;
+  let stringChar = '';
+  let escaped = false;
+  let inSingleLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1] ?? '';
+
+    if (inSingleLineComment) {
+      if (char === '\n') {
+        inSingleLineComment = false;
+        result += char;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && nextChar === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (inString) {
+      result += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === stringChar) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      inString = true;
+      stringChar = char;
+      result += char;
+      continue;
+    }
+
+    if (char === '/' && nextChar === '/') {
+      inSingleLineComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === '/' && nextChar === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    result += char;
+  }
+
+  // Remove trailing commas before } or ]
+  let stripped = '';
+  inString = false;
+  stringChar = '';
+  escaped = false;
+  for (let i = 0; i < result.length; i++) {
+    const char = result[i];
+    if (inString) {
+      stripped += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === stringChar) {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      inString = true;
+      stringChar = char;
+      stripped += char;
+      continue;
+    }
+    if (char === ',') {
+      let j = i + 1;
+      while (j < result.length && /\s/.test(result[j] ?? '')) j++;
+      const nextNonSpace = result[j] ?? '';
+      if (nextNonSpace === '}' || nextNonSpace === ']') {
+        continue;
+      }
+    }
+    stripped += char;
+  }
+
+  return stripped;
+};
+
 export const parseConfigFile = (path: string): ParsedConfigFile => {
   if (!existsSync(path)) {
     return { config: {}, warnings: [] };
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf-8')) as unknown;
+    const raw = readFileSync(path, 'utf-8');
+    const parsed = JSON.parse(stripJsonc(raw)) as unknown;
     if (!isObjectRecord(parsed)) {
       return {
         config: {},
@@ -310,21 +411,28 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 };
 
 export const loadRouterConfig = (cwd: string): ConfigLoadResult => {
-  const globalPath = join(getAgentDir(), 'model-router.json');
-  const projectPath = join(cwd, '.pi', 'model-router.json');
-  const globalResult = parseConfigFile(globalPath);
-  const projectResult = parseConfigFile(projectPath);
+  const globalJsonPath = join(getAgentDir(), 'model-router.json');
+  const globalJsoncPath = join(getAgentDir(), 'model-router.jsonc');
+  const projectJsonPath = join(cwd, '.pi', 'model-router.json');
+  const projectJsoncPath = join(cwd, '.pi', 'model-router.jsonc');
+  const globalJsonResult = parseConfigFile(globalJsonPath);
+  const globalJsoncResult = parseConfigFile(globalJsoncPath);
+  const projectJsonResult = parseConfigFile(projectJsonPath);
+  const projectJsoncResult = parseConfigFile(projectJsoncPath);
   const baseConfig: RouterConfig = { profiles: {} };
-  const merged = mergeConfig(
-    mergeConfig(baseConfig, globalResult.config),
-    projectResult.config,
-  );
+  // Priority: global .json < global .jsonc < project .json < project .jsonc
+  let merged = mergeConfig(baseConfig, globalJsonResult.config);
+  merged = mergeConfig(merged, globalJsoncResult.config);
+  merged = mergeConfig(merged, projectJsonResult.config);
+  merged = mergeConfig(merged, projectJsoncResult.config);
   const normalized = normalizeConfig(merged);
   return {
     config: normalized.config,
     warnings: [
-      ...globalResult.warnings,
-      ...projectResult.warnings,
+      ...globalJsonResult.warnings,
+      ...globalJsoncResult.warnings,
+      ...projectJsonResult.warnings,
+      ...projectJsoncResult.warnings,
       ...normalized.warnings,
     ],
   };
