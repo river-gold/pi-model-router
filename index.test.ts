@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import routerExtension from './index';
 
-vi.mock('./config', () => ({
+vi.mock('./src/config', () => ({
   loadRouterConfig: () => ({
     config: {
       profiles: {

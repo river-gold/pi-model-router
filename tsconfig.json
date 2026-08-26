@@ -12,5 +12,5 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["extensions/**/*"]
+  "include": ["index.ts", "index.test.ts", "src/**/*"]
 }

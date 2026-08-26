@@ -36,7 +36,7 @@ pi install .
 Or load directly for one run:
 
 ```bash
-pi -e ./extensions/index.ts
+pi -e ./index.ts
 ```
 
 ## Configuration

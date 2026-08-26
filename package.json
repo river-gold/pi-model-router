@@ -3,8 +3,10 @@
   "version": "0.4.4",
   "type": "module",
   "files": [
-    "extensions",
-    "!extensions/*.test.ts",
+    "index.ts",
+    "src",
+    "!src/*.test.ts",
+    "!index.test.ts",
     "LICENSE",
     "model-router.example.json",
     "README.md"
@@ -29,11 +31,11 @@
     "url": "https://github.com/yeliu84/pi-model-router/issues"
   },
   "exports": {
-    ".": "./extensions/index.ts"
+    ".": "./index.ts"
   },
   "pi": {
     "extensions": [
-      "./extensions/index.ts"
+      "./index.ts"
     ]
   },
   "scripts": {

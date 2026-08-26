@@ -7,14 +7,14 @@ The `pi-model-router` is an extension-first model router for the `pi` coding age
 - **Extension-First**: All functionality must be implemented as a `pi` extension without modifying `pi` core.
 - **Custom Provider**: Use `pi.registerProvider` to hook into the model lifecycle. The logical model (e.g., `router/auto`) should remain stable while the underlying model changes transparently.
 - **Modularized Design**: Strictly follow the modular structure defined in Phase 3:
-  - `extensions/types.ts`: All interfaces and type definitions.
-  - `extensions/config.ts`: Configuration loading, normalization, and merging.
-  - `extensions/routing.ts`: Core routing logic (heuristics, classifier, rule matching).
-  - `extensions/provider.ts`: Custom `router` provider registration and delegation stream.
-  - `extensions/state.ts`: Session-persisted state management and snapshotting.
-  - `extensions/ui.ts`: UI status line and widget rendering logic.
-  - `extensions/commands.ts`: CLI command registrations and completions.
-  - `extensions/index.ts`: Main entry point (orchestrator).
+  - `src/types.ts`: All interfaces and type definitions.
+  - `src/config.ts`: Configuration loading, normalization, and merging.
+  - `src/routing.ts`: Core routing logic (heuristics, classifier, rule matching).
+  - `src/provider.ts`: Custom `router` provider registration and delegation stream.
+  - `src/state.ts`: Session-persisted state management and snapshotting.
+  - `src/ui.ts`: UI status line and widget rendering logic.
+  - `src/commands.ts`: CLI command registrations and completions.
+  - `index.ts`: Main entry point (orchestrator).
 
 ## Routing Decision Logic
 Routing follows a tiered system (`high`, `medium`, `low`) and an ordered decision flow:

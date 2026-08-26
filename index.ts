@@ -11,19 +11,19 @@ import {
   type RouterThinkingByProfile,
   type RouterTier,
   type CustomSessionEntry,
-} from './types';
+} from './src/types';
 import {
   loadRouterConfig,
   profileNames,
   resolveProfileName,
   parseCanonicalModelRef,
   ROUTER_TIERS,
-} from './config';
-import { MAX_DEBUG_HISTORY } from './constants';
-import { isRouterPersistedState, buildPersistedState } from './state';
-import { updateStatus, formatModelRef } from './ui';
-import { registerCommands } from './commands';
-import { registerRouterProvider } from './provider';
+} from './src/config';
+import { MAX_DEBUG_HISTORY } from './src/constants';
+import { isRouterPersistedState, buildPersistedState } from './src/state';
+import { updateStatus, formatModelRef } from './src/ui';
+import { registerCommands } from './src/commands';
+import { registerRouterProvider } from './src/provider';
 
 const routerExtension = (pi: ExtensionAPI) => {
   let currentConfig: RouterConfig = { profiles: {} };

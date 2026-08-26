@@ -30,14 +30,14 @@ For every request sent to a `router/*` model, the following logic is executed:
 
 The extension is modularized for maintainability:
 
-- `extensions/index.ts`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together.
-- `extensions/provider.ts`: Implements the `router` provider and the delegation/retry loop.
-- `extensions/routing.ts`: Core decision logic (pin/rules/classifier) and the LLM classifier.
-- `extensions/config.ts`: Loads, merges, and normalizes the JSON configuration.
-- `extensions/commands.ts`: Registers all `/router` subcommands and their autocompletions.
-- `extensions/ui.ts`: Manages the status line and the optional state widget.
-- `extensions/state.ts`: Handles session-persisted state and snapshots.
-- `extensions/types.ts`: Centralized interface and type definitions.
+- `index.ts`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together.
+- `src/provider.ts`: Implements the `router` provider and the delegation/retry loop.
+- `src/routing.ts`: Core decision logic (pin/rules/classifier) and the LLM classifier.
+- `src/config.ts`: Loads, merges, and normalizes the JSON configuration.
+- `src/commands.ts`: Registers all `/router` subcommands and their autocompletions.
+- `src/ui.ts`: Manages the status line and the optional state widget.
+- `src/state.ts`: Handles session-persisted state and snapshots.
+- `src/types.ts`: Centralized interface and type definitions.
 
 ## State & Persistence
 
