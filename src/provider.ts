@@ -14,13 +14,7 @@ import type {
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
-import type {
-  RouterConfig,
-  RoutingDecision,
-  RouterTier,
-  RouterPinByProfile,
-  RouterThinkingByProfile,
-} from './types';
+import type { RouterConfig, RoutingDecision } from './types';
 import {
   profileNames,
   parseCanonicalModelRef,
@@ -168,8 +162,6 @@ export const registerRouterProvider = (
     selectedProfile: string | undefined;
     routerEnabled: boolean;
     lastDecision: RoutingDecision | undefined;
-    readonly thinkingByProfile: RouterThinkingByProfile;
-    readonly pinnedTierByProfile: RouterPinByProfile;
     accumulatedCost: number;
     /** Override for the registry wait timeout (for testing). */
     readonly registryTimeoutMs?: number;
@@ -177,7 +169,6 @@ export const registerRouterProvider = (
   actions: {
     persistState: () => void;
     recordDebugDecision: (decision: RoutingDecision) => void;
-    getThinkingOverride: (profileName: string, tier: RouterTier) => ThinkingLevel | undefined;
     updateStatus: (ctx: ExtensionContext) => void;
     syncPiThinkingLevel: (level: ThinkingLevel) => void;
   },
@@ -259,15 +250,11 @@ export const registerRouterProvider = (
           state.selectedProfile = model.id;
           state.routerEnabled = true;
 
-          const pinnedTier = state.pinnedTierByProfile[model.id];
-
           let decision: RoutingDecision = decideRouting(
             context,
             model.id,
             profile,
             state.lastDecision,
-            pinnedTier,
-            state.thinkingByProfile[model.id],
             state.currentConfig.rules,
           );
 
@@ -276,11 +263,7 @@ export const registerRouterProvider = (
             profile,
             state.currentConfig.classifierModel,
           );
-          if (
-            effectiveClassifier &&
-            !pinnedTier &&
-            !decision.isRuleMatched
-          ) {
+          if (effectiveClassifier && !decision.isRuleMatched) {
             const classifierResult = await runClassifier(
               effectiveClassifier.model,
               registry,
@@ -295,7 +278,6 @@ export const registerRouterProvider = (
                 classifierResult.tier,
                 phaseForTier(classifierResult.tier),
                 `Classifier: ${classifierResult.reasoning}`,
-                state.thinkingByProfile[model.id],
                 true,
               );
             }
@@ -372,7 +354,6 @@ export const registerRouterProvider = (
                   foundTier,
                   phaseForTier(foundTier),
                   `Forced ${foundTier} tier because the originally routed ${decision.tier} tier does not support image attachments.`,
-                  state.thinkingByProfile[model.id],
                   false,
                 );
               }
@@ -385,11 +366,8 @@ export const registerRouterProvider = (
           // Sync pi's thinking level display with the router's effective thinking.
           // Wrapped in try/catch: in subagent contexts the extension runtime
           // may be invalidated (stale) after session teardown.
-          const effectiveThinking =
-            actions.getThinkingOverride(model.id, decision.tier) ??
-            decision.thinking;
           try {
-            actions.syncPiThinkingLevel(effectiveThinking);
+            actions.syncPiThinkingLevel(decision.thinking);
             if (state.lastExtensionContext) {
               actions.updateStatus(state.lastExtensionContext);
             }
@@ -465,13 +443,9 @@ export const registerRouterProvider = (
                 effectiveContext = truncateContext(context, targetLimit);
               }
 
-              const thinkingOverride = actions.getThinkingOverride(
-                model.id,
-                decision.tier,
-              );
               const delegatedReasoning = resolveDelegatedReasoning(
                 targetModel,
-                thinkingOverride ?? decision.thinking,
+                decision.thinking,
               ) as SimpleStreamOptions['reasoning'] | undefined;
 
               try {

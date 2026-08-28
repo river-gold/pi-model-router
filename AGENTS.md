@@ -18,11 +18,10 @@ The `pi-model-router` is an extension-first model router for the `pi` coding age
 
 ## Routing Decision Logic
 Routing follows a tiered system (`high`, `medium`, `low`) and an ordered decision flow:
-1. **Manual Pin**: Use tier pinned via `/router pin`.
-2. **Custom Rules**: Check keyword-based rules against the user prompt.
-3. **LLM Classifier (Optional)**: Call `classifierModel` for intent categorization.
-4. **Heuristics (Fallback)**: Use local heuristics if the classifier is off/fails.
-5. **Phase Bias**: Apply stickiness to maintain a consistent tier during multi-turn tasks.
+1. **Custom Rules**: Check keyword-based rules against the user prompt.
+2. **LLM Classifier (Optional)**: Call `classifierModel` for intent categorization.
+3. **Heuristics (Fallback)**: Use local heuristics if the classifier is off/fails.
+4. **Phase Bias**: Apply stickiness to maintain a consistent tier during multi-turn tasks.
 
 ## Coding Standards
 - **TypeScript**: Strictly adhere to TypeScript. NEVER use the `any` type; prefer specific types or `unknown`.

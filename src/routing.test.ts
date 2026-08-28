@@ -236,15 +236,6 @@ describe('routing.ts', () => {
       { matches: 'force-high', tier: 'high', reason: 'High rule' },
     ];
 
-    it('should respect manual pinned tier', () => {
-      const context: Context = {
-        messages: [{ role: 'user', content: 'hello', timestamp: Date.now() }],
-      };
-      const decision = decideRouting(context, 'p', profile, undefined, 'high');
-      expect(decision.tier).toBe('high');
-      expect(decision.reasoning).toContain('Pinned to high tier');
-    });
-
     it('should match custom rule first', () => {
       const context: Context = {
         messages: [
@@ -259,8 +250,6 @@ describe('routing.ts', () => {
         context,
         'p',
         profile,
-        undefined,
-        undefined,
         undefined,
         rules,
       );
@@ -287,8 +276,6 @@ describe('routing.ts', () => {
         'p',
         profile,
         undefined,
-        undefined,
-        undefined,
         rulesWithCapitalCase,
       );
       expect(decision.tier).toBe('high');
@@ -314,8 +301,6 @@ describe('routing.ts', () => {
         context,
         'p',
         profile,
-        undefined,
-        undefined,
         undefined,
         rulesWithMultipleMatches,
       );

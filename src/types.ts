@@ -1,11 +1,7 @@
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 
 export type RouterTier = 'high' | 'medium' | 'low';
-export type RouterPin = RouterTier | 'auto';
 export type RouterPhase = 'planning' | 'implementation' | 'lightweight';
-export type RouterPinByProfile = Partial<Record<string, RouterTier>>;
-export type RouterThinkingByTier = Partial<Record<RouterTier, ThinkingLevel>>;
-export type RouterThinkingByProfile = Record<string, RouterThinkingByTier>;
 
 export interface RoutingRule {
   matches: string | string[];
@@ -61,9 +57,6 @@ export interface RoutingDecision {
 export interface RouterPersistedState {
   enabled: boolean;
   selectedProfile: string;
-  pinTier?: RouterTier;
-  pinByProfile?: RouterPinByProfile;
-  thinkingByProfile?: RouterThinkingByProfile;
   debugEnabled?: boolean;
   debugHistory?: RoutingDecision[];
   lastPhase?: RouterPhase;

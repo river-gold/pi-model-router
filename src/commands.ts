@@ -3,13 +3,7 @@ import type {
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import type { AutocompleteItem } from '@earendil-works/pi-tui';
-import type {
-  RouterConfig,
-  RouterPinByProfile,
-  RouterThinkingByProfile,
-  RoutingDecision,
-  RouterTier,
-} from './types';
+import type { RouterConfig, RoutingDecision } from './types';
 import { profileNames } from './config';
 import { formatModelRef, formatDecision } from './ui';
 
@@ -19,8 +13,6 @@ export const registerCommands = (
     readonly currentConfig: RouterConfig;
     routerEnabled: boolean;
     selectedProfile: string | undefined;
-    readonly pinnedTierByProfile: RouterPinByProfile;
-    readonly thinkingByProfile: RouterThinkingByProfile;
     readonly lastDecision: RoutingDecision | undefined;
     lastNonRouterModel: string | undefined;
     readonly accumulatedCost: number;

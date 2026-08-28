@@ -20,10 +20,9 @@ The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. 
 
 For every request sent to a `router/*` model, the following logic is executed:
 
-1. **Manual Pin**: If the user has pinned a tier via `/router pin`, that tier is used.
-2. **Custom Rules**: Keyword-based rules defined in the config are checked against the user prompt.
-3. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
-4. **Default**: If no pin, rule, or classifier decides, the router defaults to `medium` tier.
+1. **Custom Rules**: Keyword-based rules defined in the config are checked against the user prompt.
+2. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
+3. **Default**: If no rule or classifier decides, the router defaults to `medium` tier.
 
 ## Module Architecture
 
@@ -31,7 +30,7 @@ The extension is modularized for maintainability:
 
 - `index.ts`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together.
 - `src/provider.ts`: Implements the `router` provider and the delegation/retry loop.
-- `src/routing.ts`: Core decision logic (pin/rules/classifier) and the LLM classifier.
+- `src/routing.ts`: Core decision logic (rules/classifier) and the LLM classifier.
 - `src/config.ts`: Loads, merges, and normalizes the JSON configuration.
 - `src/commands.ts`: Registers all `/router` subcommands and their autocompletions.
 - `src/ui.ts`: Manages the router status line.
@@ -42,8 +41,7 @@ The extension is modularized for maintainability:
 
 The router state is persisted using `pi.appendEntry` with a custom type `router-state`. This allows the router to:
 
-- Restore the active profile and pins across agent relaunches.
-- Maintain independent pins and state for different conversation branches.
+- Restore the active profile across agent relaunches.
 - Track accumulated session costs safely.
 
 ## Reliability: Fallback Chains

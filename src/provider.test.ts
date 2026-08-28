@@ -115,15 +115,12 @@ describe('provider.ts', () => {
       selectedProfile: undefined,
       routerEnabled: false,
       lastDecision: undefined,
-      thinkingByProfile: {},
-      pinnedTierByProfile: {},
       accumulatedCost: 0,
     };
 
     mockActions = {
       persistState: vi.fn(),
       recordDebugDecision: vi.fn(),
-      getThinkingOverride: vi.fn().mockReturnValue(undefined),
       updateStatus: vi.fn(),
       syncPiThinkingLevel: vi.fn(),
     };
@@ -181,55 +178,6 @@ describe('provider.ts', () => {
       expect(mockActions.persistState).toHaveBeenCalled();
     });
 
-    it('clamps the requested thinking level using the target model', async () => {
-      registerRouterProvider(mockPi, mockState, mockActions);
-      const stream = new MockEventStream();
-      vi.mocked(createAssistantMessageEventStream).mockReturnValue(
-        stream as unknown as AssistantMessageEventStream,
-      );
-      vi.mocked(streamSimple).mockReturnValue(
-        (async function* () {
-          yield { type: 'done', message: { usage: { cost: { total: 0 } } } };
-        })() as unknown as ReturnType<typeof streamSimple>,
-      );
-
-      mockState.pinnedTierByProfile['balanced'] = 'high';
-      mockActions.getThinkingOverride = vi.fn().mockReturnValue(
-        'max' as unknown as ThinkingLevel,
-      );
-      mockState.currentModelRegistry!.find = (
-        provider: string,
-        modelId: string,
-      ) => ({
-        provider,
-        id: modelId,
-        reasoning: true,
-        thinkingLevelMap: {
-          off: null,
-          minimal: null,
-          low: 'low',
-          medium: 'medium',
-          high: 'high',
-          xhigh: null,
-          max: null,
-        },
-        input: ['text'] as const,
-      } as unknown as Model<Api>);
-
-      const model = {
-        id: 'balanced',
-        api: 'router-api' as Api,
-        provider: 'router',
-      } as unknown as Model<Api>;
-      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
-
-      registeredProviderOptions!.streamSimple(model, context);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const delegatedOptions = vi.mocked(streamSimple).mock.calls[0]?.[2];
-      expect(delegatedOptions?.reasoning).toBe('max');
-    });
-
     it('should try fallbacks if the primary model fails', async () => {
       registerRouterProvider(mockPi, mockState, mockActions);
       const stream = new MockEventStream();
@@ -257,7 +205,6 @@ describe('provider.ts', () => {
       }));
 
       // Force a medium tier routing decision
-      mockState.pinnedTierByProfile['balanced'] = 'medium';
 
       const model = {
         id: 'balanced',
@@ -372,7 +319,6 @@ describe('provider.ts', () => {
       };
 
       // Force a medium tier routing decision originally
-      mockState.pinnedTierByProfile['balanced'] = 'medium';
 
       const model = {
         id: 'balanced',
@@ -422,7 +368,6 @@ describe('provider.ts', () => {
 
       // Medium tier model has resolvedContextWindow = 5000 in config.
       // But let's verify if reported max context window of router is larger (which is 10000 from high tier).
-      mockState.pinnedTierByProfile['balanced'] = 'medium';
 
       const model = {
         id: 'balanced',
@@ -587,7 +532,6 @@ describe('provider.ts', () => {
       );
 
       // Pin to medium so primary is gpt-4o-mini with fallback gemini-1.5-flash
-      mockState.pinnedTierByProfile['balanced'] = 'medium';
 
       const model = {
         id: 'balanced',
@@ -624,7 +568,6 @@ describe('provider.ts', () => {
       );
 
       // Pin to medium so primary is gpt-4o-mini with fallback gemini-1.5-flash
-      mockState.pinnedTierByProfile['balanced'] = 'medium';
 
       const model = {
         id: 'balanced',
@@ -655,7 +598,6 @@ describe('provider.ts', () => {
       );
 
       // Pin to medium to get fallback chain
-      mockState.pinnedTierByProfile['balanced'] = 'medium';
 
       const model = {
         id: 'balanced',

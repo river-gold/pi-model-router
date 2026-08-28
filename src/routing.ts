@@ -8,7 +8,6 @@ import type {
   RouterProfile,
   RoutingDecision,
   RoutingRule,
-  RouterThinkingByTier,
 } from './types';
 import { parseCanonicalModelRef, isRouterTier } from './config';
 import { resolveDelegatedModel, type RegistryWithProviderAuth } from './constants';
@@ -104,7 +103,6 @@ export const buildRoutingDecision = (
   tier: RouterTier,
   phase: RouterPhase,
   reasoning: string,
-  thinkingOverrides?: RouterThinkingByTier,
   isClassifier?: boolean,
 ): RoutingDecision => {
   const routed = profile[tier];
@@ -112,10 +110,9 @@ export const buildRoutingDecision = (
     throw new Error(`Profile "${profileName}" has no configuration for the ${tier} tier.`);
   }
   const { provider, modelId } = parseCanonicalModelRef(routed.model);
-  const baseThinking =
+  const effectiveThinking =
     routed.thinking ??
     (tier === 'high' ? 'high' : tier === 'low' ? 'low' : 'medium');
-  const effectiveThinking = thinkingOverrides?.[tier] ?? baseThinking;
 
   return {
     profile: profileName,
@@ -136,8 +133,6 @@ export const decideRouting = (
   profileName: string,
   profile: RouterProfile,
   previousDecision: RoutingDecision | undefined,
-  pinnedTier?: RouterTier,
-  thinkingOverrides?: RouterThinkingByTier,
   rules?: RoutingRule[],
 ): RoutingDecision => {
   const prompt = getLastUserText(context).toLowerCase();
@@ -147,51 +142,45 @@ export const decideRouting = (
   let reasoning = 'Defaulted to medium tier for general coding work.';
   let isRuleMatched = false;
 
-  if (pinnedTier) {
-    phase = phaseForTier(pinnedTier);
-    tier = pinnedTier;
-    reasoning = `Pinned to ${pinnedTier} tier via /router-pin.`;
-  } else {
-    // Check custom rules first
-    if (rules) {
-      let highestTier: RouterTier | undefined;
-      let winningRule: RoutingRule | undefined;
-      const tierRank: Record<RouterTier, number> = {
-        low: 1,
-        medium: 2,
-        high: 3,
-      };
+  // Check custom rules first
+  if (rules) {
+    let highestTier: RouterTier | undefined;
+    let winningRule: RoutingRule | undefined;
+    const tierRank: Record<RouterTier, number> = {
+      low: 1,
+      medium: 2,
+      high: 3,
+    };
 
-      for (const rule of rules) {
-        const matches = Array.isArray(rule.matches)
-          ? rule.matches
-          : [rule.matches];
-        const lowercaseMatches = matches.map((m) => m.toLowerCase());
-        if (containsAny(prompt, lowercaseMatches)) {
-          if (!highestTier || tierRank[rule.tier] > tierRank[highestTier]) {
-            highestTier = rule.tier;
-            winningRule = rule;
-          }
+    for (const rule of rules) {
+      const matches = Array.isArray(rule.matches)
+        ? rule.matches
+        : [rule.matches];
+      const lowercaseMatches = matches.map((m) => m.toLowerCase());
+      if (containsAny(prompt, lowercaseMatches)) {
+        if (!highestTier || tierRank[rule.tier] > tierRank[highestTier]) {
+          highestTier = rule.tier;
+          winningRule = rule;
         }
-      }
-
-      if (winningRule && highestTier) {
-        tier = highestTier;
-        phase = phaseForTier(tier);
-        const matches = Array.isArray(winningRule.matches)
-          ? winningRule.matches
-          : [winningRule.matches];
-        reasoning =
-          winningRule.reason ??
-          `Matched custom routing rule for: ${matches.join(', ')}`;
-        isRuleMatched = true;
       }
     }
 
-    // Heuristics removed: when no pinned tier and no custom rule matches,
-    // keep the default medium tier. Classifier (if configured) may still
-    // override afterwards in provider.ts.
+    if (winningRule && highestTier) {
+      tier = highestTier;
+      phase = phaseForTier(tier);
+      const matches = Array.isArray(winningRule.matches)
+        ? winningRule.matches
+        : [winningRule.matches];
+      reasoning =
+        winningRule.reason ??
+        `Matched custom routing rule for: ${matches.join(', ')}`;
+      isRuleMatched = true;
+    }
   }
+
+  // Heuristics removed: when no custom rule matches,
+  // keep the default medium tier. Classifier (if configured) may still
+  // override afterwards in provider.ts.
 
   // Resolve to nearest available tier if the selected tier is disabled
   const resolvedTier = resolveAvailableTier(profile, tier);
@@ -207,7 +196,6 @@ export const decideRouting = (
     tier,
     phase,
     reasoning,
-    thinkingOverrides,
     false,
   );
   decision.isRuleMatched = isRuleMatched;

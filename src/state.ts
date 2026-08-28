@@ -1,6 +1,4 @@
 import type {
-  RouterPinByProfile,
-  RouterThinkingByProfile,
   RoutingDecision,
   RouterPersistedState,
 } from './types';
@@ -22,8 +20,6 @@ export const isRouterPersistedState = (
 export const buildPersistedState = (
   routerEnabled: boolean,
   selectedProfile: string | undefined,
-  pinnedTierByProfile: RouterPinByProfile,
-  thinkingByProfile: RouterThinkingByProfile,
   debugEnabled: boolean,
   debugHistory: RoutingDecision[],
   lastDecision: RoutingDecision | undefined,
@@ -33,9 +29,6 @@ export const buildPersistedState = (
   return {
     enabled: routerEnabled,
     selectedProfile: selectedProfile ?? '',
-    pinTier: selectedProfile ? pinnedTierByProfile[selectedProfile] : undefined,
-    pinByProfile: { ...pinnedTierByProfile },
-    thinkingByProfile: { ...thinkingByProfile },
     debugEnabled,
     debugHistory,
     lastPhase: lastDecision?.phase,

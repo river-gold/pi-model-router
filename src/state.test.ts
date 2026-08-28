@@ -48,8 +48,6 @@ describe('state.ts', () => {
       const state = buildPersistedState(
         true,
         'balanced',
-        { balanced: 'high' },
-        { balanced: { high: 'xhigh' } },
         true,
         [decision],
         decision,
@@ -59,9 +57,6 @@ describe('state.ts', () => {
 
       expect(state.enabled).toBe(true);
       expect(state.selectedProfile).toBe('balanced');
-      expect(state.pinTier).toBe('high');
-      expect(state.pinByProfile).toEqual({ balanced: 'high' });
-      expect(state.thinkingByProfile).toEqual({ balanced: { high: 'xhigh' } });
       expect(state.debugEnabled).toBe(true);
       expect(state.debugHistory).toEqual([decision]);
       expect(state.lastPhase).toBe('planning');
@@ -75,8 +70,6 @@ describe('state.ts', () => {
       const state = buildPersistedState(
         false,
         undefined,
-        {},
-        {},
         false,
         [],
         undefined,
@@ -84,7 +77,6 @@ describe('state.ts', () => {
         0,
       );
       expect(state.selectedProfile).toBe('');
-      expect(state.pinTier).toBeUndefined();
     });
   });
 });

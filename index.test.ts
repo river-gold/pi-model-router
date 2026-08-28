@@ -107,8 +107,6 @@ describe('index.ts (orchestrator)', () => {
         data: {
           enabled: true,
           selectedProfile: 'balanced',
-          pinByProfile: { balanced: 'high' },
-          thinkingByProfile: {},
           debugEnabled: true,
           accumulatedCost: 0.012,
           timestamp: Date.now(),
@@ -277,8 +275,6 @@ describe('index.ts (orchestrator)', () => {
           data: {
             enabled: true,
             selectedProfile: 'balanced',
-            pinByProfile: {},
-            thinkingByProfile: {},
             timestamp: Date.now(),
           },
         },
@@ -317,8 +313,6 @@ describe('index.ts (orchestrator)', () => {
           data: {
             enabled: true,
             selectedProfile: 'balanced',
-            pinByProfile: {},
-            thinkingByProfile: {},
             timestamp: Date.now(),
           },
         },
@@ -347,39 +341,6 @@ describe('index.ts (orchestrator)', () => {
       );
     });
 
-    it('should migrate legacy pinTier field to pinByProfile', async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-      mockCtx.sessionManager.getBranch = () => [
-        {
-          type: 'custom',
-          customType: 'router-state',
-          data: {
-            enabled: true,
-            selectedProfile: 'balanced',
-            pinTier: 'medium',
-            pinByProfile: {},
-            thinkingByProfile: {},
-            timestamp: Date.now(),
-          },
-        },
-      ];
-
-      const sessionStartHandlers = eventListeners['session_start'] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Should persist with the legacy pinTier migrated into pinByProfile
-      expect(mockPi.appendEntry).toHaveBeenCalledWith(
-        'router-state',
-        expect.objectContaining({
-          pinByProfile: expect.objectContaining({ balanced: 'medium' }),
-        }),
-      );
-    });
-
     it('should sync thinking level when lastDecision exists on successful restore', async () => {
       routerExtension(mockPi);
 
@@ -402,8 +363,6 @@ describe('index.ts (orchestrator)', () => {
           data: {
             enabled: true,
             selectedProfile: 'balanced',
-            pinByProfile: {},
-            thinkingByProfile: {},
             lastDecision: decision,
             timestamp: Date.now(),
           },

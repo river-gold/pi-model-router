@@ -1,11 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { registerCommands } from './commands';
-import type {
-  RouterConfig,
-  RoutingDecision,
-  RouterPinByProfile,
-  RouterThinkingByProfile,
-} from './types';
+import type { RouterConfig, RoutingDecision } from './types';
 
 describe('commands.ts', () => {
   const buildMockPi = () => {
@@ -66,8 +61,6 @@ describe('commands.ts', () => {
       currentConfig: config,
       routerEnabled: true,
       selectedProfile: 'balanced',
-      pinnedTierByProfile: {} as RouterPinByProfile,
-      thinkingByProfile: {} as RouterThinkingByProfile,
       lastDecision,
       lastNonRouterModel: 'openai/gpt-4o',
       accumulatedCost: 0.05,

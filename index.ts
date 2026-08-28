@@ -7,21 +7,16 @@ import {
   type RouterConfig,
   type RouterPersistedState,
   type RoutingDecision,
-  type RouterPinByProfile,
-  type RouterThinkingByProfile,
-  type RouterTier,
   type CustomSessionEntry,
 } from './src/types';
 import {
   loadRouterConfig,
   profileNames,
   resolveProfileName,
-  parseCanonicalModelRef,
-  ROUTER_TIERS,
 } from './src/config';
 import { MAX_DEBUG_HISTORY } from './src/constants';
 import { isRouterPersistedState, buildPersistedState } from './src/state';
-import { updateStatus, formatModelRef } from './src/ui';
+import { updateStatus } from './src/ui';
 import { registerCommands } from './src/commands';
 import { registerRouterProvider } from './src/provider';
 
@@ -34,8 +29,6 @@ const routerExtension = (pi: ExtensionAPI) => {
   let routerEnabled = false;
   let selectedProfile: string | undefined = undefined;
   let lastRegisteredModels = '';
-  let pinnedTierByProfile: RouterPinByProfile = {};
-  let thinkingByProfile: RouterThinkingByProfile = {};
   let debugHistory: RoutingDecision[] = [];
   let lastNonRouterModel: string | undefined;
   let accumulatedCost = 0;
@@ -71,35 +64,14 @@ const routerExtension = (pi: ExtensionAPI) => {
     }
   };
 
-  const getPinnedTierForProfile = (
-    profileName: string,
-  ): RouterTier | undefined => pinnedTierByProfile[profileName];
-
-  const setPinnedTierForProfile = (
-    profileName: string,
-    tier: RouterTier | undefined,
-  ) => {
-    if (tier) {
-      pinnedTierByProfile[profileName] = tier;
-    } else {
-      delete pinnedTierByProfile[profileName];
-    }
-  };
-
   const recordDebugDecision = (decision: RoutingDecision) => {
     debugHistory = [...debugHistory, decision].slice(-MAX_DEBUG_HISTORY);
-  };
-
-  const getThinkingOverride = (profileName: string, tier: RouterTier) => {
-    return thinkingByProfile[profileName]?.[tier];
   };
 
   const persistState = () => {
     const state = buildPersistedState(
       routerEnabled,
       selectedProfile,
-      pinnedTierByProfile,
-      thinkingByProfile,
       debugEnabled,
       debugHistory,
       lastDecision,
@@ -139,8 +111,6 @@ const routerExtension = (pi: ExtensionAPI) => {
         ctx,
         routerEnabled,
         selectedProfile,
-        pinnedTierByProfile,
-        thinkingByProfile,
         lastDecision,
       ),
     reloadConfig: (
@@ -220,8 +190,6 @@ const routerExtension = (pi: ExtensionAPI) => {
           set lastDecision(v) {
             lastDecision = v;
           },
-          thinkingByProfile,
-          pinnedTierByProfile,
           get accumulatedCost() {
             return accumulatedCost;
           },
@@ -232,7 +200,6 @@ const routerExtension = (pi: ExtensionAPI) => {
         {
           persistState,
           recordDebugDecision,
-          getThinkingOverride,
           updateStatus: actions.updateStatus,
           syncPiThinkingLevel: setThinkingLevelInternally,
         },
@@ -255,13 +222,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     selectedProfile = ctx.model?.provider === 'router'
       ? resolveProfileName(currentConfig, ctx.model.id)
       : resolveProfileName(currentConfig, selectedProfile);
-    // Clear in-place to keep references intact
-    for (const key of Object.keys(pinnedTierByProfile)) {
-      delete pinnedTierByProfile[key];
-    }
-    for (const key of Object.keys(thinkingByProfile)) {
-      delete thinkingByProfile[key];
-    }
     debugHistory = [];
     accumulatedCost = 0;
     lastNonRouterModel =
@@ -285,15 +245,6 @@ const routerExtension = (pi: ExtensionAPI) => {
         savedState.selectedProfile,
       );
       routerEnabled = savedState.enabled;
-      if (savedState.pinByProfile) {
-        Object.assign(pinnedTierByProfile, savedState.pinByProfile);
-      }
-      if (savedState.thinkingByProfile) {
-        Object.assign(thinkingByProfile, savedState.thinkingByProfile);
-      }
-      if (savedState.pinTier && selectedProfile) {
-        pinnedTierByProfile[selectedProfile] = savedState.pinTier;
-      }
       debugEnabled = savedState.debugEnabled ?? debugEnabled;
       debugHistory = savedState.debugHistory
         ? [...savedState.debugHistory].slice(-MAX_DEBUG_HISTORY)
@@ -353,8 +304,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       set selectedProfile(v) {
         selectedProfile = v;
       },
-      pinnedTierByProfile,
-      thinkingByProfile,
       get lastDecision() {
         return lastDecision;
       },
