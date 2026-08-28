@@ -21,7 +21,7 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 Install from npm:
 
 ```bash
-pi install npm:@yeliu84/pi-model-router
+pi install npm:@river-gold/pi-model-router
 ```
 
 ### For development
@@ -82,3 +82,7 @@ Copy the example config to one of:
 
 - [Architecture Guide](docs/ARCHITECTURE.md): Deep dive into the routing logic and modular design.
 - [Sample Configuration](docs/model-router.example.json): Diverse profile examples (`cheap`, `deep`, `balanced`).
+
+## Credits
+
+Original project by [Ye Liu (yeliu84)](https://github.com/yeliu84/pi-model-router). Fork maintained by [river-gold](https://github.com/river-gold/pi-model-router).
