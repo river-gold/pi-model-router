@@ -81,7 +81,6 @@ describe('ui.ts', () => {
     });
 
     const mockConfig: RouterConfig = {
-      maxSessionBudget: 10.0,
       profiles: {},
     };
 
@@ -166,7 +165,7 @@ describe('ui.ts', () => {
       expect(widgetLines).toContain('[dim]Router: enabled[/dim]');
       expect(widgetLines).toContain('[dim]Profile: balanced (active)[/dim]');
       expect(widgetLines).toContain('[dim]Pin: high[/dim]');
-      expect(widgetLines).toContain('[dim]Cost: $0.0050 / $10.00[/dim]');
+      expect(widgetLines).toContain('[dim]Cost: $0.0050[/dim]');
       expect(widgetLines).toContain(
         '[dim]Route: high -> google/gemini-2.5-pro (xhigh)[/dim]',
       );
@@ -267,7 +266,7 @@ describe('ui.ts', () => {
       );
     });
 
-    it('should omit budget denominator from widget when maxSessionBudget is undefined', () => {
+    it('should display cost without budget denominator', () => {
       const ctx = buildMockCtx() as unknown as ExtensionContext;
       const noBudgetConfig: RouterConfig = {
         profiles: {},
@@ -300,43 +299,6 @@ describe('ui.ts', () => {
       const widgetLines = vi.mocked(ctx.ui.setWidget).mock.calls[0][1] as unknown as string[];
       const costLine = widgetLines.find((l: string) => l.includes('Cost'));
       expect(costLine).toBe('[dim]Cost: $0.5000[/dim]');
-    });
-
-    it('should omit budget denominator when maxSessionBudget is 0 (falsy)', () => {
-      const ctx = buildMockCtx() as unknown as ExtensionContext;
-      const zeroBudgetConfig: RouterConfig = {
-        maxSessionBudget: 0,
-        profiles: {},
-      };
-      const decision: RoutingDecision = {
-        profile: 'balanced',
-        tier: 'medium',
-        phase: 'implementation',
-        targetProvider: 'google',
-        targetModelId: 'gemini-2.5-flash',
-        targetLabel: 'google/gemini-2.5-flash',
-        reasoning: 'test',
-        thinking: 'medium',
-        timestamp: Date.now(),
-      };
-
-      updateStatus(
-        ctx,
-        true,
-        'balanced',
-        {},
-        {},
-        decision,
-        undefined,
-        0,
-        true,
-        zeroBudgetConfig,
-      );
-
-      const widgetLines = vi.mocked(ctx.ui.setWidget).mock.calls[0][1] as unknown as string[];
-      const costLine = widgetLines.find((l: string) => l.includes('Cost'));
-      // maxSessionBudget=0 is falsy, so no denominator is shown
-      expect(costLine).toBe('[dim]Cost: $0.0000[/dim]');
     });
   });
 });

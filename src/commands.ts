@@ -127,10 +127,7 @@ export const registerCommands = (
       `Pins by profile: ${formatPinSummary(state.pinnedTierByProfile)}`,
       `Thinking overrides: ${formatThinkingSummary(state.thinkingByProfile)}`,
       `Widget: ${state.widgetEnabled ? 'on' : 'off'}`,
-      `Session cost: $${state.accumulatedCost.toFixed(4)}` +
-        (state.currentConfig.maxSessionBudget
-          ? ` / $${state.currentConfig.maxSessionBudget.toFixed(2)}`
-          : ''),
+      `Session cost: $${state.accumulatedCost.toFixed(4)}`,
       `Available profiles: ${names}`,
       `Last non-router model: ${formatModelRef(state.lastNonRouterModel)}`,
       `Debug: ${state.debugEnabled ? 'on' : 'off'}`,

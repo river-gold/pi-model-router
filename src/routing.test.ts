@@ -347,27 +347,6 @@ describe('routing.ts', () => {
       expect(decisionLow.tier).toBe('medium');
     });
 
-    it('should downgrade high to medium if budget is exceeded', () => {
-      const context: Context = {
-        messages: [
-          { role: 'user', content: 'hello', timestamp: Date.now() },
-        ],
-      };
-      // Force high tier via pinned tier so budget logic can trigger
-      const decision = decideRouting(
-        context,
-        'p',
-        profile,
-        undefined,
-        'high',
-        undefined,
-        undefined,
-        true,
-      );
-      expect(decision.tier).toBe('medium');
-      expect(decision.isBudgetForced).toBe(true);
-    });
-
     it('should maintain planning phase bias (stickiness)', () => {
       // Heuristics removed: previous planning phase is retained as phase but tier defaults to medium.
       const context: Context = {

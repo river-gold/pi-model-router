@@ -234,7 +234,6 @@ export const mergeConfig = (
   return {
     debug: override.debug ?? base.debug,
     classifierModel: override.classifierModel ?? base.classifierModel,
-    maxSessionBudget: override.maxSessionBudget ?? base.maxSessionBudget,
     rules: override.rules ?? base.rules,
     profiles: mergedProfiles,
   };
@@ -363,11 +362,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     normalizedProfiles[name] = { high, medium, low, ...(classifierModel ? { classifierModel } : {}) };
   }
 
-  const maxSessionBudget =
-    typeof raw.maxSessionBudget === 'number' && raw.maxSessionBudget > 0
-      ? raw.maxSessionBudget
-      : undefined;
-
   const rules: RoutingRule[] = [];
   if (Array.isArray(raw.rules)) {
     for (const rule of raw.rules) {
@@ -402,7 +396,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     config: {
       debug: typeof raw.debug === 'boolean' ? raw.debug : false,
       classifierModel,
-      maxSessionBudget,
       rules: rules.length > 0 ? rules : undefined,
       profiles: normalizedProfiles,
     },

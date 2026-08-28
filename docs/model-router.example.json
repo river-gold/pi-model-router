@@ -1,7 +1,6 @@
 {
   "debug": false,
   "classifierModel": "google/gemini-flash-latest",
-  "maxSessionBudget": 1.0,
   "rules": [
     {
       "matches": ["deploy", "production", "release"],

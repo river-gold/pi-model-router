@@ -358,20 +358,6 @@ describe('commands.ts', () => {
       expect(notifyMessage).toContain('Warning 2');
     });
 
-    it('should show maxSessionBudget in status', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.currentConfig.maxSessionBudget = 10.0;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('status', ctx as any);
-      const notifyMessage = ctx.ui.notify.mock.calls[0][0];
-      expect(notifyMessage).toContain('$10.00');
-    });
   });
 
   describe('handleProfile edge cases', () => {

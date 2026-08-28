@@ -15,7 +15,6 @@ const getEffectiveThinking = (
 const getDecisionFlags = (decision: RoutingDecision): string[] => {
   const flags: string[] = [];
   if (decision.isFallback) flags.push('fallback');
-  if (decision.isBudgetForced) flags.push('budget-limit');
   if (decision.isRuleMatched) flags.push('rule');
   return flags;
 };
@@ -98,10 +97,7 @@ export const updateStatus = (
     `Router: ${routerEnabled ? 'enabled' : 'disabled'}`,
     `Profile: ${statusProfile}${activeRouterProfile ? ' (active)' : ''}`,
     `Pin: ${activePin ?? 'auto'}`,
-    `Cost: $${accumulatedCost.toFixed(4)}` +
-      (currentConfig.maxSessionBudget
-        ? ` / $${currentConfig.maxSessionBudget.toFixed(2)}`
-        : ''),
+    `Cost: $${accumulatedCost.toFixed(4)}`,
   ];
   if (lastDecision && lastDecision.profile === statusProfile) {
     const effectiveThinking = getEffectiveThinking(

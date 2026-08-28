@@ -20,11 +20,10 @@ The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. 
 
 For every request sent to a `router/*` model, the following logic is executed:
 
-1. **Budget Check**: If a `maxSessionBudget` is configured and the session spend exceeds it, the router automatically downgrades `high` tier requests to `medium`.
-2. **Manual Pin**: If the user has pinned a tier via `/router pin` or `/router fix`, that tier is used.
-3. **Custom Rules**: Keyword-based rules defined in the config are checked against the user prompt.
-4. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
-5. **Default**: If no pin, rule, or classifier decides, the router defaults to `medium` tier.
+1. **Manual Pin**: If the user has pinned a tier via `/router pin` or `/router fix`, that tier is used.
+2. **Custom Rules**: Keyword-based rules defined in the config are checked against the user prompt.
+3. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
+4. **Default**: If no pin, rule, or classifier decides, the router defaults to `medium` tier.
 
 ## Module Architecture
 

@@ -11,7 +11,7 @@
     "model-router.example.json",
     "README.md"
   ],
-  "description": "Smart per-turn model router for Pi that optimizes your AI budget and usage limits by dynamically switching LLM tiers based on task complexity, budget, and phase awareness.",
+  "description": "Smart per-turn model router for Pi that optimizes your AI usage by dynamically switching LLM tiers based on task complexity and phase awareness.",
   "keywords": [
     "pi-package",
     "pi",

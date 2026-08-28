@@ -39,7 +39,6 @@ export interface RouterProfile {
 export interface RouterConfig {
   debug?: boolean;
   classifierModel?: ClassifierConfig;
-  maxSessionBudget?: number;
   rules?: RoutingRule[];
   profiles: Record<string, RouterProfile>;
 }
@@ -56,7 +55,6 @@ export interface RoutingDecision {
   timestamp: number;
   isClassifier?: boolean;
   isFallback?: boolean;
-  isBudgetForced?: boolean;
   isRuleMatched?: boolean;
 }
 

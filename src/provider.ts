@@ -260,9 +260,6 @@ export const registerRouterProvider = (
           state.routerEnabled = true;
 
           const pinnedTier = state.pinnedTierByProfile[model.id];
-          const isBudgetExceeded =
-            state.currentConfig.maxSessionBudget !== undefined &&
-            state.accumulatedCost >= state.currentConfig.maxSessionBudget;
 
           let decision: RoutingDecision = decideRouting(
             context,
@@ -272,11 +269,8 @@ export const registerRouterProvider = (
             pinnedTier,
             state.thinkingByProfile[model.id],
             state.currentConfig.rules,
-            isBudgetExceeded,
           );
 
-          // Classifier Override — skip when budget is already exceeded since the
-          // result would be downgraded anyway, saving an unnecessary LLM call.
           // Priority: profile classifierModel > global classifierModel > profile low model
           const effectiveClassifier = resolveEffectiveClassifier(
             profile,
@@ -285,8 +279,7 @@ export const registerRouterProvider = (
           if (
             effectiveClassifier &&
             !pinnedTier &&
-            !decision.isRuleMatched &&
-            !isBudgetExceeded
+            !decision.isRuleMatched
           ) {
             const classifierResult = await runClassifier(
               effectiveClassifier.model,

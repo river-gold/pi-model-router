@@ -201,10 +201,9 @@ describe('config.ts', () => {
   });
 
   describe('normalizeConfig', () => {
-    it('should normalize rules, profiles, budget, classifierModel', () => {
+    it('should normalize rules, profiles, classifierModel', () => {
       const raw = {
         debug: true,
-        maxSessionBudget: 5.5,
         classifierModel: 'openai/gpt-4o',
         rules: [
           { matches: 'test', tier: 'high', reason: 'Rule reason' },
@@ -222,7 +221,6 @@ describe('config.ts', () => {
       );
       expect(warnings).toEqual([]);
       expect(config.debug).toBe(true);
-      expect(config.maxSessionBudget).toBe(5.5);
       expect(config.classifierModel?.model).toBe('openai/gpt-4o');
       expect(config.rules?.length).toBe(2);
       expect(config.profiles.balanced?.high?.model).toBe(

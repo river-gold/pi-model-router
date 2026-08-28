@@ -1,6 +1,6 @@
 # pi-model-router
 
-Smart per-turn model router extension for the [pi-coding-agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) that optimizes your AI budget and usage limits without sacrificing quality by dynamically routing each turn to the optimal LLM tier. It automatically selects between high, medium, and low-tier models based on task intent, session budget, context size, and custom rules — complete with automatic fallbacks and phase awareness.
+Smart per-turn model router extension for the [pi-coding-agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) that optimizes your AI usage without sacrificing quality by dynamically routing each turn to the optimal LLM tier. It automatically selects between high, medium, and low-tier models based on task intent, context size, and custom rules — complete with automatic fallbacks and phase awareness.
 
 ## What it does
 
@@ -10,7 +10,6 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 - **Advanced Controls**: Includes built-in support for:
   - **LLM Intent Classifier**: Optionally use a fast model to categorize intent (overrides heuristics).
   - **Custom Rules**: Define keyword-based tier overrides for specific patterns (e.g., `deploy` → `high`).
-  - **Cost Budgeting**: Set a session spend limit; high tier downgrades to medium once exceeded.
   - **Fallback Chains**: Automatic retry with alternative models if the primary choice fails.
 - **Thinking Control**: Fixed per-tier `thinking` from `model-router.json` (no effort UI); delegated reasoning is clamped per target model.
 - **Persistent State**: Pins, profiles, costs, and debug history are remembered across agent restarts and conversation branches.
@@ -51,7 +50,6 @@ Copy the example config to one of:
 ```json
 {
   "classifierModel": "google/gemini-flash-latest",
-  "maxSessionBudget": 1.0,
   "profiles": {
     "auto": {
       "high": { "model": "openai/gpt-5.4-pro", "thinking": "high" },
@@ -67,7 +65,6 @@ Copy the example config to one of:
 | Field                   | Description                                                                       |
 | ----------------------- | --------------------------------------------------------------------------------- |
 | `classifierModel`       | (Optional) Model used to categorize intent. Supports model aliases. If omitted, defaults to `medium` when no `rules` or `pin` matches. |
-| `maxSessionBudget`      | (Optional) USD budget for the session. Forces `medium` tier once exceeded.        |
 | `rules`                 | List of custom keyword rules (e.g. `{ "matches": "deploy", "tier": "high" }`).    |
 | `profiles`              | Map of profile definitions, each containing optional `high`, `medium`, and `low` tiers (at least one required). |
 

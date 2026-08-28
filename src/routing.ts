@@ -139,7 +139,6 @@ export const decideRouting = (
   pinnedTier?: RouterTier,
   thinkingOverrides?: RouterThinkingByTier,
   rules?: RoutingRule[],
-  isBudgetExceeded = false,
 ): RoutingDecision => {
   const prompt = getLastUserText(context).toLowerCase();
 
@@ -194,14 +193,6 @@ export const decideRouting = (
     // override afterwards in provider.ts.
   }
 
-  let isBudgetForced = false;
-  if (isBudgetExceeded && tier === 'high') {
-    tier = 'medium';
-    phase = 'implementation';
-    reasoning = `Budget exceeded. Downgraded from high to medium tier. (Original: ${reasoning})`;
-    isBudgetForced = true;
-  }
-
   // Resolve to nearest available tier if the selected tier is disabled
   const resolvedTier = resolveAvailableTier(profile, tier);
   if (resolvedTier !== tier) {
@@ -220,7 +211,6 @@ export const decideRouting = (
     false,
   );
   decision.isRuleMatched = isRuleMatched;
-  decision.isBudgetForced = isBudgetForced;
   return decision;
 };
 
