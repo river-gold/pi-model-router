@@ -512,6 +512,37 @@ describe('routing.ts', () => {
       });
     });
 
+    it('should pass CLASSIFIER_SYSTEM_PROMPT and dynamic user context to streamSimple', async () => {
+      const mockStream = (async function* () {
+        yield { type: 'text_delta', delta: 'Tier: low\n' };
+        yield { type: 'text_delta', delta: 'Reasoning: Simple lookup.' };
+      })();
+      vi.mocked(streamSimple).mockReturnValue(mockStream as any);
+
+      await runClassifier(
+        'openai/gpt-4o',
+        mockRegistry,
+        context,
+        'implementation',
+        'off',
+      );
+
+      expect(streamSimple).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          systemPrompt: expect.stringContaining('You are a model router classifier.'),
+          tools: undefined,
+          messages: [
+            expect.objectContaining({
+              role: 'user',
+              content: expect.stringContaining('Latest user message:'),
+            }),
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
     it('should return undefined if stream fails or format is invalid', async () => {
       const mockStream = (async function* () {
         yield { type: 'text_delta', delta: 'Invalid response format' };

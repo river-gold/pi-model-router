@@ -202,6 +202,17 @@ export const decideRouting = (
   return decision;
 };
 
+export const CLASSIFIER_SYSTEM_PROMPT = `You are a model router classifier. Your job is to categorize the user's latest request into one of three tiers: "high", "medium", or "low".
+
+Tiers:
+- high: Architecture, design, planning, tradeoff analysis, broad debugging, large refactors, codebase research.
+- medium: Implementation of a known plan, multi-file edits, normal coding work, focused debugging, tests/fixes.
+- low: Summaries, changelogs, formatting, quick explanations, small bounded transforms, simple read-only lookup.
+
+Return your decision in exactly two lines:
+Tier: [high|medium|low]
+Reasoning: [one short sentence]`;
+
 export const runClassifier = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext['modelRegistry'],
@@ -232,32 +243,20 @@ export const runClassifier = async (
     const promptText = getLastUserText(context);
     const historyText = getRecentConversationText(context, 4);
 
-    const classifierPrompt = `You are a model router classifier. Your job is to categorize the user's latest request into one of three tiers: "high", "medium", or "low".
-
-Tiers:
-- high: Architecture, design, planning, tradeoff analysis, broad debugging, large refactors, codebase research.
-- medium: Implementation of a known plan, multi-file edits, normal coding work, focused debugging, tests/fixes.
-- low: Summaries, changelogs, formatting, quick explanations, small bounded transforms, simple read-only lookup.
-
-${currentPhase ? `Current conversation phase: ${currentPhase}\n` : ''}
-Recent history:
+    const classifierUserPrompt = `${currentPhase ? `Current conversation phase: ${currentPhase}\n` : ''}Recent history:
 ${historyText}
 
 Latest user message:
 ${promptText}
 
-Return your decision in exactly two lines:
-Tier: [high|medium|low]
-Reasoning: [one short sentence]
-
 ${currentPhase === 'planning' ? 'Consider that the conversation is currently in a planning phase. Bias toward "high" unless the request is clearly a simple implementation or summary.' : ''}
-${currentPhase === 'implementation' ? 'Consider that the conversation is currently in an implementation phase. Bias toward "medium" unless the request is clearly planning or a simple summary.' : ''}`;
+${currentPhase === 'implementation' ? 'Consider that the conversation is currently in an implementation phase. Bias toward "medium" unless the request is clearly planning or a simple summary.' : ''}`.trim();
 
     const classifierContext: Context = {
       ...context,
-      systemPrompt: undefined,
+      systemPrompt: CLASSIFIER_SYSTEM_PROMPT,
       tools: undefined,
-      messages: [{ role: 'user', content: classifierPrompt, timestamp: Date.now() }],
+      messages: [{ role: 'user', content: classifierUserPrompt, timestamp: Date.now() }],
     };
 
     const reasoningOption =
@@ -274,9 +273,10 @@ ${currentPhase === 'implementation' ? 'Consider that the conversation is current
     for await (const event of stream) {
       if (
         event.type === 'text_delta' &&
-        typeof (event as any).delta === 'string'
+        'delta' in event &&
+        typeof event.delta === 'string'
       ) {
-        fullText += (event as any).delta;
+        fullText += event.delta;
       }
     }
 
