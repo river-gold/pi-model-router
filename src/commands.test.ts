@@ -107,25 +107,10 @@ describe('commands.ts', () => {
       const names = completions.map((c: any) => c.value);
       expect(names).toContain('status');
       expect(names).not.toContain('profile');
-      expect(names).toContain('pin');
+      expect(names).not.toContain('pin');
     });
 
 
-    it('should autocomplete pin arguments', () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions('pin ');
-      expect(completions).toBeDefined();
-      const values = completions.map((c: any) => c.value);
-      expect(values).toContain('pin auto');
-      expect(values).toContain('pin high');
-      expect(values).not.toContain('pin balanced');
-    });
   });
 
   describe('Handler Subcommands', () => {
@@ -147,48 +132,8 @@ describe('commands.ts', () => {
     });
 
 
-    it('should handle /router pin', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('pin high', ctx as any);
-      expect(state.pinnedTierByProfile.balanced).toBe('high');
-      expect(actions.persistState).toHaveBeenCalled();
-      expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Router pinned to high',
-        'info',
-      );
-
-      // Clear pin
-      await cmd.handler('pin auto', ctx as any);
-      expect(state.pinnedTierByProfile.balanced).toBeUndefined();
-    });
 
 
-    it('should handle /router disable', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('disable', ctx as any);
-      expect(pi.setModel).toHaveBeenCalledWith({
-        provider: 'openai',
-        id: 'gpt-4o',
-      });
-      expect(state.routerEnabled).toBe(false);
-      expect(actions.persistState).toHaveBeenCalled();
-      expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
-    });
 
 
     it('should handle /router debug history control', async () => {
@@ -279,146 +224,8 @@ describe('commands.ts', () => {
 
   });
 
-  describe('handlePin edge cases', () => {
-    it('should show error when no active profile', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      (state as any).selectedProfile = undefined;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('pin high', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'No router profile is active. Select a router model first.',
-        'error',
-      );
-    });
-
-    it('should show current pin when no arguments', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('pin', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Pinned tier: auto'),
-        'info',
-      );
-      expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
-    });
-
-    it('should show error when pin has too many arguments', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('pin high extra', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router pin <high|medium|low|auto>',
-        'error',
-      );
-    });
-
-    it('should show error when pin value is invalid', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('pin invalid', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid router pin: invalid'),
-        'error',
-      );
-    });
-  });
 
 
-  describe('handleDisable edge cases', () => {
-    it('should show error with extra args', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('disable extra', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router disable (no arguments)',
-        'error',
-      );
-    });
-
-    it('should warn when no lastNonRouterModel', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      (state as any).lastNonRouterModel = undefined;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('disable', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('No previous non-router model recorded'),
-        'warning',
-      );
-    });
-
-    it('should show error when model not found in registry', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.lastNonRouterModel = 'unknown/model-x';
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-      ctx.modelRegistry.find.mockReturnValue(null);
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('disable', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Recorded non-router model is unavailable'),
-        'error',
-      );
-    });
-
-    it('should show error when setModel fails', async () => {
-      const pi = buildMockPi();
-      pi.setModel.mockResolvedValue(false);
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('disable', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to switch to'),
-        'error',
-      );
-      // State should NOT be changed on failure
-      expect(state.routerEnabled).toBe(true);
-    });
-  });
 
 
   describe('handleDebug edge cases', () => {

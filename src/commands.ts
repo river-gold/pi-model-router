@@ -10,18 +10,8 @@ import type {
   RoutingDecision,
   RouterTier,
 } from './types';
-import {
-  profileNames,
-  ROUTER_PIN_VALUES,
-  ROUTER_TIERS,
-  parseCanonicalModelRef,
-} from './config';
-import {
-  formatPinSummary,
-  formatThinkingSummary,
-  formatModelRef,
-  formatDecision,
-} from './ui';
+import { profileNames } from './config';
+import { formatModelRef, formatDecision } from './ui';
 
 export const registerCommands = (
   pi: ExtensionAPI,
@@ -50,8 +40,6 @@ export const registerCommands = (
 ) => {
   const SUBCOMMAND_DETAILS = [
     { name: 'status', desc: 'Show current router status' },
-    { name: 'pin', desc: 'Pin routing for a profile to a specific tier' },
-    { name: 'disable', desc: 'Disable the router and restore last model' },
     { name: 'debug', desc: 'Toggle or clear router debug history' },
     { name: 'reload', desc: 'Reload the model router configuration' },
     { name: 'help', desc: 'Show usage help for subcommands' },
@@ -70,25 +58,6 @@ export const registerCommands = (
     return items.length > 0 ? items : null;
   };
 
-  const getPinCompletions = (args: string[]): AutocompleteItem[] | null => {
-    // pin <tier|auto>
-    if (args.length <= 1) {
-      const token = args[0] ?? '';
-      const items = ROUTER_PIN_VALUES.filter((value) =>
-        value.startsWith(token),
-      ).map((value) => ({
-        value,
-        label: value,
-        description: value === 'auto'
-          ? 'Restore auto-routing (clear pin) for the active profile'
-          : `Pin active profile to ${value} tier`,
-      }));
-      return items.length > 0 ? items : null;
-    }
-    return null;
-  };
-
-
   const handleStatus = async (args: string[], ctx: ExtensionContext) => {
     if (args.length > 0) {
       ctx.ui.notify('Usage: /router status (no arguments)', 'error');
@@ -99,9 +68,6 @@ export const registerCommands = (
       'Model Router Status:',
       `Router enabled: ${state.routerEnabled ? 'yes' : 'off'}`,
       `Selected profile: ${state.selectedProfile ?? 'none'}`,
-      `Selected profile pin: ${state.selectedProfile ? (state.pinnedTierByProfile[state.selectedProfile] ?? 'auto') : 'none'}`,
-      `Pins by profile: ${formatPinSummary(state.pinnedTierByProfile)}`,
-      `Thinking overrides: ${formatThinkingSummary(state.thinkingByProfile)}`,
       `Session cost: $${state.accumulatedCost.toFixed(4)}`,
       `Available profiles: ${names}`,
       `Last non-router model: ${formatModelRef(state.lastNonRouterModel)}`,
@@ -125,96 +91,6 @@ export const registerCommands = (
     }
     ctx.ui.notify(lines.join('\n'), 'info');
     actions.updateStatus(ctx);
-  };
-
-  const handlePin = async (args: string[], ctx: ExtensionContext) => {
-    const currentProfile = state.selectedProfile;
-    if (!currentProfile) {
-      ctx.ui.notify('No router profile is active. Select a router model first.', 'error');
-      return;
-    }
-    if (args.length === 0) {
-      ctx.ui.notify(
-        [
-          `Profile: ${currentProfile}`,
-          `Pinned tier: ${state.pinnedTierByProfile[currentProfile] ?? 'auto'}`,
-          `Usage: /router pin <high|medium|low|auto>`,
-        ].join('\n'),
-        'info',
-      );
-      actions.updateStatus(ctx);
-      return;
-    }
-
-    if (args.length > 1) {
-      ctx.ui.notify(
-        'Usage: /router pin <high|medium|low|auto>',
-        'error',
-      );
-      return;
-    }
-
-    const pinValue = args[0];
-
-    if (!ROUTER_PIN_VALUES.includes(pinValue as any)) {
-      ctx.ui.notify(
-        `Invalid router pin: ${pinValue}. Use one of: ${ROUTER_PIN_VALUES.join(', ')}`,
-        'error',
-      );
-      return;
-    }
-
-    const nextTier = pinValue === 'auto' ? undefined : (pinValue as RouterTier);
-    if (nextTier) {
-      state.pinnedTierByProfile[currentProfile] = nextTier;
-    } else {
-      delete state.pinnedTierByProfile[currentProfile];
-    }
-    actions.persistState();
-    actions.updateStatus(ctx);
-    ctx.ui.notify(
-      nextTier
-        ? `Router pinned to ${nextTier}`
-        : `Router pin cleared; heuristic routing restored`,
-      'info',
-    );
-  };
-
-  const handleDisable = async (args: string[], ctx: ExtensionContext) => {
-    if (args.length > 0) {
-      ctx.ui.notify('Usage: /router disable (no arguments)', 'error');
-      return;
-    }
-    if (!state.lastNonRouterModel) {
-      ctx.ui.notify(
-        'No previous non-router model recorded. Use /model to pick a concrete model.',
-        'warning',
-      );
-      return;
-    }
-    const { provider, modelId } = parseCanonicalModelRef(
-      state.lastNonRouterModel,
-    );
-    const targetModel = ctx.modelRegistry.find(provider, modelId);
-    if (!targetModel) {
-      ctx.ui.notify(
-        `Recorded non-router model is unavailable: ${state.lastNonRouterModel}`,
-        'error',
-      );
-      return;
-    }
-    const success = await pi.setModel(targetModel);
-    if (!success) {
-      ctx.ui.notify(`Failed to switch to ${state.lastNonRouterModel}`, 'error');
-      return;
-    }
-    state.routerEnabled = false;
-    actions.persistState();
-    actions.updateStatus(ctx);
-    ctx.ui.notify(
-      `Router disabled. Restored ${state.lastNonRouterModel}`,
-      'info',
-    );
   };
 
   const handleDebug = async (args: string[], ctx: ExtensionContext) => {
@@ -284,16 +160,6 @@ export const registerCommands = (
       }
 
       switch (subcommand) {
-        case 'pin': {
-          const completions = getPinCompletions(subArgs);
-          return (
-            completions?.map((c) => ({
-              ...c,
-              value: `pin ${c.value}`,
-              description: c.description ?? `Pin routing to ${c.label}`,
-            })) ?? null
-          );
-        }
         case 'debug': {
           const debugPrefix = subArgs[0] ?? '';
           const items = ['on', 'off', 'toggle', 'clear', 'show']
@@ -315,12 +181,6 @@ export const registerCommands = (
       const subArgs = parts.slice(1);
 
       switch (subcommand) {
-        case 'pin':
-          await handlePin(subArgs, ctx);
-          break;
-        case 'disable':
-          await handleDisable(subArgs, ctx);
-          break;
         case 'debug':
           await handleDebug(subArgs, ctx);
           break;
@@ -339,9 +199,7 @@ export const registerCommands = (
           ctx.ui.notify(
             [
               'Router Subcommands:',
-              '  status                      Show current status, profile, pin, cost, and last decision.',
-              '  pin <tier|auto>             Force a tier (high|medium|low) or set to auto.',
-              '  disable                     Disable the router and restore the last used non-router model.',
+              '  status                      Show current status, profile, cost, and last decision.',
               '  debug <on|off|show|clear>   Control routing debug logging to notifications and history.',
               '  reload                      Hot-reload the configuration JSON from .pi/model-router.json.',
               '  help, ?                     Show this help message.',

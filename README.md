@@ -74,8 +74,6 @@ Copy the example config to one of:
 | --------------------------- | ------------------------------------------------------------------------------- |
 | `/router`                   | Show detailed status, current profile, spend, and settings.                     |
 | `/router status`            | Alias for `/router` (show current status).                                      |
-| `/router pin <t\|a>`        | Pin a tier (high/medium/low/auto) for the active profile.                      |
-| `/router disable`           | Disable the router and switch back to the last non-router model.                |
 | `/router debug <on\|off>`   | Toggle turn-by-turn routing notifications (supports `toggle`, `clear`, `show`). |
 | `/router reload`            | Hot-reload the configuration JSON.                                              |
 | `/router help`              | Show usage help for all subcommands.                                            |
