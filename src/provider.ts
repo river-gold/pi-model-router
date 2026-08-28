@@ -36,6 +36,21 @@ import {
   resolveDelegatedModel,
   type RegistryWithProviderAuth,
 } from './constants';
+// Hook for local providers like pi-agent-bridge to register without hardcoding.
+// pi-agent-bridge can do: (globalThis as any).__piModelRouterLocalHandlers?.set("pi-agent-bridge://", handler)
+const getLocalHandlers = (): Map<string, (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream> => {
+  const g = globalThis as unknown as { __piModelRouterLocalHandlers?: Map<string, (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream> };
+  if (!g.__piModelRouterLocalHandlers) g.__piModelRouterLocalHandlers = new Map();
+  return g.__piModelRouterLocalHandlers;
+};
+
+export const registerLocalHandler = (
+  prefix: string,
+  handler: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream,
+) => {
+  getLocalHandlers().set(prefix, handler);
+};
+
 const REGISTRY_WAIT_TIMEOUT_MS = 5000;
 const REGISTRY_WAIT_INITIAL_DELAY_MS = 50;
 const REGISTRY_WAIT_MAX_DELAY_MS = 500;
@@ -484,18 +499,42 @@ export const registerRouterProvider = (
               const { reasoning: _piReasoning, ...delegationOptions } =
                 options ?? {};
 
-              const delegatedStream = streamSimple(
-                requestModel,
-                effectiveContext,
-                {
-                  ...delegationOptions,
-                  apiKey,
-                  headers,
-                  ...(delegatedReasoning
-                    ? { reasoning: delegatedReasoning }
-                    : {}),
-                },
-              );
+              // Hook for local providers (e.g., pi-agent-bridge://) to handle without HTTP
+              let delegatedStream: AssistantMessageEventStream;
+              const localHandlers = getLocalHandlers();
+              let handledLocally = false;
+              for (const [prefix, handler] of localHandlers) {
+                if (requestModel.baseUrl.startsWith(prefix)) {
+                  delegatedStream = handler(
+                    requestModel,
+                    effectiveContext,
+                    {
+                      ...delegationOptions,
+                      apiKey,
+                      headers,
+                      ...(delegatedReasoning
+                        ? { reasoning: delegatedReasoning }
+                        : {}),
+                    },
+                  );
+                  handledLocally = true;
+                  break;
+                }
+              }
+              if (!handledLocally) {
+                delegatedStream = streamSimple(
+                  requestModel,
+                  effectiveContext,
+                  {
+                    ...delegationOptions,
+                    apiKey,
+                    headers,
+                    ...(delegatedReasoning
+                      ? { reasoning: delegatedReasoning }
+                      : {}),
+                  },
+                );
+              }
 
               let contentReceived = false;
               for await (const event of delegatedStream) {
