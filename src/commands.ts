@@ -2,7 +2,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
-import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { AutocompleteItem } from '@earendil-works/pi-tui';
 import type {
   RouterConfig,
@@ -36,7 +35,6 @@ export const registerCommands = (
     lastNonRouterModel: string | undefined;
     readonly accumulatedCost: number;
     debugEnabled: boolean;
-    widgetEnabled: boolean;
     readonly debugHistory: RoutingDecision[];
     readonly lastConfigWarnings: string[];
   },
@@ -48,25 +46,12 @@ export const registerCommands = (
       options?: { preserveDebug?: boolean },
     ) => void;
     ensureValidActiveRouterProfile: (ctx: ExtensionContext) => Promise<void>;
-    switchToRouterProfile: (
-      profileName: string,
-      ctx: ExtensionContext,
-      strict?: boolean,
-    ) => Promise<boolean>;
-    syncPiThinkingLevel: (level: ThinkingLevel) => void;
   },
 ) => {
   const SUBCOMMAND_DETAILS = [
     { name: 'status', desc: 'Show current router status' },
-    { name: 'profile', desc: 'Switch to a different router profile' },
     { name: 'pin', desc: 'Pin routing for a profile to a specific tier' },
-    { name: 'thinking', desc: 'Override thinking level for a tier or profile' },
     { name: 'disable', desc: 'Disable the router and restore last model' },
-    {
-      name: 'fix',
-      desc: 'Correct the last routing decision and pin that tier',
-    },
-    { name: 'widget', desc: 'Toggle the router status widget' },
     { name: 'debug', desc: 'Toggle or clear router debug history' },
     { name: 'reload', desc: 'Reload the model router configuration' },
     { name: 'help', desc: 'Show usage help for subcommands' },
@@ -103,15 +88,6 @@ export const registerCommands = (
     return null;
   };
 
-  const getThinkingCompletions = (
-    _args: string[],
-  ): AutocompleteItem[] | null => {
-    // Router models are fixed-thinking — no effort completions.
-    return null;
-  };
-
-
-
 
   const handleStatus = async (args: string[], ctx: ExtensionContext) => {
     if (args.length > 0) {
@@ -126,7 +102,6 @@ export const registerCommands = (
       `Selected profile pin: ${state.selectedProfile ? (state.pinnedTierByProfile[state.selectedProfile] ?? 'auto') : 'none'}`,
       `Pins by profile: ${formatPinSummary(state.pinnedTierByProfile)}`,
       `Thinking overrides: ${formatThinkingSummary(state.thinkingByProfile)}`,
-      `Widget: ${state.widgetEnabled ? 'on' : 'off'}`,
       `Session cost: $${state.accumulatedCost.toFixed(4)}`,
       `Available profiles: ${names}`,
       `Last non-router model: ${formatModelRef(state.lastNonRouterModel)}`,
@@ -150,28 +125,6 @@ export const registerCommands = (
     }
     ctx.ui.notify(lines.join('\n'), 'info');
     actions.updateStatus(ctx);
-  };
-
-  const handleProfile = async (args: string[], ctx: ExtensionContext) => {
-    if (args.length > 1) {
-      ctx.ui.notify('Usage: /router profile [name]', 'error');
-      return;
-    }
-    const profileName = args[0];
-    if (!profileName) {
-      ctx.ui.notify(
-        `Current profile: ${state.selectedProfile}. Available: ${profileNames(state.currentConfig).join(', ')}`,
-        'info',
-      );
-      return;
-    }
-    const success = await actions.switchToRouterProfile(profileName, ctx);
-    if (success) {
-      ctx.ui.notify(
-        `Switched to router profile: ${state.selectedProfile}`,
-        'info',
-      );
-    }
   };
 
   const handlePin = async (args: string[], ctx: ExtensionContext) => {
@@ -227,20 +180,6 @@ export const registerCommands = (
     );
   };
 
-  const handleThinking = async (_args: string[], ctx: ExtensionContext) => {
-    const currentProfile = state.selectedProfile;
-    if (!currentProfile) {
-      ctx.ui.notify('No router profile is active. Select a router model first.', 'error');
-      return;
-    }
-    // Router models are fixed-thinking (reasoning:false) — effort overrides disabled.
-    ctx.ui.notify(
-      'Router profiles have fixed thinking (no effort). Tier thinking is from model-router.json and clamped per target model.',
-      'info',
-    );
-    return;
-  };
-
   const handleDisable = async (args: string[], ctx: ExtensionContext) => {
     if (args.length > 0) {
       ctx.ui.notify('Usage: /router disable (no arguments)', 'error');
@@ -274,46 +213,6 @@ export const registerCommands = (
     actions.updateStatus(ctx);
     ctx.ui.notify(
       `Router disabled. Restored ${state.lastNonRouterModel}`,
-      'info',
-    );
-  };
-
-  const handleFix = async (args: string[], ctx: ExtensionContext) => {
-    if (args.length !== 1) {
-      ctx.ui.notify('Usage: /router fix <high|medium|low>', 'error');
-      return;
-    }
-    const tier = args[0]?.toLowerCase();
-    if (!ROUTER_TIERS.includes(tier as RouterTier)) {
-      ctx.ui.notify('Usage: /router fix <high|medium|low>', 'error');
-      return;
-    }
-    if (!state.lastDecision) {
-      ctx.ui.notify('No recent routing decision to fix.', 'warning');
-      return;
-    }
-    state.pinnedTierByProfile[state.lastDecision.profile] = tier as RouterTier;
-    actions.persistState();
-    actions.updateStatus(ctx);
-    ctx.ui.notify(
-      `Router decision corrected. ${state.lastDecision.profile} is now pinned to ${tier}.`,
-      'info',
-    );
-  };
-
-  const handleWidget = async (args: string[], ctx: ExtensionContext) => {
-    if (args.length > 1) {
-      ctx.ui.notify('Usage: /router widget <on|off|toggle>', 'error');
-      return;
-    }
-    const cmd = args[0]?.toLowerCase();
-    if (cmd === 'on') state.widgetEnabled = true;
-    else if (cmd === 'off') state.widgetEnabled = false;
-    else state.widgetEnabled = !state.widgetEnabled;
-    actions.persistState();
-    actions.updateStatus(ctx);
-    ctx.ui.notify(
-      `Router widget ${state.widgetEnabled ? 'enabled' : 'disabled'}.`,
       'info',
     );
   };
@@ -385,17 +284,6 @@ export const registerCommands = (
       }
 
       switch (subcommand) {
-        case 'profile': {
-          const profilePrefix = subArgs[0] ?? '';
-          const items = profileNames(state.currentConfig)
-            .filter((name) => name.startsWith(profilePrefix))
-            .map((name) => ({
-              value: `profile ${name}`,
-              label: `router/${name}`,
-              description: `Switch to router profile "${name}"`,
-            }));
-          return items.length > 0 ? items : null;
-        }
         case 'pin': {
           const completions = getPinCompletions(subArgs);
           return (
@@ -405,38 +293,6 @@ export const registerCommands = (
               description: c.description ?? `Pin routing to ${c.label}`,
             })) ?? null
           );
-        }
-        case 'thinking': {
-          const completions = getThinkingCompletions(subArgs);
-          return (
-            completions?.map((c) => ({
-              ...c,
-              value: `thinking ${c.value}`,
-              description: c.description ?? `Set thinking level to ${c.label}`,
-            })) ?? null
-          );
-        }
-        case 'fix': {
-          const fixPrefix = subArgs[0] ?? '';
-          const items = ['high', 'medium', 'low']
-            .filter((t) => t.startsWith(fixPrefix.toLowerCase()))
-            .map((t) => ({
-              value: `fix ${t}`,
-              label: t,
-              description: `Correct decision and pin to ${t} tier`,
-            }));
-          return items.length > 0 ? items : null;
-        }
-        case 'widget': {
-          const widgetPrefix = subArgs[0] ?? '';
-          const items = ['on', 'off', 'toggle']
-            .filter((v) => v.startsWith(widgetPrefix))
-            .map((v) => ({
-              value: `widget ${v}`,
-              label: v,
-              description: `Set widget to ${v}`,
-            }));
-          return items.length > 0 ? items : null;
         }
         case 'debug': {
           const debugPrefix = subArgs[0] ?? '';
@@ -459,23 +315,11 @@ export const registerCommands = (
       const subArgs = parts.slice(1);
 
       switch (subcommand) {
-        case 'profile':
-          await handleProfile(subArgs, ctx);
-          break;
         case 'pin':
           await handlePin(subArgs, ctx);
           break;
-        case 'thinking':
-          await handleThinking(subArgs, ctx);
-          break;
         case 'disable':
           await handleDisable(subArgs, ctx);
-          break;
-        case 'fix':
-          await handleFix(subArgs, ctx);
-          break;
-        case 'widget':
-          await handleWidget(subArgs, ctx);
           break;
         case 'debug':
           await handleDebug(subArgs, ctx);
@@ -496,12 +340,8 @@ export const registerCommands = (
             [
               'Router Subcommands:',
               '  status                      Show current status, profile, pin, cost, and last decision.',
-              '  profile [name]              Switch to a profile (enables router if off). Lists available if no name.',
               '  pin <tier|auto>             Force a tier (high|medium|low) or set to auto.',
-              '  thinking [tier] <level>     Override thinking level (off|minimal|...|max|auto). Not all tier models may support every level.',
               '  disable                     Disable the router and restore the last used non-router model.',
-              '  fix <tier>                  Correct the last routing decision and pin that tier for the current profile.',
-              '  widget <on|off|toggle>      Control the persistent status widget visibility.',
               '  debug <on|off|show|clear>   Control routing debug logging to notifications and history.',
               '  reload                      Hot-reload the configuration JSON from .pi/model-router.json.',
               '  help, ?                     Show this help message.',
@@ -511,26 +351,10 @@ export const registerCommands = (
           break;
         default:
           if (subcommand) {
-            // Check if subcommand is actually a profile name (backwards compatible-ish with /router-on)
-            if (state.currentConfig.profiles[subcommand]) {
-              if (subArgs.length > 0) {
-                ctx.ui.notify(
-                  `Usage: /router ${subcommand} (no extra arguments allowed)`,
-                  'error',
-                );
-                return;
-              }
-              await actions.switchToRouterProfile(subcommand, ctx);
-              ctx.ui.notify(
-                `Router enabled with profile: ${state.selectedProfile}`,
-                'info',
-              );
-            } else {
-              ctx.ui.notify(
-                `Unknown router subcommand: ${subcommand}. Try /router help`,
-                'error',
-              );
-            }
+            ctx.ui.notify(
+              `Unknown router subcommand: ${subcommand}. Try /router help`,
+              'error',
+            );
           } else {
             await handleStatus(subArgs, ctx);
           }

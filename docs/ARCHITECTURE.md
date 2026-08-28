@@ -20,7 +20,7 @@ The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. 
 
 For every request sent to a `router/*` model, the following logic is executed:
 
-1. **Manual Pin**: If the user has pinned a tier via `/router pin` or `/router fix`, that tier is used.
+1. **Manual Pin**: If the user has pinned a tier via `/router pin`, that tier is used.
 2. **Custom Rules**: Keyword-based rules defined in the config are checked against the user prompt.
 3. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
 4. **Default**: If no pin, rule, or classifier decides, the router defaults to `medium` tier.
@@ -34,7 +34,7 @@ The extension is modularized for maintainability:
 - `src/routing.ts`: Core decision logic (pin/rules/classifier) and the LLM classifier.
 - `src/config.ts`: Loads, merges, and normalizes the JSON configuration.
 - `src/commands.ts`: Registers all `/router` subcommands and their autocompletions.
-- `src/ui.ts`: Manages the status line and the optional state widget.
+- `src/ui.ts`: Manages the router status line.
 - `src/state.ts`: Handles session-persisted state and snapshots.
 - `src/types.ts`: Centralized interface and type definitions.
 

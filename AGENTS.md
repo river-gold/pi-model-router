@@ -12,13 +12,13 @@ The `pi-model-router` is an extension-first model router for the `pi` coding age
   - `src/routing.ts`: Core routing logic (heuristics, classifier, rule matching).
   - `src/provider.ts`: Custom `router` provider registration and delegation stream.
   - `src/state.ts`: Session-persisted state management and snapshotting.
-  - `src/ui.ts`: UI status line and widget rendering logic.
+  - `src/ui.ts`: UI status line rendering logic.
   - `src/commands.ts`: CLI command registrations and completions.
   - `index.ts`: Main entry point (orchestrator).
 
 ## Routing Decision Logic
 Routing follows a tiered system (`high`, `medium`, `low`) and an ordered decision flow:
-1. **Manual Pin**: Use tier pinned via `/router pin` or `/router fix`.
+1. **Manual Pin**: Use tier pinned via `/router pin`.
 2. **Custom Rules**: Check keyword-based rules against the user prompt.
 3. **LLM Classifier (Optional)**: Call `classifierModel` for intent categorization.
 4. **Heuristics (Fallback)**: Use local heuristics if the classifier is off/fails.

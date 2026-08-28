@@ -68,7 +68,6 @@ describe('index.ts (orchestrator)', () => {
     },
     ui: {
       setStatus: vi.fn(),
-      setWidget: vi.fn(),
       setHiddenThinkingLabel: vi.fn(),
       theme: { fg: (c: string, text: string) => text },
       notify: vi.fn(),
@@ -111,7 +110,6 @@ describe('index.ts (orchestrator)', () => {
           pinByProfile: { balanced: 'high' },
           thinkingByProfile: {},
           debugEnabled: true,
-          widgetEnabled: true,
           accumulatedCost: 0.012,
           timestamp: Date.now(),
         },

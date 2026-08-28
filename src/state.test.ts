@@ -51,7 +51,6 @@ describe('state.ts', () => {
         { balanced: 'high' },
         { balanced: { high: 'xhigh' } },
         true,
-        false,
         [decision],
         decision,
         'openai/gpt-4o',
@@ -64,7 +63,6 @@ describe('state.ts', () => {
       expect(state.pinByProfile).toEqual({ balanced: 'high' });
       expect(state.thinkingByProfile).toEqual({ balanced: { high: 'xhigh' } });
       expect(state.debugEnabled).toBe(true);
-      expect(state.widgetEnabled).toBe(false);
       expect(state.debugHistory).toEqual([decision]);
       expect(state.lastPhase).toBe('planning');
       expect(state.lastDecision).toEqual(decision);
@@ -79,7 +77,6 @@ describe('state.ts', () => {
         undefined,
         {},
         {},
-        false,
         false,
         [],
         undefined,

@@ -1,7 +1,6 @@
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type {
   RoutingDecision,
-  RouterConfig,
   RouterPinByProfile,
   RouterThinkingByProfile,
 } from './types';
@@ -11,13 +10,6 @@ const getEffectiveThinking = (
   profileName: string,
   decision: RoutingDecision,
 ) => thinkingByProfile[profileName]?.[decision.tier] ?? decision.thinking;
-
-const getDecisionFlags = (decision: RoutingDecision): string[] => {
-  const flags: string[] = [];
-  if (decision.isFallback) flags.push('fallback');
-  if (decision.isRuleMatched) flags.push('rule');
-  return flags;
-};
 
 export const formatDecision = (decision: RoutingDecision): string => {
   return `${decision.profile}: ${decision.tier} -> ${decision.targetProvider}/${decision.targetModelId} [${decision.thinking}] (${decision.reasoning})`;
@@ -57,10 +49,6 @@ export const updateStatus = (
   pinnedTierByProfile: RouterPinByProfile,
   thinkingByProfile: RouterThinkingByProfile,
   lastDecision: RoutingDecision | undefined,
-  lastNonRouterModel: string | undefined,
-  accumulatedCost: number,
-  widgetEnabled: boolean,
-  currentConfig: RouterConfig,
 ) => {
   const activeRouterProfile = routerEnabled ? selectedProfile : undefined;
   const statusProfile = selectedProfile ?? 'none';
@@ -87,39 +75,4 @@ export const updateStatus = (
   } else {
     ctx.ui.setStatus('router', undefined);
   }
-
-  if (!widgetEnabled) {
-    ctx.ui.setWidget('router', undefined);
-    return;
-  }
-
-  const widgetLines = [
-    `Router: ${routerEnabled ? 'enabled' : 'disabled'}`,
-    `Profile: ${statusProfile}${activeRouterProfile ? ' (active)' : ''}`,
-    `Pin: ${activePin ?? 'auto'}`,
-    `Cost: $${accumulatedCost.toFixed(4)}`,
-  ];
-  if (lastDecision && lastDecision.profile === statusProfile) {
-    const effectiveThinking = getEffectiveThinking(
-      thinkingByProfile,
-      statusProfile,
-      lastDecision,
-    );
-    const flags = getDecisionFlags(lastDecision);
-    const flagsStr = flags.length > 0 ? ` [${flags.join(',')}]` : '';
-
-    widgetLines.push(
-      `Route: ${lastDecision.tier}${flagsStr} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${effectiveThinking})`,
-      `Phase: ${lastDecision.phase}`,
-    );
-  } else if (!routerEnabled && lastNonRouterModel) {
-    widgetLines.push(`Fallback: ${lastNonRouterModel}`);
-  }
-  if (Object.keys(pinnedTierByProfile).length > 1) {
-    widgetLines.push(`Pins: ${formatPinSummary(pinnedTierByProfile)}`);
-  }
-  ctx.ui.setWidget(
-    'router',
-    widgetLines.map((line) => ctx.ui.theme.fg('dim', line)),
-  );
 };

@@ -65,7 +65,6 @@ export interface RouterPersistedState {
   pinByProfile?: RouterPinByProfile;
   thinkingByProfile?: RouterThinkingByProfile;
   debugEnabled?: boolean;
-  widgetEnabled?: boolean;
   debugHistory?: RoutingDecision[];
   lastPhase?: RouterPhase;
   lastDecision?: RoutingDecision;

@@ -25,7 +25,6 @@ describe('commands.ts', () => {
     ui: {
       notify: vi.fn(),
       setStatus: vi.fn(),
-      setWidget: vi.fn(),
     },
     modelRegistry: {
       find: vi.fn().mockImplementation((provider: string, modelId: string) => {
@@ -73,7 +72,6 @@ describe('commands.ts', () => {
       lastNonRouterModel: 'openai/gpt-4o',
       accumulatedCost: 0.05,
       debugEnabled: false,
-      widgetEnabled: false,
       debugHistory: [lastDecision],
       lastConfigWarnings: [],
     };
@@ -84,8 +82,6 @@ describe('commands.ts', () => {
     updateStatus: vi.fn(),
     reloadConfig: vi.fn(),
     ensureValidActiveRouterProfile: vi.fn(),
-    switchToRouterProfile: vi.fn().mockResolvedValue(true),
-    syncPiThinkingLevel: vi.fn(),
   });
 
   describe('Registration & Subcommand Completion', () => {
@@ -110,24 +106,10 @@ describe('commands.ts', () => {
       expect(completions).toBeDefined();
       const names = completions.map((c: any) => c.value);
       expect(names).toContain('status');
-      expect(names).toContain('profile');
+      expect(names).not.toContain('profile');
       expect(names).toContain('pin');
     });
 
-    it('should autocomplete profile names', () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions('profile ');
-      expect(completions).toBeDefined();
-      const values = completions.map((c: any) => c.value);
-      expect(values).toContain('profile balanced');
-      expect(values).toContain('profile cheap');
-    });
 
     it('should autocomplete pin arguments', () => {
       const pi = buildMockPi();
@@ -164,22 +146,6 @@ describe('commands.ts', () => {
       expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
     });
 
-    it('should handle /router profile switch', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('profile cheap', ctx as any);
-      expect(actions.switchToRouterProfile).toHaveBeenCalledWith('cheap', ctx);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Switched to router profile'),
-        'info',
-      );
-    });
 
     it('should handle /router pin', async () => {
       const pi = buildMockPi();
@@ -204,23 +170,6 @@ describe('commands.ts', () => {
       expect(state.pinnedTierByProfile.balanced).toBeUndefined();
     });
 
-    it('should handle /router thinking', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking high xhigh', ctx as any);
-      // Router is fixed-thinking — no override is stored
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-      expect(state.thinkingByProfile.balanced).toBeUndefined();
-    });
 
     it('should handle /router disable', async () => {
       const pi = buildMockPi();
@@ -241,36 +190,6 @@ describe('commands.ts', () => {
       expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
     });
 
-    it('should handle /router fix', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('fix low', ctx as any);
-      expect(state.pinnedTierByProfile.balanced).toBe('low');
-      expect(actions.persistState).toHaveBeenCalled();
-      expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
-    });
-
-    it('should handle /router widget toggles', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('widget on', ctx as any);
-      expect(state.widgetEnabled).toBe(true);
-
-      await cmd.handler('widget off', ctx as any);
-      expect(state.widgetEnabled).toBe(false);
-    });
 
     it('should handle /router debug history control', async () => {
       const pi = buildMockPi();
@@ -360,62 +279,6 @@ describe('commands.ts', () => {
 
   });
 
-  describe('handleProfile edge cases', () => {
-    it('should show current profile when no argument given', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('profile', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Current profile: balanced'),
-        'info',
-      );
-    });
-
-    it('should show error when profile has too many arguments', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('profile one two', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router profile [name]',
-        'error',
-      );
-    });
-
-    it('should not notify on profile switch failure', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      actions.switchToRouterProfile.mockResolvedValue(false);
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('profile nonexistent', ctx as any);
-      expect(actions.switchToRouterProfile).toHaveBeenCalledWith(
-        'nonexistent',
-        ctx,
-      );
-      // When switchToRouterProfile returns false, no success notification
-      expect(ctx.ui.notify).not.toHaveBeenCalledWith(
-        expect.stringContaining('Switched to router profile'),
-        'info',
-      );
-    });
-  });
-
   describe('handlePin edge cases', () => {
     it('should show error when no active profile', async () => {
       const pi = buildMockPi();
@@ -484,239 +347,6 @@ describe('commands.ts', () => {
     });
   });
 
-  describe('handleThinking branches', () => {
-    it('should show error when no active profile', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      (state as any).selectedProfile = undefined;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking high', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'No router profile is active. Select a router model first.',
-        'error',
-      );
-    });
-
-    it('should show current thinking when no arguments', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-    });
-
-    it('should show error with too many arguments', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking high medium low', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-    });
-
-    it('should show error with invalid tier', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking badtier high', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-    });
-
-    it('should show error with invalid level', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking badlevel', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-    });
-
-    it('should apply auto to all tiers and clear overrides', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.thinkingByProfile.balanced = { high: 'xhigh', medium: 'medium' };
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking auto', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-      // No override is cleared — router is fixed
-      expect(state.thinkingByProfile.balanced).toEqual({ high: 'xhigh', medium: 'medium' });
-    });
-
-    it('should apply thinking level to specific tier', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking low minimal', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-      expect(state.thinkingByProfile.balanced?.low).toBeUndefined();
-    });
-
-    it('should clear specific tier with auto', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.thinkingByProfile.balanced = { high: 'xhigh' };
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking high auto', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-      expect(state.thinkingByProfile.balanced).toEqual({ high: 'xhigh' });
-    });
-
-    it('should sync pi thinking level when setting a level', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking high', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-      expect(actions.syncPiThinkingLevel).not.toHaveBeenCalled();
-    });
-
-    it('should restore last decision thinking when setting auto', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking auto', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-      expect(actions.syncPiThinkingLevel).not.toHaveBeenCalled();
-    });
-
-    it('should warn about unsupported tiers', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.currentConfig.profiles.balanced = {
-        high: {
-          model: 'openai/gpt-4o',
-        },
-        medium: {
-          model: 'openai/gpt-4o-mini',
-        },
-      };
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking xhigh', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-    });
-
-    it('should not warn for off level', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.currentConfig.profiles.balanced = {
-        high: {
-          model: 'openai/gpt-4o',
-        },
-      };
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking off', ctx as any);
-      // Should NOT warn for 'off'
-      const warnCalls = ctx.ui.notify.mock.calls.filter(
-        (c: unknown[]) => c[1] === 'warning',
-      );
-      expect(warnCalls.length).toBe(0);
-    });
-
-    it('should accept "all" as explicit tier arg', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('thinking all high', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('fixed thinking'),
-        'info',
-      );
-      expect(state.thinkingByProfile.balanced).toBeUndefined();
-    });
-  });
 
   describe('handleDisable edge cases', () => {
     it('should show error with extra args', async () => {
@@ -790,108 +420,6 @@ describe('commands.ts', () => {
     });
   });
 
-  describe('handleFix edge cases', () => {
-    it('should show error with wrong number of args', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('fix', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router fix <high|medium|low>',
-        'error',
-      );
-    });
-
-    it('should show error with too many args', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('fix high extra', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router fix <high|medium|low>',
-        'error',
-      );
-    });
-
-    it('should show error with invalid tier', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('fix badtier', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router fix <high|medium|low>',
-        'error',
-      );
-    });
-
-    it('should warn when no last decision', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      (state as any).lastDecision = undefined;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('fix high', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'No recent routing decision to fix.',
-        'warning',
-      );
-    });
-  });
-
-  describe('handleWidget edge cases', () => {
-    it('should show error with too many args', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('widget on extra', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router widget <on|off|toggle>',
-        'error',
-      );
-    });
-
-    it('should toggle widget when no arg given', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.widgetEnabled = false;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('widget', ctx as any);
-      expect(state.widgetEnabled).toBe(true);
-      expect(actions.persistState).toHaveBeenCalled();
-
-      await cmd.handler('widget', ctx as any);
-      expect(state.widgetEnabled).toBe(false);
-    });
-  });
 
   describe('handleDebug edge cases', () => {
     it('should enable debug explicitly', async () => {
@@ -994,76 +522,9 @@ describe('commands.ts', () => {
   });
 
   describe('Autocomplete completions', () => {
-    it('should return thinking completions for first arg', () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
 
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
 
-      const completions = cmd.getArgumentCompletions('thinking ');
-      // Router is fixed-thinking — no completions
-      expect(completions).toBeNull();
-    });
 
-    it('should return null when thinking first arg is a level-tier overlap', () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      // 'high' is both a tier and a level; level check comes first, so no further completions
-      const completions = cmd.getArgumentCompletions('thinking high a');
-      expect(completions).toBeNull();
-    });
-
-    it('should return null for thinking completions after level arg', () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      // 'auto' is a level, so no further completions
-      const completions = cmd.getArgumentCompletions('thinking auto ');
-      expect(completions).toBeNull();
-    });
-
-    it('should return fix completions', () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions('fix ');
-      expect(completions).toBeDefined();
-      const values = completions!.map((c: any) => c.value);
-      expect(values).toContain('fix high');
-      expect(values).toContain('fix medium');
-      expect(values).toContain('fix low');
-    });
-
-    it('should return widget completions', () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions('widget ');
-      expect(completions).toBeDefined();
-      const values = completions!.map((c: any) => c.value);
-      expect(values).toContain('widget on');
-      expect(values).toContain('widget off');
-      expect(values).toContain('widget toggle');
-    });
 
     it('should return debug completions', () => {
       const pi = buildMockPi();
@@ -1127,38 +588,7 @@ describe('commands.ts', () => {
       );
     });
 
-    it('should treat profile name as subcommand (backward compat)', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
 
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('cheap', ctx as any);
-      expect(actions.switchToRouterProfile).toHaveBeenCalledWith('cheap', ctx);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('Router enabled with profile'),
-        'info',
-      );
-    });
-
-    it('should show error when profile name has extra args', async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler('balanced extra', ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining('no extra arguments allowed'),
-        'error',
-      );
-    });
 
     it('should fall through to status on empty args', async () => {
       const pi = buildMockPi();
