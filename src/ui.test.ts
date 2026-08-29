@@ -54,7 +54,27 @@ describe('ui.ts', () => {
       updateStatus(ctx, true, 'balanced', decision);
       expect(ctx.ui.setStatus).toHaveBeenCalledWith(
         'router',
-        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high)',
+        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high) [🧠llm]',
+      );
+    });
+
+    it('should display vector hit with similarity', () => {
+      const ctx = buildMockCtx() as unknown as ExtensionContext;
+      const vecDecision = { ...decision, isVectorHit: true, vectorSimilarity: 0.923 } as RoutingDecision;
+      updateStatus(ctx, true, 'balanced', vecDecision);
+      expect(ctx.ui.setStatus).toHaveBeenCalledWith(
+        'router',
+        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high) [⚡vec:0.92]',
+      );
+    });
+
+    it('should display rule tag', () => {
+      const ctx = buildMockCtx() as unknown as ExtensionContext;
+      const ruleDecision = { ...decision, isRuleMatched: true } as RoutingDecision;
+      updateStatus(ctx, true, 'balanced', ruleDecision);
+      expect(ctx.ui.setStatus).toHaveBeenCalledWith(
+        'router',
+        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high) [📌rule]',
       );
     });
 

@@ -217,7 +217,6 @@ export const runClassifier = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext['modelRegistry'],
   context: Context,
-  currentPhase?: RouterPhase,
   thinking?: ThinkingLevel,
 ): Promise<{ tier: RouterTier; reasoning: string } | undefined> => {
   try {
@@ -241,16 +240,9 @@ export const runClassifier = async (
     );
 
     const promptText = getLastUserText(context);
-    const historyText = getRecentConversationText(context, 4);
 
-    const classifierUserPrompt = `${currentPhase ? `Current conversation phase: ${currentPhase}\n` : ''}Recent history:
-${historyText}
-
-Latest user message:
-${promptText}
-
-${currentPhase === 'planning' ? 'Consider that the conversation is currently in a planning phase. Bias toward "high" unless the request is clearly a simple implementation or summary.' : ''}
-${currentPhase === 'implementation' ? 'Consider that the conversation is currently in an implementation phase. Bias toward "medium" unless the request is clearly planning or a simple summary.' : ''}`.trim();
+    const classifierUserPrompt = `Latest user message:
+${promptText}`.trim();
 
     const classifierContext: Context = {
       ...context,

@@ -1,5 +1,15 @@
 {
   "debug": false,
+  "vectorCache": {
+    "enabled": true,
+    "threshold": 0.75,
+    "vectorFile": "router-vectors.db",
+    "embeddingModel": "qwen3-embedding:0.6b",
+    "embeddingBaseUrl": "http://localhost:11434",
+    "backgroundRefresh": true,
+    "dimensions": 1024,
+    "embeddingContextWindow": 8192
+  },
   "classifierModel": "google/gemini-flash-latest",
   "rules": [
     {

@@ -23,7 +23,14 @@ export const updateStatus = (
 
     let statusText: string;
     if (lastDecision && matchesProfile) {
-      statusText = `router:${activeRouterProfile} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.thinking})`;
+      const cacheTag = lastDecision.isVectorHit
+        ? `⚡vec:${lastDecision.vectorSimilarity?.toFixed(2) ?? '?'}`
+        : lastDecision.isClassifier
+          ? '🧠llm'
+          : lastDecision.isRuleMatched
+            ? '📌rule'
+            : '🧠llm';
+      statusText = `router:${activeRouterProfile} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.thinking}) [${cacheTag}]`;
     } else {
       statusText = `router:${activeRouterProfile} -> waiting`;
     }

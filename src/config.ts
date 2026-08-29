@@ -12,6 +12,7 @@ import type {
   RouterTier,
   RoutingRule,
   ClassifierConfig,
+  VectorCacheConfig,
 } from './types';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import {
@@ -22,6 +23,13 @@ import {
 export const ROUTER_TIERS = ['high', 'medium', 'low'] as const;
 
 export const ROUTER_PIN_VALUES = ['auto', 'high', 'medium', 'low'] as const;
+
+export const DEFAULT_VECTOR_THRESHOLD = 0.75;
+export const DEFAULT_VECTOR_FILE = 'router-vectors.db';
+export const DEFAULT_EMBEDDING_MODEL = 'qwen3-embedding:0.6b';
+export const DEFAULT_EMBEDDING_BASE_URL = 'http://localhost:11434';
+export const DEFAULT_VECTOR_DIMENSIONS = 1024;
+export const DEFAULT_EMBEDDING_CONTEXT_WINDOW = 8192;
 
 export const isObjectRecord = (
   value: unknown,
@@ -205,6 +213,110 @@ export const normalizeClassifierConfig = (
   return undefined;
 };
 
+export const normalizeVectorCacheConfig = (
+  raw: unknown,
+  warnings: string[],
+): VectorCacheConfig | undefined => {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isObjectRecord(raw)) {
+    warnings.push(`Invalid vectorCache config: expected an object. Ignored.`);
+    return undefined;
+  }
+
+  const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : true;
+
+  let threshold = DEFAULT_VECTOR_THRESHOLD;
+  if (raw.threshold !== undefined) {
+    if (typeof raw.threshold === 'number' && raw.threshold >= 0 && raw.threshold <= 1) {
+      threshold = raw.threshold;
+    } else {
+      warnings.push(`Invalid vectorCache.threshold "${String(raw.threshold)}": expected number between 0 and 1. Using default ${DEFAULT_VECTOR_THRESHOLD}.`);
+    }
+  }
+
+  let vectorFile = DEFAULT_VECTOR_FILE;
+  if (typeof raw.vectorFile === 'string' && raw.vectorFile.trim()) {
+    vectorFile = raw.vectorFile.trim();
+  } else if (raw.vectorFile !== undefined) {
+    warnings.push(`Invalid vectorCache.vectorFile: expected non-empty string. Using default "${DEFAULT_VECTOR_FILE}".`);
+  }
+  // Alias: allow "vectorPath" or "file" as alternative keys
+  if (typeof raw.vectorPath === 'string' && raw.vectorPath.trim() && vectorFile === DEFAULT_VECTOR_FILE) {
+    vectorFile = (raw.vectorPath as string).trim();
+  }
+  if (typeof raw.file === 'string' && raw.file.trim() && vectorFile === DEFAULT_VECTOR_FILE) {
+    vectorFile = (raw.file as string).trim();
+  }
+
+  let embeddingModel = DEFAULT_EMBEDDING_MODEL;
+  if (typeof raw.embeddingModel === 'string' && raw.embeddingModel.trim()) {
+    embeddingModel = raw.embeddingModel.trim();
+  } else if (typeof raw.model === 'string' && raw.model.trim() && embeddingModel === DEFAULT_EMBEDDING_MODEL) {
+    embeddingModel = (raw.model as string).trim();
+  } else if (raw.embeddingModel !== undefined) {
+    warnings.push(`Invalid vectorCache.embeddingModel: expected non-empty string. Using default "${DEFAULT_EMBEDDING_MODEL}".`);
+  }
+
+  let embeddingBaseUrl = DEFAULT_EMBEDDING_BASE_URL;
+  if (typeof raw.embeddingBaseUrl === 'string' && raw.embeddingBaseUrl.trim()) {
+    embeddingBaseUrl = raw.embeddingBaseUrl.trim().replace(/\/+$/, '');
+  } else if (typeof raw.baseUrl === 'string' && raw.baseUrl.trim() && embeddingBaseUrl === DEFAULT_EMBEDDING_BASE_URL) {
+    embeddingBaseUrl = (raw.baseUrl as string).trim().replace(/\/+$/, '');
+  } else if (raw.embeddingBaseUrl !== undefined || raw.baseUrl !== undefined) {
+    // only warn if provided but invalid type
+    if (raw.embeddingBaseUrl !== undefined && typeof raw.embeddingBaseUrl !== 'string') {
+      warnings.push(`Invalid vectorCache.embeddingBaseUrl: expected string. Using default "${DEFAULT_EMBEDDING_BASE_URL}".`);
+    }
+  }
+
+  const backgroundRefresh = typeof raw.backgroundRefresh === 'boolean' ? raw.backgroundRefresh : false;
+
+  let dimensions = DEFAULT_VECTOR_DIMENSIONS;
+  if (raw.dimensions !== undefined) {
+    if (typeof raw.dimensions === 'number' && Number.isInteger(raw.dimensions) && raw.dimensions > 0 && raw.dimensions <= 4096) {
+      dimensions = raw.dimensions;
+    } else {
+      warnings.push(`Invalid vectorCache.dimensions "${String(raw.dimensions)}": expected integer between 1 and 4096. Using default ${DEFAULT_VECTOR_DIMENSIONS}.`);
+    }
+  }
+
+  const keepAlive = typeof raw.keepAlive === 'string' && raw.keepAlive.trim() ? raw.keepAlive.trim() : undefined;
+
+  let embeddingContextWindow = DEFAULT_EMBEDDING_CONTEXT_WINDOW;
+  const rawContextWindow =
+    raw.embeddingContextWindow ??
+    raw.embeddingContextSize ??
+    raw.contextWindow ??
+    raw.contextSize ??
+    raw.maxTokens;
+  if (rawContextWindow !== undefined) {
+    if (
+      typeof rawContextWindow === 'number' &&
+      Number.isInteger(rawContextWindow) &&
+      rawContextWindow > 0 &&
+      rawContextWindow <= 100000
+    ) {
+      embeddingContextWindow = rawContextWindow;
+    } else {
+      warnings.push(
+        `Invalid vectorCache.embeddingContextWindow "${String(rawContextWindow)}": expected integer between 1 and 100000. Using default ${DEFAULT_EMBEDDING_CONTEXT_WINDOW}.`,
+      );
+    }
+  }
+
+  return {
+    enabled,
+    threshold,
+    vectorFile,
+    embeddingModel,
+    embeddingBaseUrl,
+    backgroundRefresh,
+    dimensions,
+    embeddingContextWindow,
+    ...(keepAlive ? { keepAlive } : {}),
+  };
+};
+
 export const resolveEffectiveClassifier = (
   profile: RouterProfile,
   globalClassifier: ClassifierConfig | undefined,
@@ -231,11 +343,22 @@ export const mergeConfig = (
     };
   }
 
+  // Merge vectorCache: shallow merge, override wins per field
+  let mergedVectorCache: VectorCacheConfig | undefined = base.vectorCache;
+  if (override.vectorCache !== undefined) {
+    if (isObjectRecord(override.vectorCache) && isObjectRecord(base.vectorCache)) {
+      mergedVectorCache = { ...base.vectorCache, ...override.vectorCache } as VectorCacheConfig;
+    } else if (override.vectorCache !== undefined) {
+      mergedVectorCache = override.vectorCache as VectorCacheConfig;
+    }
+  }
+
   return {
     debug: override.debug ?? base.debug,
     classifierModel: override.classifierModel ?? base.classifierModel,
     rules: override.rules ?? base.rules,
     profiles: mergedProfiles,
+    ...(mergedVectorCache ? { vectorCache: mergedVectorCache } : {}),
   };
 };
 
@@ -392,12 +515,18 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     'classifierModel',
   );
 
+  const vectorCache = normalizeVectorCacheConfig(
+    (raw as unknown as Record<string, unknown>).vectorCache,
+    warnings,
+  );
+
   return {
     config: {
       debug: typeof raw.debug === 'boolean' ? raw.debug : false,
       classifierModel,
       rules: rules.length > 0 ? rules : undefined,
       profiles: normalizedProfiles,
+      ...(vectorCache ? { vectorCache } : {}),
     },
     warnings,
   };

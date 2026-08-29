@@ -14,7 +14,7 @@ import type {
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
-import type { RouterConfig, RoutingDecision } from './types';
+import type { RouterConfig, RoutingDecision, RouterTier } from './types';
 import {
   profileNames,
   parseCanonicalModelRef,
@@ -30,6 +30,8 @@ import {
   resolveDelegatedModel,
   type RegistryWithProviderAuth,
 } from './constants';
+import { embedText, normalizePromptForEmbedding } from './embeddings';
+import { getVectorStore } from './vector-store';
 // Hook for local providers like pi-agent-bridge to register without hardcoding.
 // pi-agent-bridge can do: (globalThis as any).__piModelRouterLocalHandlers?.set("pi-agent-bridge://", handler)
 const getLocalHandlers = (): Map<string, (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream> => {
@@ -81,6 +83,7 @@ import {
   runClassifier,
   extractTextFromContent,
   hasImageAttachment,
+  getLastUserText,
 } from './routing';
 
 export const createErrorMessage = (
@@ -263,12 +266,93 @@ export const registerRouterProvider = (
             profile,
             state.currentConfig.classifierModel,
           );
-          if (effectiveClassifier && !decision.isRuleMatched) {
+
+          // --- Vector Cache Lookup (before LLM classifier) ---
+          let queryEmbedding: number[] | undefined;
+          let vectorHit = false;
+          const vectorCache = state.currentConfig.vectorCache;
+          const shouldUseVector = !!vectorCache?.enabled && !decision.isRuleMatched;
+
+          if (shouldUseVector && vectorCache) {
+            const promptForVector = getLastUserText(context);
+            // Skip vector cache if prompt exceeds embedding context window -> directly use LLM
+            if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
+              // Exceeds embedding model context, bypass vector cache
+            } else {
+              const normalizedForVector = normalizePromptForEmbedding(promptForVector);
+              if (normalizedForVector) {
+              try {
+                const store = getVectorStore(vectorCache.vectorFile, vectorCache.dimensions);
+                if (store && store.isReady()) {
+                  const emb = await embedText(promptForVector, vectorCache);
+                  if (emb) {
+                    queryEmbedding = emb;
+                    const hit = store.search(emb, 1, vectorCache.threshold);
+                    if (hit) {
+                      decision = buildRoutingDecision(
+                        model.id,
+                        profile,
+                        hit.tier,
+                        phaseForTier(hit.tier),
+                        `vector-cache hit similarity ${hit.similarity.toFixed(2)} (threshold ${vectorCache.threshold}) tier=${hit.tier} ${hit.reasoning ? `orig:${hit.reasoning}` : ''}`.trim(),
+                        false,
+                      );
+                      decision.isVectorHit = true;
+                      decision.vectorSimilarity = hit.similarity;
+                      vectorHit = true;
+                      try {
+                        store.incrementHit(hit.normalized);
+                      } catch (err) {
+                        try { state.lastExtensionContext?.ui.notify(`Vector incrementHit failed: ${err instanceof Error ? err.message : String(err)}`, 'warning'); } catch {}
+                      }
+
+                      // Background refresh: continuously improve cache regardless of match
+                      if (vectorCache.backgroundRefresh && effectiveClassifier) {
+                        const bgPrompt = promptForVector;
+                        const bgNormalized = normalizedForVector;
+                        const bgEmbedding = emb;
+                        const bgStore = store;
+                        const bgClassifier = effectiveClassifier;
+                        // Fire-and-forget
+                        void (async () => {
+                          try {
+                            const classifierResult = await runClassifier(
+                              bgClassifier.model,
+                              registry,
+                              context,
+                              bgClassifier.thinking,
+                            );
+                            if (classifierResult) {
+                              bgStore.upsert(bgPrompt, bgNormalized, classifierResult.tier, classifierResult.reasoning, bgEmbedding);
+                            }
+                          } catch (err) {
+                            try { state.lastExtensionContext?.ui.notify(`Vector backgroundRefresh failed: ${err instanceof Error ? err.message : String(err)}`, 'warning'); } catch {}
+                          }
+                        })();
+                      }
+                    }
+                  } else {
+                    try { state.lastExtensionContext?.ui.notify(`Vector embed failed for: "${promptForVector.slice(0,40)}" — fallback to LLM`, 'warning'); } catch {}
+                  }
+                } else if (store?.error) {
+                  try { state.lastExtensionContext?.ui.notify(`Vector store not ready: ${store.error}`, 'warning'); } catch {}
+                } else {
+                  if (!queryEmbedding) {
+                    try { state.lastExtensionContext?.ui.notify(`Vector embed failed for: "${promptForVector.slice(0,40)}" — fallback to LLM`, 'warning'); } catch {}
+                  }
+                }
+                } catch (err) {
+                  try { state.lastExtensionContext?.ui.notify(`Vector cache lookup failed: ${err instanceof Error ? err.message : String(err)}`, 'warning'); } catch {}
+                }
+              }
+            }
+          }
+
+          if (!vectorHit && effectiveClassifier && !decision.isRuleMatched) {
             const classifierResult = await runClassifier(
               effectiveClassifier.model,
               registry,
               context,
-              state.lastDecision?.phase,
               effectiveClassifier.thinking,
             );
             if (classifierResult) {
@@ -280,6 +364,32 @@ export const registerRouterProvider = (
                 `Classifier: ${classifierResult.reasoning}`,
                 true,
               );
+            }
+          }
+
+          // Persist current prompt to vector cache if not already a hit (learn from LLM or default)
+          if (!vectorHit && vectorCache?.enabled) {
+            const promptForVector = getLastUserText(context);
+            if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
+              // Too long for embedding model, skip caching
+            } else {
+              const normalizedForVector = normalizePromptForEmbedding(promptForVector);
+              if (normalizedForVector) {
+              try {
+                const store = getVectorStore(vectorCache.vectorFile, vectorCache.dimensions);
+                if (store && store.isReady()) {
+                  let emb = queryEmbedding;
+                  if (!emb) {
+                    emb = await embedText(promptForVector, vectorCache) ?? undefined;
+                  }
+                  if (emb) {
+                    store.upsert(promptForVector, normalizedForVector, decision.tier, decision.reasoning, emb);
+                  }
+                }
+                } catch (err) {
+                  try { state.lastExtensionContext?.ui.notify(`Vector cache persist failed: ${err instanceof Error ? err.message : String(err)}`, 'warning'); } catch {}
+                }
+              }
             }
           }
 
@@ -348,7 +458,7 @@ export const registerRouterProvider = (
               }
 
               if (foundTier) {
-                decision = buildRoutingDecision(
+                const forced = buildRoutingDecision(
                   model.id,
                   profile,
                   foundTier,
@@ -356,6 +466,10 @@ export const registerRouterProvider = (
                   `Forced ${foundTier} tier because the originally routed ${decision.tier} tier does not support image attachments.`,
                   false,
                 );
+                // Preserve vector hit flag if applicable
+                forced.isVectorHit = decision.isVectorHit;
+                forced.vectorSimilarity = decision.vectorSimilarity;
+                decision = forced;
               }
             }
           }
@@ -467,7 +581,7 @@ export const registerRouterProvider = (
                 options ?? {};
 
               // Hook for local providers (e.g., pi-agent-bridge://) to handle without HTTP
-              let delegatedStream: AssistantMessageEventStream;
+              let delegatedStream: AssistantMessageEventStream | undefined;
               const localHandlers = getLocalHandlers();
               let handledLocally = false;
               for (const [prefix, handler] of localHandlers) {
@@ -504,6 +618,7 @@ export const registerRouterProvider = (
               }
 
               let contentReceived = false;
+              if (!delegatedStream) throw new Error('No delegated stream available');
               for await (const event of delegatedStream) {
                 if (event.type === 'done') {
                   const cost = event.message.usage?.cost?.total ?? 0;

@@ -19,6 +19,7 @@ import { isRouterPersistedState, buildPersistedState } from './src/state';
 import { updateStatus } from './src/ui';
 import { registerCommands } from './src/commands';
 import { registerRouterProvider } from './src/provider';
+import { getVectorStore } from './src/vector-store';
 
 const routerExtension = (pi: ExtensionAPI) => {
   let currentConfig: RouterConfig = { profiles: {} };
@@ -125,6 +126,20 @@ const routerExtension = (pi: ExtensionAPI) => {
       }
       selectedProfile = resolveProfileName(currentConfig, selectedProfile);
       actions.registerRouterProvider();
+      // Proactively initialize vector cache to surface init errors early
+      if (currentConfig.vectorCache?.enabled) {
+        const store = getVectorStore(
+          currentConfig.vectorCache.vectorFile,
+          currentConfig.vectorCache.dimensions,
+        );
+        if (store && !store.isReady() && store.error) {
+          const msg = `Vector cache init failed: ${store.error}`;
+          lastConfigWarnings = [...lastConfigWarnings, msg];
+          if (ctx) {
+            ctx.ui.notify(msg, 'warning');
+          }
+        }
+      }
       if (ctx) {
         actions.updateStatus(ctx);
         if (lastConfigWarnings.length > 0) {

@@ -503,7 +503,6 @@ describe('routing.ts', () => {
         'openai/gpt-4o',
         mockRegistry,
         context,
-        'planning',
         'high',
       );
       expect(result).toEqual({
@@ -523,7 +522,6 @@ describe('routing.ts', () => {
         'openai/gpt-4o',
         mockRegistry,
         context,
-        'implementation',
         'off',
       );
 

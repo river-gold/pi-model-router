@@ -3,6 +3,10 @@
   "defaultModel": "muse-spark",
   "enabledModels": [
     "router/*",
-    "antigravity/*"
+    "antigravity/*",
+    "opencode-go/muse-spark-1.2-contributor",
+    "ollama-cloud/deepseek-v4-*",
+    "ollama-cloud/kimi-k3",
+    "ollama-cloud/glm-5.3-*"
   ]
 }

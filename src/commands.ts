@@ -6,6 +6,7 @@ import type { AutocompleteItem } from '@earendil-works/pi-tui';
 import type { RouterConfig, RoutingDecision } from './types';
 import { profileNames } from './config';
 import { formatModelRef, formatDecision } from './ui';
+import { getVectorStore, getExistingVectorStore } from './vector-store';
 
 export const registerCommands = (
   pi: ExtensionAPI,
@@ -34,6 +35,7 @@ export const registerCommands = (
     { name: 'status', desc: 'Show current router status' },
     { name: 'debug', desc: 'Toggle or clear router debug history' },
     { name: 'reload', desc: 'Reload the model router configuration' },
+    { name: 'cache', desc: 'Vector cache operations (status/clear)' },
     { name: 'help', desc: 'Show usage help for subcommands' },
   ];
 
@@ -72,7 +74,41 @@ export const registerCommands = (
         `Last phase: ${state.lastDecision.phase}`,
         `Last model: ${state.lastDecision.targetProvider}/${state.lastDecision.targetModelId} (${state.lastDecision.thinking})`,
         `Reason: ${state.lastDecision.reasoning}`,
+        ...(state.lastDecision.isVectorHit ? [`Vector hit: yes (similarity ${state.lastDecision.vectorSimilarity?.toFixed(2) ?? '?'})`] : []),
       );
+    }
+    // Vector cache status
+    const vc = state.currentConfig.vectorCache;
+    if (vc) {
+      lines.push(
+        '',
+        'Vector Cache:',
+        `  enabled: ${vc.enabled ? 'yes' : 'no'}`,
+        `  threshold: ${vc.threshold}`,
+        `  vectorFile: ${vc.vectorFile}`,
+        `  embeddingModel: ${vc.embeddingModel}`,
+        `  embeddingBaseUrl: ${vc.embeddingBaseUrl}`,
+        `  backgroundRefresh: ${vc.backgroundRefresh ? 'on' : 'off'}`,
+        `  dimensions: ${vc.dimensions}`,
+        `  embeddingContextWindow: ${vc.embeddingContextWindow}`,
+      );
+      try {
+        const store = vc.enabled ? (getExistingVectorStore() ?? getVectorStore(vc.vectorFile, vc.dimensions)) : undefined;
+        if (store) {
+          if (store.isReady()) {
+            const stats = store.stats();
+            lines.push(`  vectors: ${stats?.count ?? 0}`, `  dbPath: ${stats?.path ?? store.path}`);
+          } else if (store.error) {
+            lines.push(`  error: ${store.error}`);
+          } else {
+            lines.push(`  status: not initialized`);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    } else {
+      lines.push('', 'Vector Cache: disabled (no vectorCache config)');
     }
     if (state.lastConfigWarnings && state.lastConfigWarnings.length > 0) {
       lines.push(
@@ -130,6 +166,45 @@ export const registerCommands = (
     );
   };
 
+  const handleCache = async (args: string[], ctx: ExtensionContext) => {
+    const sub = args[0]?.toLowerCase();
+    if (!sub || sub === 'status') {
+      const vc = state.currentConfig.vectorCache;
+      if (!vc) {
+        ctx.ui.notify('Vector cache is not configured.', 'info');
+        return;
+      }
+      const store = getExistingVectorStore() ?? getVectorStore(vc.vectorFile, vc.dimensions);
+      if (!store) {
+        ctx.ui.notify('Vector cache store unavailable.', 'error');
+        return;
+      }
+      if (!store.isReady()) {
+        ctx.ui.notify(`Vector cache not ready: ${store.error ?? 'unknown error'}`, 'error');
+        return;
+      }
+      const stats = store.stats();
+      ctx.ui.notify(`Vector cache: ${stats?.count ?? 0} vectors at ${stats?.path} (dim=${stats?.dimensions})`, 'info');
+      return;
+    }
+    if (sub === 'clear') {
+      const vc = state.currentConfig.vectorCache;
+      if (!vc) {
+        ctx.ui.notify('Vector cache is not configured.', 'error');
+        return;
+      }
+      const store = getExistingVectorStore() ?? getVectorStore(vc.vectorFile, vc.dimensions);
+      if (!store || !store.isReady()) {
+        ctx.ui.notify(`Vector cache not ready: ${store?.error ?? 'unavailable'}`, 'error');
+        return;
+      }
+      const ok = store.clear();
+      ctx.ui.notify(ok ? 'Vector cache cleared.' : 'Failed to clear vector cache.', ok ? 'info' : 'error');
+      return;
+    }
+    ctx.ui.notify('Usage: /router cache <status|clear>', 'error');
+  };
+
   pi.registerCommand('router', {
     description: 'Model router control center',
     getArgumentCompletions: (prefix) => {
@@ -163,6 +238,17 @@ export const registerCommands = (
             }));
           return items.length > 0 ? items : null;
         }
+        case 'cache': {
+          const cachePrefix = subArgs[0] ?? '';
+          const items = ['status', 'clear']
+            .filter((v) => v.startsWith(cachePrefix))
+            .map((v) => ({
+              value: `cache ${v}`,
+              label: v,
+              description: `Vector cache: ${v}`,
+            }));
+          return items.length > 0 ? items : null;
+        }
       }
 
       return null;
@@ -181,6 +267,9 @@ export const registerCommands = (
           break;
         case 'status':
           await handleStatus(subArgs, ctx);
+          break;
+        case 'cache':
+          await handleCache(subArgs, ctx);
           break;
         case 'help':
         case '?':

@@ -5,7 +5,10 @@ import { streamSimple } from '@earendil-works/pi-ai/compat';
 import type { Api, Context, Model, AssistantMessageEventStream, SimpleStreamOptions } from '@earendil-works/pi-ai';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
-import type { RouterConfig, RoutingDecision, RouterTier } from './types';
+import type { RouterConfig, RouterTier } from './types';
+import { getVectorStore } from './vector-store';
+import { embedText } from './embeddings';
+import { runClassifier } from './routing';
 
 interface MockEvent {
   type: string;
@@ -31,6 +34,27 @@ vi.mock('@earendil-works/pi-ai', () => ({
 vi.mock('@earendil-works/pi-ai/compat', () => ({
   streamSimple: vi.fn(),
 }));
+
+vi.mock('./vector-store', () => ({
+  getVectorStore: vi.fn(),
+  closeVectorStore: vi.fn(),
+  getExistingVectorStore: vi.fn(),
+  VectorStore: vi.fn(),
+}));
+
+vi.mock('./embeddings', () => ({
+  embedText: vi.fn(),
+  embedTexts: vi.fn(),
+  normalizePromptForEmbedding: vi.fn((text: string) => text.trim().toLowerCase().slice(0, 8000)),
+}));
+
+vi.mock('./routing', async () => {
+  const actual = await vi.importActual<typeof import('./routing')>('./routing');
+  return {
+    ...actual,
+    runClassifier: vi.fn(),
+  };
+});
 
 type ProviderState = Parameters<typeof registerRouterProvider>[1];
 type ProviderActions = Parameters<typeof registerRouterProvider>[2];
@@ -644,6 +668,442 @@ describe('provider.ts', () => {
       const state = { currentModelRegistry: undefined };
       const result = await waitForRegistry(state, 200);
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('vector cache integration', () => {
+    const makeVectorCache = (overrides: Record<string, unknown> = {}) => ({
+      enabled: true,
+      threshold: 0.88,
+      vectorFile: 'test.db',
+      embeddingModel: 'qwen3-embedding:0.6b',
+      embeddingBaseUrl: 'http://localhost:11434',
+      backgroundRefresh: false,
+      dimensions: 3,
+      embeddingContextWindow: 8192,
+      ...overrides,
+    });
+
+    const setupDelegateSuccess = () => {
+      vi.mocked(streamSimple).mockReturnValue(
+        (async function* () {
+          yield { type: 'text_delta', delta: 'done' };
+          yield { type: 'done', message: { usage: { cost: { total: 0 } } } };
+        })() as unknown as ReturnType<typeof streamSimple>,
+      );
+    };
+
+    it('should use vector tier on hit, set isVectorHit true, incrementHit, and trigger background classifier when backgroundRefresh true', async () => {
+      mockState.currentConfig.vectorCache = makeVectorCache({ backgroundRefresh: true }) as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+
+      const mockEmbedding = [0.1, 0.2, 0.3];
+      const hit = {
+        tier: 'high' as RouterTier,
+        similarity: 0.95,
+        normalized: 'hello',
+        reasoning: 'orig reason',
+        distance: 0.05,
+        prompt: 'hello',
+        hitCount: 2,
+        updatedAt: Date.now(),
+      };
+      const mockStore = {
+        isReady: vi.fn(() => true),
+        search: vi.fn(() => hit),
+        incrementHit: vi.fn(),
+        upsert: vi.fn(() => true),
+        error: undefined,
+      };
+
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue(mockEmbedding);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'bg classifier' });
+
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      // allow background fire-and-forget to complete
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      expect(mockState.lastDecision!.tier).toBe('high');
+      expect(mockState.lastDecision!.isVectorHit).toBe(true);
+      expect(mockState.lastDecision!.vectorSimilarity).toBeCloseTo(0.95);
+      expect(mockStore.incrementHit).toHaveBeenCalledWith('hello');
+      expect(vi.mocked(embedText)).toHaveBeenCalled();
+      expect(mockStore.search).toHaveBeenCalled();
+      expect(vi.mocked(runClassifier)).toHaveBeenCalled();
+      expect(mockStore.upsert).toHaveBeenCalled();
+    });
+
+    it('should fallback to classifier and upsert on vector miss', async () => {
+      mockState.currentConfig.vectorCache = makeVectorCache({ backgroundRefresh: false }) as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+
+      const mockEmbedding = [0.1, 0.2, 0.3];
+      const mockStore = {
+        isReady: vi.fn(() => true),
+        search: vi.fn(() => undefined),
+        incrementHit: vi.fn(),
+        upsert: vi.fn(() => true),
+        error: undefined,
+      };
+
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue(mockEmbedding);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'classifier low' });
+
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      expect(mockStore.search).toHaveBeenCalled();
+      expect(vi.mocked(runClassifier)).toHaveBeenCalled();
+      expect(mockStore.upsert).toHaveBeenCalled();
+      expect(mockState.lastDecision!.tier).toBe('low');
+      expect(mockState.lastDecision!.isVectorHit).not.toBe(true);
+      expect(mockStore.incrementHit).not.toHaveBeenCalled();
+    });
+
+    it('should bypass vector cache when prompt exceeds embeddingContextWindow', async () => {
+      mockState.currentConfig.vectorCache = makeVectorCache({ embeddingContextWindow: 5 }) as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+
+      const mockStore = {
+        isReady: vi.fn(() => true),
+        search: vi.fn(() => ({ tier: 'high' as RouterTier, similarity: 0.99, normalized: 'a', reasoning: '', distance: 0.01, prompt: 'a', hitCount: 1, updatedAt: Date.now() })),
+        incrementHit: vi.fn(),
+        upsert: vi.fn(() => true),
+        error: undefined,
+      };
+
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue([0.1, 0.2, 0.3]);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'classifier bypass' });
+
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      // prompt length 20 => tokens ceil(20/3)=7 > 5, so bypass
+      const longPrompt = 'a'.repeat(20);
+      const context = { messages: [{ role: 'user', content: longPrompt }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      expect(vi.mocked(embedText)).not.toHaveBeenCalled();
+      expect(mockStore.search).not.toHaveBeenCalled();
+      expect(vi.mocked(runClassifier)).toHaveBeenCalled();
+    });
+
+    it('should fallback to classifier when store is not ready', async () => {
+      mockState.currentConfig.vectorCache = makeVectorCache() as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+
+      const mockStore = {
+        isReady: vi.fn(() => false),
+        search: vi.fn(),
+        incrementHit: vi.fn(),
+        upsert: vi.fn(() => true),
+        error: 'init failed',
+      };
+
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue([0.1, 0.2, 0.3]);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'classifier fallback' });
+
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      expect(vi.mocked(getVectorStore)).toHaveBeenCalled();
+      expect(mockStore.search).not.toHaveBeenCalled();
+      expect(vi.mocked(runClassifier)).toHaveBeenCalled();
+      expect(mockState.lastDecision!.tier).toBe('low');
+    });
+
+    it('should fallback to classifier when embedText returns undefined', async () => {
+      mockState.currentConfig.vectorCache = makeVectorCache() as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+
+      const mockStore = {
+        isReady: vi.fn(() => true),
+        search: vi.fn(),
+        incrementHit: vi.fn(),
+        upsert: vi.fn(() => true),
+        error: undefined,
+      };
+
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue(undefined);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'classifier fallback' });
+
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      expect(vi.mocked(embedText)).toHaveBeenCalled();
+      expect(mockStore.search).not.toHaveBeenCalled();
+      expect(vi.mocked(runClassifier)).toHaveBeenCalled();
+      expect(mockState.lastDecision!.tier).toBe('low');
+    });
+
+    it('should not trigger background classifier when backgroundRefresh is false on hit', async () => {
+      mockState.currentConfig.vectorCache = makeVectorCache({ backgroundRefresh: false }) as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+
+      const mockEmbedding = [0.1, 0.2, 0.3];
+      const hit = {
+        tier: 'high' as RouterTier,
+        similarity: 0.92,
+        normalized: 'hello',
+        reasoning: 'orig',
+        distance: 0.08,
+        prompt: 'hello',
+        hitCount: 1,
+        updatedAt: Date.now(),
+      };
+      const mockStore = {
+        isReady: vi.fn(() => true),
+        search: vi.fn(() => hit),
+        incrementHit: vi.fn(),
+        upsert: vi.fn(() => true),
+        error: undefined,
+      };
+
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue(mockEmbedding);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'should not be called' });
+
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      expect(mockState.lastDecision!.tier).toBe('high');
+      expect(mockState.lastDecision!.isVectorHit).toBe(true);
+      expect(mockStore.incrementHit).toHaveBeenCalled();
+      expect(vi.mocked(runClassifier)).not.toHaveBeenCalled();
+    });
+
+    it('should upsert on miss when vector cache is enabled', async () => {
+      mockState.currentConfig.vectorCache = makeVectorCache({ backgroundRefresh: false }) as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+
+      const mockEmbedding = [0.4, 0.5, 0.6];
+      const mockStore = {
+        isReady: vi.fn(() => true),
+        search: vi.fn(() => undefined),
+        incrementHit: vi.fn(),
+        upsert: vi.fn(() => true),
+        error: undefined,
+      };
+
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue(mockEmbedding);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'classifier reason' });
+
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'test query for upsert' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      expect(mockStore.search).toHaveBeenCalled();
+      expect(vi.mocked(runClassifier)).toHaveBeenCalled();
+      expect(mockStore.upsert).toHaveBeenCalled();
+      const upsertArgs = mockStore.upsert.mock.calls[0] as unknown[];
+      expect(upsertArgs[2]).toBe('low');
+      expect(mockState.lastDecision!.tier).toBe('low');
+    });
+  });
+
+  describe('vector cache error logging via TUI notify', () => {
+    const makeVectorCache = (overrides: Record<string, unknown> = {}) => ({
+      enabled: true,
+      threshold: 0.88,
+      vectorFile: 'test.db',
+      embeddingModel: 'qwen3-embedding:0.6b',
+      embeddingBaseUrl: 'http://localhost:11434',
+      backgroundRefresh: false,
+      dimensions: 3,
+      embeddingContextWindow: 8192,
+      ...overrides,
+    });
+    const setupDelegateSuccess = () => {
+      vi.mocked(streamSimple).mockReturnValue(
+        (async function* () {
+          yield { type: 'text_delta', delta: 'done' };
+          yield { type: 'done', message: { usage: { cost: { total: 0 } } } };
+        })() as unknown as ReturnType<typeof streamSimple>,
+      );
+    };
+    const makeNotifyContext = () => ({
+      ui: { setHiddenThinkingLabel: vi.fn(), notify: vi.fn() },
+    }) as unknown as ExtensionContext;
+
+    it('should notify when store is not ready', async () => {
+      const notifyCtx = makeNotifyContext();
+      mockState.lastExtensionContext = notifyCtx;
+      mockState.currentConfig.vectorCache = makeVectorCache() as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+      const mockStore = { isReady: vi.fn(() => false), search: vi.fn(), incrementHit: vi.fn(), upsert: vi.fn(() => true), error: 'init failed' };
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue([0.1, 0.2, 0.3]);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'r' });
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((r) => setTimeout(r, 120));
+      expect(notifyCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining('Vector store not ready'), 'warning');
+    });
+
+    it('should notify when embed fails', async () => {
+      const notifyCtx = makeNotifyContext();
+      mockState.lastExtensionContext = notifyCtx;
+      mockState.currentConfig.vectorCache = makeVectorCache() as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+      const mockStore = { isReady: vi.fn(() => true), search: vi.fn(() => undefined), incrementHit: vi.fn(), upsert: vi.fn(() => true), error: undefined };
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue(undefined);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'r' });
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((r) => setTimeout(r, 120));
+      expect(notifyCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining('Vector embed failed'), 'warning');
+    });
+
+    it('should notify when vector lookup throws', async () => {
+      const notifyCtx = makeNotifyContext();
+      mockState.lastExtensionContext = notifyCtx;
+      mockState.currentConfig.vectorCache = makeVectorCache() as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+      const mockStore = { isReady: vi.fn(() => true), search: vi.fn(() => { throw new Error('search boom'); }), incrementHit: vi.fn(), upsert: vi.fn(() => true), error: undefined };
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue([0.1, 0.2, 0.3]);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'r' });
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((r) => setTimeout(r, 120));
+      expect(notifyCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining('Vector cache lookup failed'), 'warning');
+    });
+
+    it('should notify when incrementHit throws', async () => {
+      const notifyCtx = makeNotifyContext();
+      mockState.lastExtensionContext = notifyCtx;
+      mockState.currentConfig.vectorCache = makeVectorCache() as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+      const hit = { tier: 'high' as RouterTier, similarity: 0.9, normalized: 'hello', reasoning: 'r', distance: 0.1, prompt: 'hello', hitCount: 1, updatedAt: Date.now() };
+      const mockStore = { isReady: vi.fn(() => true), search: vi.fn(() => hit), incrementHit: vi.fn(() => { throw new Error('incr fail'); }), upsert: vi.fn(() => true), error: undefined };
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue([0.1, 0.2, 0.3]);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'r' });
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((r) => setTimeout(r, 120));
+      expect(notifyCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining('incrementHit failed'), 'warning');
+    });
+
+    it('should notify when backgroundRefresh upsert throws', async () => {
+      const notifyCtx = makeNotifyContext();
+      mockState.lastExtensionContext = notifyCtx;
+      mockState.currentConfig.vectorCache = makeVectorCache({ backgroundRefresh: true }) as unknown as RouterConfig['vectorCache'];
+      mockState.currentConfig.classifierModel = { model: 'openai/gpt-4o' };
+      mockState.currentConfig.profiles.balanced.low = { model: 'openai/gpt-4o-nano', resolvedContextWindow: 5000 };
+      const hit = { tier: 'high' as RouterTier, similarity: 0.9, normalized: 'hello', reasoning: 'r', distance: 0.1, prompt: 'hello', hitCount: 1, updatedAt: Date.now() };
+      const mockStore = { isReady: vi.fn(() => true), search: vi.fn(() => hit), incrementHit: vi.fn(), upsert: vi.fn(() => { throw new Error('upsert bg fail'); }), error: undefined };
+      vi.mocked(getVectorStore).mockReturnValue(mockStore as unknown as ReturnType<typeof getVectorStore>);
+      vi.mocked(embedText).mockResolvedValue([0.1, 0.2, 0.3]);
+      vi.mocked(runClassifier).mockResolvedValue({ tier: 'low' as RouterTier, reasoning: 'bg' });
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      setupDelegateSuccess();
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(notifyCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining('backgroundRefresh failed'), 'warning');
     });
   });
 });
