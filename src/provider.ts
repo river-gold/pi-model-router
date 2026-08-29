@@ -83,7 +83,7 @@ import {
   runClassifier,
   extractTextFromContent,
   hasImageAttachment,
-  getLastUserText,
+  getLastPromptText,
 } from './routing';
 
 export const createErrorMessage = (
@@ -274,7 +274,7 @@ export const registerRouterProvider = (
           const shouldUseVector = !!vectorCache?.enabled && !decision.isRuleMatched;
 
           if (shouldUseVector && vectorCache) {
-            const promptForVector = getLastUserText(context);
+            const promptForVector = getLastPromptText(context);
             // Skip vector cache if prompt exceeds embedding context window -> directly use LLM
             if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
               // Exceeds embedding model context, bypass vector cache
@@ -369,7 +369,7 @@ export const registerRouterProvider = (
 
           // Persist current prompt to vector cache if not already a hit (learn from LLM or default)
           if (!vectorHit && vectorCache?.enabled) {
-            const promptForVector = getLastUserText(context);
+            const promptForVector = getLastPromptText(context);
             if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
               // Too long for embedding model, skip caching
             } else {

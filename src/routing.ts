@@ -40,6 +40,16 @@ export const getLastUserText = (context: Context): string => {
   return '';
 };
 
+export const getLastPromptText = (context: Context): string => {
+  if (context.messages.length === 0) return '';
+  const last = context.messages[context.messages.length - 1];
+  if (last.role === 'toolResult' || last.role === 'user') {
+    const text = extractTextFromContent(last.content).trim();
+    if (text) return text;
+  }
+  return getLastUserText(context);
+};
+
 export const getRecentConversationText = (
   context: Context,
   limit = 6,
@@ -239,7 +249,7 @@ export const runClassifier = async (
       model,
     );
 
-    const promptText = getLastUserText(context);
+    const promptText = getLastPromptText(context);
 
     const classifierUserPrompt = `Latest user message:
 ${promptText}`.trim();
