@@ -11,7 +11,6 @@ import type {
   ParsedConfigFile,
   RouterTier,
   ClassifierConfig,
-  VectorCacheConfig,
 } from './types';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import {
@@ -23,12 +22,6 @@ export const ROUTER_TIERS = ['high', 'medium', 'low'] as const;
 
 export const ROUTER_PIN_VALUES = ['auto', 'high', 'medium', 'low'] as const;
 
-export const DEFAULT_VECTOR_THRESHOLD = 0.75;
-export const DEFAULT_VECTOR_FILE = 'router-vectors.db';
-export const DEFAULT_EMBEDDING_MODEL = 'qwen3-embedding:0.6b';
-export const DEFAULT_EMBEDDING_BASE_URL = 'http://localhost:11434';
-export const DEFAULT_VECTOR_DIMENSIONS = 1024;
-export const DEFAULT_EMBEDDING_CONTEXT_WINDOW = 8192;
 export const DEFAULT_HISTORY_SIZE = 0;
 
 export const isObjectRecord = (
@@ -101,7 +94,6 @@ export const stripJsonc = (text: string): string => {
     result += char;
   }
 
-  // Remove trailing commas before } or ]
   let stripped = '';
   inString = false;
   stringChar = '';
@@ -213,121 +205,6 @@ export const normalizeClassifierConfig = (
   return undefined;
 };
 
-export const normalizeVectorCacheConfig = (
-  raw: unknown,
-  warnings: string[],
-): VectorCacheConfig | undefined => {
-  if (raw === undefined || raw === null) return undefined;
-  if (!isObjectRecord(raw)) {
-    warnings.push(`Invalid vectorCache config: expected an object. Ignored.`);
-    return undefined;
-  }
-
-  const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : true;
-
-  let threshold = DEFAULT_VECTOR_THRESHOLD;
-  if (raw.threshold !== undefined) {
-    if (typeof raw.threshold === 'number' && raw.threshold >= 0 && raw.threshold <= 1) {
-      threshold = raw.threshold;
-    } else {
-      warnings.push(`Invalid vectorCache.threshold "${String(raw.threshold)}": expected number between 0 and 1. Using default ${DEFAULT_VECTOR_THRESHOLD}.`);
-    }
-  }
-
-  let vectorFile = DEFAULT_VECTOR_FILE;
-  if (typeof raw.vectorFile === 'string' && raw.vectorFile.trim()) {
-    vectorFile = raw.vectorFile.trim();
-  } else if (raw.vectorFile !== undefined) {
-    warnings.push(`Invalid vectorCache.vectorFile: expected non-empty string. Using default "${DEFAULT_VECTOR_FILE}".`);
-  }
-  // Alias: allow "vectorPath" or "file" as alternative keys
-  if (typeof raw.vectorPath === 'string' && raw.vectorPath.trim() && vectorFile === DEFAULT_VECTOR_FILE) {
-    vectorFile = (raw.vectorPath as string).trim();
-  }
-  if (typeof raw.file === 'string' && raw.file.trim() && vectorFile === DEFAULT_VECTOR_FILE) {
-    vectorFile = (raw.file as string).trim();
-  }
-
-  let embeddingModel = DEFAULT_EMBEDDING_MODEL;
-  if (typeof raw.embeddingModel === 'string' && raw.embeddingModel.trim()) {
-    embeddingModel = raw.embeddingModel.trim();
-  } else if (typeof raw.model === 'string' && raw.model.trim() && embeddingModel === DEFAULT_EMBEDDING_MODEL) {
-    embeddingModel = (raw.model as string).trim();
-  } else if (raw.embeddingModel !== undefined) {
-    warnings.push(`Invalid vectorCache.embeddingModel: expected non-empty string. Using default "${DEFAULT_EMBEDDING_MODEL}".`);
-  }
-
-  let embeddingBaseUrl = DEFAULT_EMBEDDING_BASE_URL;
-  if (typeof raw.embeddingBaseUrl === 'string' && raw.embeddingBaseUrl.trim()) {
-    embeddingBaseUrl = raw.embeddingBaseUrl.trim().replace(/\/+$/, '');
-  } else if (typeof raw.baseUrl === 'string' && raw.baseUrl.trim() && embeddingBaseUrl === DEFAULT_EMBEDDING_BASE_URL) {
-    embeddingBaseUrl = (raw.baseUrl as string).trim().replace(/\/+$/, '');
-  } else if (raw.embeddingBaseUrl !== undefined || raw.baseUrl !== undefined) {
-    // only warn if provided but invalid type
-    if (raw.embeddingBaseUrl !== undefined && typeof raw.embeddingBaseUrl !== 'string') {
-      warnings.push(`Invalid vectorCache.embeddingBaseUrl: expected string. Using default "${DEFAULT_EMBEDDING_BASE_URL}".`);
-    }
-  }
-
-  const backgroundRefresh = typeof raw.backgroundRefresh === 'boolean' ? raw.backgroundRefresh : false;
-
-  let dimensions = DEFAULT_VECTOR_DIMENSIONS;
-  if (raw.dimensions !== undefined) {
-    if (typeof raw.dimensions === 'number' && Number.isInteger(raw.dimensions) && raw.dimensions > 0 && raw.dimensions <= 4096) {
-      dimensions = raw.dimensions;
-    } else {
-      warnings.push(`Invalid vectorCache.dimensions "${String(raw.dimensions)}": expected integer between 1 and 4096. Using default ${DEFAULT_VECTOR_DIMENSIONS}.`);
-    }
-  }
-
-  const keepAlive = typeof raw.keepAlive === 'string' && raw.keepAlive.trim() ? raw.keepAlive.trim() : undefined;
-
-  let historySize = DEFAULT_HISTORY_SIZE;
-  const rawHistorySize = (raw as Record<string, unknown>).historySize ?? (raw as Record<string, unknown>).historyLimit ?? (raw as Record<string, unknown>).historyCount;
-  if (rawHistorySize !== undefined) {
-    if (typeof rawHistorySize === 'number' && Number.isInteger(rawHistorySize) && rawHistorySize >= 0 && rawHistorySize <= 20) {
-      historySize = rawHistorySize;
-    } else {
-      warnings.push(`Invalid vectorCache.historySize "${String(rawHistorySize)}": expected integer between 0 and 20. Using default ${DEFAULT_HISTORY_SIZE}.`);
-    }
-  }
-
-  let embeddingContextWindow = DEFAULT_EMBEDDING_CONTEXT_WINDOW;
-  const rawContextWindow =
-    raw.embeddingContextWindow ??
-    raw.embeddingContextSize ??
-    raw.contextWindow ??
-    raw.contextSize ??
-    raw.maxTokens;
-  if (rawContextWindow !== undefined) {
-    if (
-      typeof rawContextWindow === 'number' &&
-      Number.isInteger(rawContextWindow) &&
-      rawContextWindow > 0 &&
-      rawContextWindow <= 100000
-    ) {
-      embeddingContextWindow = rawContextWindow;
-    } else {
-      warnings.push(
-        `Invalid vectorCache.embeddingContextWindow "${String(rawContextWindow)}": expected integer between 1 and 100000. Using default ${DEFAULT_EMBEDDING_CONTEXT_WINDOW}.`,
-      );
-    }
-  }
-
-  return {
-    enabled,
-    threshold,
-    vectorFile,
-    embeddingModel,
-    embeddingBaseUrl,
-    backgroundRefresh,
-    dimensions,
-    embeddingContextWindow,
-    historySize,
-    ...(keepAlive ? { keepAlive } : {}),
-  };
-};
-
 export const resolveEffectiveClassifier = (
   profile: RouterProfile,
   globalClassifier: ClassifierConfig | undefined,
@@ -354,29 +231,18 @@ export const mergeConfig = (
     };
   }
 
-  // Merge vectorCache: shallow merge, override wins per field
-  let mergedVectorCache: VectorCacheConfig | undefined = base.vectorCache;
-  if (override.vectorCache !== undefined) {
-    if (isObjectRecord(override.vectorCache) && isObjectRecord(base.vectorCache)) {
-      mergedVectorCache = { ...base.vectorCache, ...override.vectorCache } as VectorCacheConfig;
-    } else if (override.vectorCache !== undefined) {
-      mergedVectorCache = override.vectorCache as VectorCacheConfig;
-    }
-  }
-
-  // historySize at top-level (preferred) or fall back to vectorCache.historySize for backward compat
-  const mergedHistorySize = (override as unknown as Record<string, unknown>).historySize !== undefined
-    ? (override as unknown as Record<string, unknown>).historySize as number
-    : (override as unknown as Record<string, unknown>).historyLimit !== undefined
-      ? (override as unknown as Record<string, unknown>).historyLimit as number
-      : base.historySize;
+  const mergedHistorySize =
+    (override as unknown as Record<string, unknown>).historySize !== undefined
+      ? (override as unknown as Record<string, unknown>).historySize as number
+      : (override as unknown as Record<string, unknown>).historyLimit !== undefined
+        ? (override as unknown as Record<string, unknown>).historyLimit as number
+        : base.historySize;
 
   return {
     debug: override.debug ?? base.debug,
     classifierModel: override.classifierModel ?? base.classifierModel,
     historySize: mergedHistorySize ?? base.historySize,
     profiles: mergedProfiles,
-    ...(mergedVectorCache ? { vectorCache: mergedVectorCache } : {}),
   };
 };
 
@@ -509,12 +375,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     'classifierModel',
   );
 
-  const vectorCache = normalizeVectorCacheConfig(
-    (raw as unknown as Record<string, unknown>).vectorCache,
-    warnings,
-  );
-
-  // Top-level historySize (preferred), fallback to vectorCache.historySize for backward compat
   let historySize: number | undefined = undefined;
   const rawHistorySize = (raw as unknown as Record<string, unknown>).historySize ?? (raw as unknown as Record<string, unknown>).historyLimit;
   if (rawHistorySize !== undefined) {
@@ -524,8 +384,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       warnings.push(`Invalid historySize "${String(rawHistorySize)}": expected integer between 0 and 20. Using default ${DEFAULT_HISTORY_SIZE}.`);
       historySize = DEFAULT_HISTORY_SIZE;
     }
-  } else if (vectorCache?.historySize !== undefined) {
-    historySize = vectorCache.historySize;
   }
 
   return {
@@ -534,7 +392,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       classifierModel,
       historySize,
       profiles: normalizedProfiles,
-      ...(vectorCache ? { vectorCache } : {}),
     },
     warnings,
   };
@@ -550,7 +407,6 @@ export const loadRouterConfig = (cwd: string): ConfigLoadResult => {
   const projectJsonResult = parseConfigFile(projectJsonPath);
   const projectJsoncResult = parseConfigFile(projectJsoncPath);
   const baseConfig: RouterConfig = { profiles: {} };
-  // Priority: global .json < global .jsonc < project .json < project .jsonc
   let merged = mergeConfig(baseConfig, globalJsonResult.config);
   merged = mergeConfig(merged, globalJsoncResult.config);
   merged = mergeConfig(merged, projectJsonResult.config);
@@ -582,12 +438,6 @@ export const resolveProfileName = (
   return undefined;
 };
 
-/**
- * Resolve the effective context window for a specific tier at runtime,
- * incorporating the API model registry as the highest-priority source.
- *
- * Resolution chain: API > tier config > model alias > hardcoded default
- */
 export const resolveContextWindow = (
   tier: RouterTier,
   profile: RouterProfile,
@@ -596,7 +446,6 @@ export const resolveContextWindow = (
   const tierConfig = profile[tier];
   if (!tierConfig) return DEFAULT_CONTEXT_WINDOW;
 
-  // 1. API value (highest priority)
   if (modelRegistry) {
     try {
       const { provider, modelId } = parseCanonicalModelRef(tierConfig.model);
@@ -605,16 +454,9 @@ export const resolveContextWindow = (
     } catch { /* ignore */ }
   }
 
-  // 2-4. Pre-resolved during config normalization (tier > alias > hardcoded)
   return tierConfig.resolvedContextWindow ?? DEFAULT_CONTEXT_WINDOW;
 };
 
-/**
- * Resolve the effective max tokens for a specific tier at runtime,
- * incorporating the API model registry as the highest-priority source.
- *
- * Resolution chain: API > tier config > model alias > hardcoded default
- */
 export const resolveMaxTokens = (
   tier: RouterTier,
   profile: RouterProfile,
@@ -623,7 +465,6 @@ export const resolveMaxTokens = (
   const tierConfig = profile[tier];
   if (!tierConfig) return DEFAULT_MAX_TOKENS;
 
-  // 1. API value (highest priority)
   if (modelRegistry) {
     try {
       const { provider, modelId } = parseCanonicalModelRef(tierConfig.model);
@@ -632,11 +473,8 @@ export const resolveMaxTokens = (
     } catch { /* ignore */ }
   }
 
-  // 2-4. Pre-resolved during config normalization (tier > alias > hardcoded)
   return tierConfig.resolvedMaxTokens ?? DEFAULT_MAX_TOKENS;
 };
-
-
 
 export const resolveDelegatedReasoning = (
   model: Model<Api>,

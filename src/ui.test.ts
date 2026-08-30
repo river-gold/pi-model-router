@@ -10,8 +10,7 @@ describe('ui.ts', () => {
 
   const decision: RoutingDecision = {
     profile: 'balanced',
-    tier: 'high',
-    targetProvider: 'google',
+    tier: 'high',    targetProvider: 'google',
     targetModelId: 'gemini-2.5-pro',
     targetLabel: 'google/gemini-2.5-pro',
     reasoning: 'Exploratory prompts',
@@ -53,17 +52,7 @@ describe('ui.ts', () => {
       updateStatus(ctx, true, 'balanced', decision);
       expect(ctx.ui.setStatus).toHaveBeenCalledWith(
         'router',
-        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high) [🧠llm]',
-      );
-    });
-
-    it('should display vector hit with similarity', () => {
-      const ctx = buildMockCtx() as unknown as ExtensionContext;
-      const vecDecision = { ...decision, isVectorHit: true, vectorSimilarity: 0.923 } as RoutingDecision;
-      updateStatus(ctx, true, 'balanced', vecDecision);
-      expect(ctx.ui.setStatus).toHaveBeenCalledWith(
-        'router',
-        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high) [⚡vec:0.92]',
+        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high)',
       );
     });
 

@@ -25,25 +25,11 @@ export interface RouterProfile {
   classifierModel?: ClassifierConfig;
 }
 
-export interface VectorCacheConfig {
-  enabled: boolean;
-  threshold: number;
-  vectorFile: string;
-  embeddingModel: string;
-  embeddingBaseUrl: string;
-  backgroundRefresh: boolean;
-  dimensions: number;
-  embeddingContextWindow: number;
-  historySize?: number;
-  keepAlive?: string;
-}
-
 export interface RouterConfig {
   debug?: boolean;
   classifierModel?: ClassifierConfig;
   historySize?: number;
   profiles: Record<string, RouterProfile>;
-  vectorCache?: VectorCacheConfig;
 }
 
 export interface RoutingDecision {
@@ -57,8 +43,6 @@ export interface RoutingDecision {
   timestamp: number;
   isClassifier?: boolean;
   isFallback?: boolean;
-  isVectorHit?: boolean;
-  vectorSimilarity?: number;
 }
 
 export interface RouterPersistedState {
@@ -88,13 +72,4 @@ export interface CustomSessionEntry {
   data?: unknown;
 }
 
-export interface VectorSearchResult {
-  prompt: string;
-  normalized: string;
-  tier: RouterTier;
-  reasoning: string;
-  distance: number;
-  similarity: number;
-  hitCount: number;
-  updatedAt: number;
-}
+

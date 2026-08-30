@@ -1,102 +1,42 @@
-import { streamSimple } from '@earendil-works/pi-ai/compat';
-import type { Context, Message } from '@earendil-works/pi-ai';
-import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
-import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
+import type { Context } from '@earendil-works/pi-ai';
 import type {
   RouterTier,
   RouterProfile,
   RoutingDecision,
 } from './types';
-import { parseCanonicalModelRef, isRouterTier } from './config';
-import { resolveDelegatedModel, type RegistryWithProviderAuth } from './constants';
+import { parseCanonicalModelRef } from './config';
 
-export const extractTextFromContent = (
-  content: string | Message['content'],
-): string => {
-  if (typeof content === 'string') {
-    return content;
-  }
-  return content
-    .map((part) => {
-      if (part.type === 'text') return part.text;
-      if (part.type === 'thinking') return part.thinking;
-      if (part.type === 'toolCall')
-        return `${part.name} ${JSON.stringify(part.arguments)}`;
-      return '';
-    })
-    .filter(Boolean)
-    .join('\n');
-};
-
-export const getLastUserText = (context: Context): string => {
-  for (let i = context.messages.length - 1; i >= 0; i--) {
-    const message = context.messages[i];
-    if (message.role === 'user') {
-      return extractTextFromContent(message.content).trim();
-    }
-  }
-  return '';
-};
-
-export const getLastPromptText = (context: Context): string => {
-  if (context.messages.length === 0) return '';
-  const last = context.messages[context.messages.length - 1];
-  if (last.role === 'toolResult' || last.role === 'user') {
-    const text = extractTextFromContent(last.content).trim();
-    if (text) return text;
-  }
-  return getLastUserText(context);
-};
-
-export const getRecentConversationText = (
-  context: Context,
-  limit = 6,
-): string => {
-  return context.messages
-    .slice(-limit)
-    .map((message) => extractTextFromContent(message.content).trim())
-    .filter(Boolean)
-    .join('\n')
-    .toLowerCase();
-};
-
-export const countToolResults = (context: Context): number => {
-  return context.messages.filter((message) => message.role === 'toolResult')
-    .length;
-};
-
-export const countWords = (text: string): number => {
-  return text.split(/\s+/).filter(Boolean).length;
-};
-
-export const hasImageAttachment = (context: Context): boolean => {
-  return context.messages.some(
-    (message) =>
-      Array.isArray(message.content) &&
-      message.content.some((part) => part.type === 'image'),
-  );
-};
-
-export const containsAny = (text: string, keywords: string[]): boolean => {
-  return keywords.some((keyword) => text.includes(keyword));
-};
+// Re-export context utilities and classifier for backward compat (tests import from routing)
+export {
+  extractTextFromContent,
+  getLastUserText,
+  getLastPromptText,
+  getRecentConversationText,
+  getHistoryPairsText,
+  getPromptWithHistory,
+  countToolResults,
+  countWords,
+  hasImageAttachment,
+  containsAny,
+  estimateTokens,
+  truncateContext,
+} from './context';
+export { runClassifier, CLASSIFIER_SYSTEM_PROMPT } from './classifier';
 
 export const resolveAvailableTier = (
   profile: RouterProfile,
   preferred: RouterTier,
 ): RouterTier => {
   if (profile[preferred]) return preferred;
-  // Fall "up": low → medium → high
   const order: RouterTier[] = ['low', 'medium', 'high'];
   const startIdx = order.indexOf(preferred);
   for (let i = startIdx + 1; i < order.length; i++) {
     if (profile[order[i]]) return order[i];
   }
-  // Fall "down" as last resort
   for (let i = startIdx - 1; i >= 0; i--) {
     if (profile[order[i]]) return order[i];
   }
-  return preferred; // unreachable if profile has ≥1 tier
+  return preferred;
 };
 
 export const buildRoutingDecision = (
@@ -137,7 +77,6 @@ export const decideRouting = (
   let tier: RouterTier = 'medium';
   let reasoning = 'Defaulted to medium tier for general coding work.';
 
-  // Resolve to nearest available tier if the selected tier is disabled
   const resolvedTier = resolveAvailableTier(profile, tier);
   if (resolvedTier !== tier) {
     reasoning = `Resolved from ${tier} to ${resolvedTier} tier (${tier} tier is not configured). Original: ${reasoning}`;
@@ -152,160 +91,4 @@ export const decideRouting = (
     false,
   );
   return decision;
-};
-
-export const CLASSIFIER_SYSTEM_PROMPT = `You are a model router classifier. Your job is to categorize the user's latest request into one of three tiers: "high", "medium", or "low".
-
-Tiers:
-- high: Architecture, design, planning, tradeoff analysis, broad debugging, large refactors, codebase research.
-- medium: Implementation of a known plan, multi-file edits, normal coding work, focused debugging, tests/fixes.
-- low: Summaries, changelogs, formatting, quick explanations, small bounded transforms, simple read-only lookup.
-
-Return your decision in exactly two lines:
-Tier: [high|medium|low]
-Reasoning: [one short sentence]`;
-
-export const getHistoryPairsText = (context: Context, pairCount: number): string => {
-  if (!pairCount || pairCount <= 0) return '';
-  const messages = context.messages;
-  // Find all user prompts with their final result
-  const pairs: string[] = [];
-  // Collect user indices
-  const userIndices: number[] = [];
-  for (let i = 0; i < messages.length; i++) {
-    if (messages[i].role === 'user') userIndices.push(i);
-  }
-  // Exclude the current (last) user prompt from history pairs (it is the prompt to classify)
-  const lastUserIdx = userIndices.length > 0 ? userIndices[userIndices.length - 1] : -1;
-  // Consider pairs up to but not including the current user prompt
-  const historyUserIndices = lastUserIdx >= 0 ? userIndices.slice(0, -1).slice(-pairCount) : [];
-  for (const uIdx of historyUserIndices) {
-    const userText = extractTextFromContent(messages[uIdx].content).trim();
-    if (!userText) continue;
-    // Find next user index to bound the segment
-    const nextUserIdx = userIndices.find((idx) => idx > uIdx) ?? messages.length;
-    // Within (uIdx+1 .. nextUserIdx-1), find final result: last assistant or toolResult with content
-    let finalText = '';
-    for (let j = nextUserIdx - 1; j > uIdx; j--) {
-      const msg = messages[j];
-      if (msg.role === 'assistant' || msg.role === 'toolResult') {
-        const txt = extractTextFromContent(msg.content).trim();
-        if (txt) {
-          finalText = txt;
-          break;
-        }
-      }
-    }
-    if (finalText) {
-      pairs.push(`${userText}\n${finalText}`);
-    } else {
-      pairs.push(userText);
-    }
-  }
-  return pairs.join('\n---\n');
-};
-
-export const getPromptWithHistory = (context: Context, historySize: number): string => {
-  const promptText = getLastUserText(context);
-  if (!historySize || historySize <= 0) return promptText;
-  const historyText = getHistoryPairsText(context, historySize);
-  if (!historyText) return promptText;
-  return `${historyText}\n---\n${promptText}`;
-};
-
-export const runClassifier = async (
-  classifierModelRef: string,
-  modelRegistry: ExtensionContext['modelRegistry'],
-  context: Context,
-  historySizeOrThinking?: number | ThinkingLevel,
-  thinkingMaybe?: ThinkingLevel,
-): Promise<{ tier: RouterTier; reasoning: string } | undefined> => {
-  let historySize = 0;
-  let thinking: ThinkingLevel | undefined = undefined;
-  if (typeof historySizeOrThinking === 'number') {
-    historySize = historySizeOrThinking;
-    thinking = thinkingMaybe;
-  } else if (typeof historySizeOrThinking === 'string') {
-    thinking = historySizeOrThinking;
-  }
-  try {
-    const { provider, modelId } = parseCanonicalModelRef(classifierModelRef);
-    const model = modelRegistry.find(provider, modelId);
-    if (!model) return undefined;
-
-    const auth = await modelRegistry.getApiKeyAndHeaders(model);
-    if (!auth.ok || !auth.apiKey) return undefined;
-    const apiKey = auth.apiKey;
-    const headers = auth.headers;
-
-    // getApiKeyAndHeaders() does not surface a credential-specific baseUrl.
-    // Some OAuth providers (e.g. GitHub Copilot business/enterprise tenants)
-    // resolve a per-token proxy endpoint that differs from the model's static
-    // baseUrl; without applying it, this request fails with 421 Misdirected
-    // Request.
-    const requestModel = await resolveDelegatedModel(
-      modelRegistry as unknown as RegistryWithProviderAuth,
-      model,
-    );
-
-    const promptText = getLastUserText(context);
-    let classifierUserPrompt: string;
-    if (historySize > 0) {
-      const historyText = getHistoryPairsText(context, historySize);
-      classifierUserPrompt = historyText
-        ? `Recent history (user+final result pairs):\n${historyText}\n\nLatest user message:\n${promptText}`.trim()
-        : `Latest user message:\n${promptText}`.trim();
-    } else {
-      classifierUserPrompt = `Latest user message:\n${promptText}`.trim();
-    }
-
-    const classifierContext: Context = {
-      ...context,
-      systemPrompt: CLASSIFIER_SYSTEM_PROMPT,
-      tools: undefined,
-      messages: [{ role: 'user', content: classifierUserPrompt, timestamp: Date.now() }],
-    };
-
-    const reasoningOption =
-      model.reasoning && thinking && thinking !== 'off'
-        ? thinking
-        : undefined;
-
-    const stream = streamSimple(requestModel, classifierContext, {
-      apiKey,
-      headers,
-      ...(reasoningOption ? { reasoning: reasoningOption } : {}),
-    });
-    let fullText = '';
-    for await (const event of stream) {
-      if (
-        event.type === 'text_delta' &&
-        'delta' in event &&
-        typeof event.delta === 'string'
-      ) {
-        fullText += event.delta;
-      }
-    }
-
-    const lines = fullText.trim().split('\n');
-    const tierLine = lines.find((l) => l.toLowerCase().startsWith('tier:'));
-    const reasoningLine = lines.find((l) =>
-      l.toLowerCase().startsWith('reasoning:'),
-    );
-
-    if (tierLine) {
-      const tierValue = tierLine.split(':')[1].trim().toLowerCase();
-      if (isRouterTier(tierValue)) {
-        return {
-          tier: tierValue,
-          reasoning: reasoningLine
-            ? reasoningLine.split(':')[1].trim()
-            : 'Classifier decision.',
-        };
-      }
-    }
-  } catch (error) {
-    // Ignore classifier errors and fall back to heuristics
-  }
-  return undefined;
 };

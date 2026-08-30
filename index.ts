@@ -19,7 +19,6 @@ import { isRouterPersistedState, buildPersistedState } from './src/state';
 import { updateStatus } from './src/ui';
 import { registerCommands } from './src/commands';
 import { registerRouterProvider } from './src/provider';
-import { getVectorStore } from './src/vector-store';
 
 const routerExtension = (pi: ExtensionAPI) => {
   let currentConfig: RouterConfig = { profiles: {} };
@@ -47,7 +46,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     try {
       return await pi.setModel(model);
     } catch {
-      // Extension context may be stale after session teardown.
       return false;
     } finally {
       isInternalModelSwitch = false;
@@ -59,7 +57,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     try {
       pi.setThinkingLevel(level);
     } catch {
-      // Extension context may be stale after session teardown.
     } finally {
       isInternalThinkingChange = false;
     }
@@ -96,9 +93,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     try {
       pi.appendEntry('router-state', state);
     } catch {
-      // Defensive fallback: the session_shutdown event may fire after this
-      // code runs (due to event loop ordering), so isActive can still be
-      // true even though the runtime is already stale.
       return;
     }
     lastPersistedSnapshot = snapshot;
@@ -126,20 +120,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       }
       selectedProfile = resolveProfileName(currentConfig, selectedProfile);
       actions.registerRouterProvider();
-      // Proactively initialize vector cache to surface init errors early
-      if (currentConfig.vectorCache?.enabled) {
-        const store = getVectorStore(
-          currentConfig.vectorCache.vectorFile,
-          currentConfig.vectorCache.dimensions,
-        );
-        if (store && !store.isReady() && store.error) {
-          const msg = `Vector cache init failed: ${store.error}`;
-          lastConfigWarnings = [...lastConfigWarnings, msg];
-          if (ctx) {
-            ctx.ui.notify(msg, 'warning');
-          }
-        }
-      }
       if (ctx) {
         actions.updateStatus(ctx);
         if (lastConfigWarnings.length > 0) {
@@ -159,8 +139,6 @@ const routerExtension = (pi: ExtensionAPI) => {
         routerEnabled = true;
         return;
       }
-
-      // The active router model's profile no longer exists in config
       ctx.ui.notify(
         `Router profile "${ctx.model.id}" is no longer configured.`,
         'warning',
@@ -229,10 +207,7 @@ const routerExtension = (pi: ExtensionAPI) => {
     currentModelRegistry = ctx.modelRegistry;
     currentCwd = ctx.cwd;
     actions.reloadConfig(ctx);
-
-    // Give the registry a moment to synchronize after re-registration
     await new Promise((resolve) => setTimeout(resolve, 50));
-
     routerEnabled = ctx.model?.provider === 'router';
     selectedProfile = ctx.model?.provider === 'router'
       ? resolveProfileName(currentConfig, ctx.model.id)
@@ -244,7 +219,6 @@ const routerExtension = (pi: ExtensionAPI) => {
         ? `${ctx.model.provider}/${ctx.model.id}`
         : lastNonRouterModel;
     lastDecision = undefined;
-
     const entries = ctx.sessionManager.getBranch() as CustomSessionEntry[];
     const savedState = entries
       .filter(
@@ -253,7 +227,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       )
       .map((entry) => entry.data)
       .findLast((data) => isRouterPersistedState(data));
-
     if (isRouterPersistedState(savedState)) {
       selectedProfile = resolveProfileName(
         currentConfig,
@@ -268,9 +241,7 @@ const routerExtension = (pi: ExtensionAPI) => {
       accumulatedCost = savedState.accumulatedCost ?? 0;
       lastDecision = savedState.lastDecision;
     }
-
     await actions.ensureValidActiveRouterProfile(ctx);
-
     if (routerEnabled && selectedProfile) {
       const routerModel = ctx.modelRegistry.find('router', selectedProfile);
       if (routerModel) {
@@ -282,7 +253,6 @@ const routerExtension = (pi: ExtensionAPI) => {
           );
           routerEnabled = false;
         } else if (lastDecision) {
-          // Sync pi's thinking level display with the router's last decision
           setThinkingLevelInternally(lastDecision.thinking);
         }
       } else {
@@ -296,7 +266,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     } else {
       ctx.ui.setHiddenThinkingLabel?.();
     }
-
     persistState();
     actions.updateStatus(ctx);
   };
@@ -358,13 +327,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     }
   });
 
-  // Eagerly initialize the model registry from any event that provides
-  // ExtensionContext. In subagent contexts (e.g. pi-dynamic-workflows),
-  // session_start may never fire, but turn_start/model_select fire before every LLM
-  // call — including the first call to the router provider's streamSimple.
-  // Only set when not already initialized: if extensions share instances across
-  // parent/subagent sessions, always overwriting would replace the parent's valid
-  // registry with the subagent's — which goes stale when the subagent ends.
   const ensureInitializedFromContext = (ctx: ExtensionContext) => {
     if (!currentModelRegistry) {
       currentModelRegistry = ctx.modelRegistry;
@@ -379,8 +341,6 @@ const routerExtension = (pi: ExtensionAPI) => {
   });
 
   pi.on('model_select', async (event, ctx) => {
-    // Ensure the model registry is captured even if session_start hasn't fired
-    // (e.g. in subagent contexts spawned by pi-dynamic-workflows).
     ensureInitializedFromContext(ctx);
     if (!isInitialized || isInternalModelSwitch) return;
     if (event.model.provider === 'router') {
@@ -389,9 +349,6 @@ const routerExtension = (pi: ExtensionAPI) => {
         ctx.ui.notify(`Unknown router profile: ${event.model.id}`, 'error');
         return;
       }
-
-      // If the selected model has stale capacities (e.g. from the initial registration),
-      // re-apply the model from the registry to force a TUI refresh.
       const registryModel = ctx.modelRegistry.find('router', profileName);
       if (
         registryModel &&
@@ -400,7 +357,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       ) {
         await setModelInternally(registryModel);
       }
-
       routerEnabled = true;
       selectedProfile = profileName;
     } else {
@@ -428,8 +384,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     ensureInitializedFromContext(ctx);
     if (!isInitialized || !routerEnabled || !selectedProfile) return;
     if (isInternalThinkingChange) return;
-    // Router models are fixed-thinking (reasoning:false) — shift+tab is ignored.
-    // Tier effort comes from model-router.json and is clamped per target model.
   });
 };
 

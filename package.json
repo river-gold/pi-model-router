@@ -44,10 +44,6 @@
     "prepublishOnly": "npm run tsc",
     "test": "vitest run"
   },
-  "dependencies": {
-    "better-sqlite3": "^13.0.3",
-    "sqlite-vec": "^0.1.9"
-  },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": "*",
     "@earendil-works/pi-ai": "*",
@@ -55,7 +51,6 @@
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
     "prettier": "^3.8.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
@@ -63,7 +58,6 @@
   "allowScripts": {
     "@google/genai@1.52.0": true,
     "protobufjs@7.6.4": true,
-    "better-sqlite3@13.0.3": true,
     "fsevents@2.3.3": true
   }
 }

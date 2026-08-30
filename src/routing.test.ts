@@ -3,8 +3,6 @@ import {
   extractTextFromContent,
   getLastUserText,
   getRecentConversationText,
-  getHistoryPairsText,
-  getPromptWithHistory,
   countToolResults,
   countWords,
   hasImageAttachment,
@@ -155,6 +153,8 @@ describe('routing.ts', () => {
     });
   });
 
+  });
+
   describe('resolveAvailableTier', () => {
     const profile: RouterProfile = {
       medium: { model: 'openai/gpt-4o' },
@@ -188,15 +188,10 @@ describe('routing.ts', () => {
     };
 
     it('should construct correct decision object', () => {
-      const decision = buildRoutingDecision(
-        'balanced',
-        profile,
-        'high',
-        'Reasoning string',
+      const decision = buildRoutingDecision('balanced', profile, 'high', 'Reasoning string',
       );
       expect(decision.profile).toBe('balanced');
-      expect(decision.tier).toBe('high');
-      expect(decision.targetProvider).toBe('openai');
+      expect(decision.tier).toBe('high');      expect(decision.targetProvider).toBe('openai');
       expect(decision.targetModelId).toBe('gpt-4o-pro');
       expect(decision.targetLabel).toBe('openai/gpt-4o-pro');
       expect(decision.thinking).toBe('high');
@@ -205,11 +200,7 @@ describe('routing.ts', () => {
 
     it('should throw if tier is not in profile', () => {
       expect(() =>
-        buildRoutingDecision(
-          'balanced',
-          profile,
-          'medium',
-          'Reason',
+        buildRoutingDecision('balanced', profile, 'medium', 'Reason',
         ),
       ).toThrow();
     });
@@ -253,13 +244,18 @@ describe('routing.ts', () => {
             content: 'how to design this',
             timestamp: Date.now(),
           },
+          {
+            role: 'user',
+            content: 'we should design X',
+            timestamp: Date.now(),
+          },
+          { role: 'user', content: 'why X?', timestamp: Date.now() },
         ],
       };
       const previous = buildRoutingDecision('p', profile, 'high', 'Initial plan',
       );
       const decision = decideRouting(context, 'p', profile, previous);
-      expect(decision.tier).toBe('medium');
-    });
+      expect(decision.tier).toBe('medium');    });
 
     it('should always return medium for any prompt length', () => {
       const context: Context = {
@@ -274,8 +270,7 @@ describe('routing.ts', () => {
       const previous = buildRoutingDecision('p', profile, 'high', 'Previous planning',
       );
       const decision = decideRouting(context, 'p', profile, previous);
-      expect(decision.tier).toBe('medium');
-      expect(decision.reasoning).toContain('Defaulted to medium');
+      expect(decision.tier).toBe('medium');      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
     it('should always return medium even with previous medium', () => {
@@ -291,11 +286,10 @@ describe('routing.ts', () => {
       const previous = buildRoutingDecision('p', profile, 'medium', 'Previous impl',
       );
       const decision = decideRouting(context, 'p', profile, previous);
-      expect(decision.tier).toBe('medium');
-      expect(decision.reasoning).toContain('Defaulted to medium');
+      expect(decision.tier).toBe('medium');      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
-    it('should always return medium even with toolResult in history', () => {
+    it('should detect implementation from toolResultCount > 0', () => {
       const context: Context = {
         messages: [
           {
@@ -319,8 +313,7 @@ describe('routing.ts', () => {
         ],
       };
       const decision = decideRouting(context, 'p', profile, undefined);
-      expect(decision.tier).toBe('medium');
-      expect(decision.reasoning).toContain('Defaulted to medium');
+      expect(decision.tier).toBe('medium');      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
     it('should detect implementation from recent conversation containing plan:', () => {
@@ -339,8 +332,7 @@ describe('routing.ts', () => {
         ],
       };
       const decision = decideRouting(context, 'p', profile, undefined);
-      expect(decision.tier).toBe('medium');
-      expect(decision.reasoning).toContain('Defaulted to medium');
+      expect(decision.tier).toBe('medium');      expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
     it('should default to medium tier when no heuristic rules match for moderate-length prompts', () => {
@@ -440,83 +432,4 @@ describe('routing.ts', () => {
       );
       expect(result).toBeUndefined();
     });
-
-    it('should include history pairs when historySize > 0', async () => {
-      const mockStream = (async function* () {
-        yield { type: 'text_delta', delta: 'Tier: medium\n' };
-        yield { type: 'text_delta', delta: 'Reasoning: With history.' };
-      })();
-      vi.mocked(streamSimple).mockReturnValue(mockStream as any);
-      const historyContext: Context = {
-        messages: [
-          { role: 'user', content: 'first prompt', timestamp: Date.now() },
-          { role: 'assistant', content: 'first result', timestamp: Date.now() } as unknown as Message,
-          { role: 'user', content: 'current', timestamp: Date.now() },
-        ],
-      };
-      await runClassifier('openai/gpt-4o', mockRegistry, historyContext, 1, 'off');
-      expect(streamSimple).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          messages: [expect.objectContaining({ content: expect.stringContaining('first prompt') })],
-        }),
-        expect.objectContaining({ apiKey: 'test-key' }),
-      );
-      const calledContent = vi.mocked(streamSimple).mock.calls.at(-1)?.[1].messages[0].content as string;
-      expect(calledContent).toContain('Recent history');
-      expect(calledContent).toContain('first prompt');
-      expect(calledContent).toContain('first result');
-    });
   });
-
-  describe('getHistoryPairsText', () => {
-    it('should return empty for 0 or no history', () => {
-      const ctx: Context = { messages: [{ role: 'user', content: 'hello', timestamp: Date.now() }] };
-      expect(getHistoryPairsText(ctx, 0)).toBe('');
-      expect(getHistoryPairsText(ctx, 1)).toBe('');
-    });
-
-    it('should return user+final pairs', () => {
-      const ctx: Context = {
-        messages: [
-          { role: 'user', content: 'u1', timestamp: 1 },
-          { role: 'assistant', content: 'a1', timestamp: 2 } as unknown as Message,
-          { role: 'user', content: 'u2', timestamp: 3 },
-          { role: 'assistant', content: 'a2', timestamp: 4 } as unknown as Message,
-          { role: 'user', content: 'current', timestamp: 5 },
-        ],
-      };
-      expect(getHistoryPairsText(ctx, 1)).toBe('u2\na2');
-      expect(getHistoryPairsText(ctx, 2)).toBe('u1\na1\n---\nu2\na2');
-    });
-
-    it('should pick last toolResult as final if no assistant', () => {
-      const ctx: Context = {
-        messages: [
-          { role: 'user', content: 'u1', timestamp: 1 },
-          { role: 'toolResult', toolCallId: '1', toolName: 't', content: 'tool out', isError: false, timestamp: 2 } as unknown as Message,
-          { role: 'user', content: 'current', timestamp: 3 },
-        ],
-      };
-      expect(getHistoryPairsText(ctx, 1)).toBe('u1\ntool out');
-    });
-  });
-
-  describe('getPromptWithHistory', () => {
-    it('should return only prompt when historySize 0', () => {
-      const ctx: Context = { messages: [{ role: 'user', content: 'hello', timestamp: 1 }] };
-      expect(getPromptWithHistory(ctx, 0)).toBe('hello');
-    });
-
-    it('should combine history pairs and current prompt', () => {
-      const ctx: Context = {
-        messages: [
-          { role: 'user', content: 'u1', timestamp: 1 },
-          { role: 'assistant', content: 'a1', timestamp: 2 } as unknown as Message,
-          { role: 'user', content: 'current', timestamp: 3 },
-        ],
-      };
-      expect(getPromptWithHistory(ctx, 1)).toBe('u1\na1\n---\ncurrent');
-    });
-  });
-});

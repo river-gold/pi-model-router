@@ -35,8 +35,7 @@ describe('state.ts', () => {
     it('should build a state object matching the interface requirements', () => {
       const decision: RoutingDecision = {
         profile: 'balanced',
-        tier: 'high',
-        targetProvider: 'google',
+        tier: 'high',        targetProvider: 'google',
         targetModelId: 'gemini-2.5-pro',
         targetLabel: 'google/gemini-2.5-pro',
         reasoning: 'Rules matched',
