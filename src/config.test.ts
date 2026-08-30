@@ -208,7 +208,7 @@ describe('config.ts', () => {
   });
 
   describe('normalizeConfig', () => {
-    it('should normalize rules, profiles, classifierModel', () => {
+    it('should normalize profiles, classifierModel and ignore rules (removed)', () => {
       const raw = {
         debug: true,
         classifierModel: 'openai/gpt-4o',
@@ -229,7 +229,7 @@ describe('config.ts', () => {
       expect(warnings).toEqual([]);
       expect(config.debug).toBe(true);
       expect(config.classifierModel?.model).toBe('openai/gpt-4o');
-      expect(config.rules?.length).toBe(2);
+      expect((config as unknown as Record<string, unknown>).rules).toBeUndefined();
       expect(config.profiles.balanced?.high?.model).toBe(
         'google/gemini-2.5-pro',
       );

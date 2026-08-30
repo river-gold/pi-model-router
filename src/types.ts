@@ -1,13 +1,6 @@
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 
 export type RouterTier = 'high' | 'medium' | 'low';
-export type RouterPhase = 'planning' | 'implementation' | 'lightweight';
-
-export interface RoutingRule {
-  matches: string | string[];
-  tier: RouterTier;
-  reason?: string;
-}
 
 export interface ClassifierConfig {
   model: string;
@@ -47,7 +40,6 @@ export interface VectorCacheConfig {
 export interface RouterConfig {
   debug?: boolean;
   classifierModel?: ClassifierConfig;
-  rules?: RoutingRule[];
   profiles: Record<string, RouterProfile>;
   vectorCache?: VectorCacheConfig;
 }
@@ -55,7 +47,6 @@ export interface RouterConfig {
 export interface RoutingDecision {
   profile: string;
   tier: RouterTier;
-  phase: RouterPhase;
   targetProvider: string;
   targetModelId: string;
   targetLabel: string;
@@ -64,7 +55,6 @@ export interface RoutingDecision {
   timestamp: number;
   isClassifier?: boolean;
   isFallback?: boolean;
-  isRuleMatched?: boolean;
   isVectorHit?: boolean;
   vectorSimilarity?: number;
 }
@@ -74,7 +64,6 @@ export interface RouterPersistedState {
   selectedProfile: string;
   debugEnabled?: boolean;
   debugHistory?: RoutingDecision[];
-  lastPhase?: RouterPhase;
   lastDecision?: RoutingDecision;
   lastNonRouterModel?: string;
   accumulatedCost?: number;

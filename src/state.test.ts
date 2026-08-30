@@ -36,7 +36,6 @@ describe('state.ts', () => {
       const decision: RoutingDecision = {
         profile: 'balanced',
         tier: 'high',
-        phase: 'planning',
         targetProvider: 'google',
         targetModelId: 'gemini-2.5-pro',
         targetLabel: 'google/gemini-2.5-pro',
@@ -59,7 +58,6 @@ describe('state.ts', () => {
       expect(state.selectedProfile).toBe('balanced');
       expect(state.debugEnabled).toBe(true);
       expect(state.debugHistory).toEqual([decision]);
-      expect(state.lastPhase).toBe('planning');
       expect(state.lastDecision).toEqual(decision);
       expect(state.lastNonRouterModel).toBe('openai/gpt-4o');
       expect(state.accumulatedCost).toBe(0.0045);

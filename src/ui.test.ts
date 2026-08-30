@@ -11,7 +11,6 @@ describe('ui.ts', () => {
   const decision: RoutingDecision = {
     profile: 'balanced',
     tier: 'high',
-    phase: 'planning',
     targetProvider: 'google',
     targetModelId: 'gemini-2.5-pro',
     targetLabel: 'google/gemini-2.5-pro',
@@ -65,16 +64,6 @@ describe('ui.ts', () => {
       expect(ctx.ui.setStatus).toHaveBeenCalledWith(
         'router',
         '🚥 router:balanced -> high -> google/gemini-2.5-pro (high) [⚡vec:0.92]',
-      );
-    });
-
-    it('should display rule tag', () => {
-      const ctx = buildMockCtx() as unknown as ExtensionContext;
-      const ruleDecision = { ...decision, isRuleMatched: true } as RoutingDecision;
-      updateStatus(ctx, true, 'balanced', ruleDecision);
-      expect(ctx.ui.setStatus).toHaveBeenCalledWith(
-        'router',
-        '🚥 router:balanced -> high -> google/gemini-2.5-pro (high) [📌rule]',
       );
     });
 

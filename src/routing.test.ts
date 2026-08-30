@@ -7,7 +7,6 @@ import {
   countWords,
   hasImageAttachment,
   containsAny,
-  phaseForTier,
   resolveAvailableTier,
   buildRoutingDecision,
   decideRouting,
@@ -15,7 +14,7 @@ import {
 } from './routing';
 import { streamSimple } from '@earendil-works/pi-ai/compat';
 import type { Context, Message, UserMessage } from '@earendil-works/pi-ai';
-import type { RouterProfile, RoutingRule } from './types';
+import type { RouterProfile } from './types';
 
 vi.mock('@earendil-works/pi-ai/compat', () => ({
   streamSimple: vi.fn(),
@@ -154,14 +153,6 @@ describe('routing.ts', () => {
     });
   });
 
-  describe('phaseForTier', () => {
-    it('should return correct phase for tier', () => {
-      expect(phaseForTier('high')).toBe('planning');
-      expect(phaseForTier('medium')).toBe('implementation');
-      expect(phaseForTier('low')).toBe('lightweight');
-    });
-  });
-
   describe('resolveAvailableTier', () => {
     const profile: RouterProfile = {
       medium: { model: 'openai/gpt-4o' },
@@ -199,12 +190,10 @@ describe('routing.ts', () => {
         'balanced',
         profile,
         'high',
-        'planning',
         'Reasoning string',
       );
       expect(decision.profile).toBe('balanced');
       expect(decision.tier).toBe('high');
-      expect(decision.phase).toBe('planning');
       expect(decision.targetProvider).toBe('openai');
       expect(decision.targetModelId).toBe('gpt-4o-pro');
       expect(decision.targetLabel).toBe('openai/gpt-4o-pro');
@@ -218,7 +207,6 @@ describe('routing.ts', () => {
           'balanced',
           profile,
           'medium',
-          'implementation',
           'Reason',
         ),
       ).toThrow();
@@ -231,83 +219,6 @@ describe('routing.ts', () => {
       medium: { model: 'openai/gpt-4o-mini', resolvedContextWindow: 100 },
       low: { model: 'openai/gpt-4o-micro', resolvedContextWindow: 100 },
     };
-
-    const rules: RoutingRule[] = [
-      { matches: 'force-high', tier: 'high', reason: 'High rule' },
-    ];
-
-    it('should match custom rule first', () => {
-      const context: Context = {
-        messages: [
-          {
-            role: 'user',
-            content: 'Please force-high model',
-            timestamp: Date.now(),
-          },
-        ],
-      };
-      const decision = decideRouting(
-        context,
-        'p',
-        profile,
-        undefined,
-        rules,
-      );
-      expect(decision.tier).toBe('high');
-      expect(decision.isRuleMatched).toBe(true);
-      expect(decision.reasoning).toBe('High rule');
-    });
-
-    it('should match custom rule case-insensitively', () => {
-      const rulesWithCapitalCase = [
-        { matches: 'Force-High', tier: 'high' as const, reason: 'High rule' },
-      ];
-      const context: Context = {
-        messages: [
-          {
-            role: 'user',
-            content: 'Please force-high model',
-            timestamp: Date.now(),
-          },
-        ],
-      };
-      const decision = decideRouting(
-        context,
-        'p',
-        profile,
-        undefined,
-        rulesWithCapitalCase,
-      );
-      expect(decision.tier).toBe('high');
-      expect(decision.isRuleMatched).toBe(true);
-      expect(decision.reasoning).toBe('High rule');
-    });
-
-    it('should collect all matching rules and pick the highest tier', () => {
-      const rulesWithMultipleMatches = [
-        { matches: 'summary', tier: 'low' as const, reason: 'Low rule' },
-        { matches: 'refactor', tier: 'high' as const, reason: 'High rule' },
-      ];
-      const context: Context = {
-        messages: [
-          {
-            role: 'user',
-            content: 'Please summarize the refactor',
-            timestamp: Date.now(),
-          },
-        ],
-      };
-      const decision = decideRouting(
-        context,
-        'p',
-        profile,
-        undefined,
-        rulesWithMultipleMatches,
-      );
-      expect(decision.tier).toBe('high');
-      expect(decision.isRuleMatched).toBe(true);
-      expect(decision.reasoning).toBe('High rule');
-    });
 
     it('should route explicit high/low hints', () => {
       // Heuristics removed: explicit hints no longer change tier without a custom rule.
@@ -349,16 +260,10 @@ describe('routing.ts', () => {
           { role: 'user', content: 'why X?', timestamp: Date.now() },
         ],
       };
-      const previous = buildRoutingDecision(
-        'p',
-        profile,
-        'high',
-        'planning',
-        'Initial plan',
+      const previous = buildRoutingDecision('p', profile, 'high', 'Initial plan',
       );
       const decision = decideRouting(context, 'p', profile, previous);
       expect(decision.tier).toBe('medium');
-      expect(decision.phase).toBe('planning');
     });
 
     it('should keep planning phase bias when previous phase was planning, no tools, and word count > lowThreshold', () => {
@@ -371,16 +276,10 @@ describe('routing.ts', () => {
           },
         ],
       };
-      const previous = buildRoutingDecision(
-        'p',
-        profile,
-        'high',
-        'planning',
-        'Previous planning',
+      const previous = buildRoutingDecision('p', profile, 'high', 'Previous planning',
       );
       const decision = decideRouting(context, 'p', profile, previous);
       expect(decision.tier).toBe('medium');
-      expect(decision.phase).toBe('planning');
       expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
@@ -394,16 +293,10 @@ describe('routing.ts', () => {
           },
         ],
       };
-      const previous = buildRoutingDecision(
-        'p',
-        profile,
-        'medium',
-        'implementation',
-        'Previous impl',
+      const previous = buildRoutingDecision('p', profile, 'medium', 'Previous impl',
       );
       const decision = decideRouting(context, 'p', profile, previous);
       expect(decision.tier).toBe('medium');
-      expect(decision.phase).toBe('implementation');
       expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
@@ -432,7 +325,6 @@ describe('routing.ts', () => {
       };
       const decision = decideRouting(context, 'p', profile, undefined);
       expect(decision.tier).toBe('medium');
-      expect(decision.phase).toBe('implementation');
       expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
@@ -453,7 +345,6 @@ describe('routing.ts', () => {
       };
       const decision = decideRouting(context, 'p', profile, undefined);
       expect(decision.tier).toBe('medium');
-      expect(decision.phase).toBe('implementation');
       expect(decision.reasoning).toContain('Defaulted to medium');
     });
 

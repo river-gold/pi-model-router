@@ -262,7 +262,6 @@ describe('provider.ts', () => {
       mockState.lastDecision = {
         profile: 'balanced',
         tier: 'high',
-        phase: 'planning',
         targetProvider: 'google',
         targetModelId: 'gemini-2.5-pro',
         targetLabel: 'google/gemini-2.5-pro',

@@ -11,14 +11,6 @@
     "embeddingContextWindow": 8192
   },
   "classifierModel": "google/gemini-flash-latest",
-  "rules": [
-    {
-      "matches": ["deploy", "production", "release"],
-      "tier": "high",
-      "reason": "Safety check for production tasks"
-    },
-    { "matches": "changelog", "tier": "low" }
-  ],
   "profiles": {
     "auto": {
       "high": {

@@ -25,11 +25,7 @@ export const updateStatus = (
     if (lastDecision && matchesProfile) {
       const cacheTag = lastDecision.isVectorHit
         ? `⚡vec:${lastDecision.vectorSimilarity?.toFixed(2) ?? '?'}`
-        : lastDecision.isClassifier
-          ? '🧠llm'
-          : lastDecision.isRuleMatched
-            ? '📌rule'
-            : '🧠llm';
+        : '🧠llm';
       statusText = `router:${activeRouterProfile} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.thinking}) [${cacheTag}]`;
     } else {
       statusText = `router:${activeRouterProfile} -> waiting`;

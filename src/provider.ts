@@ -77,13 +77,12 @@ export const waitForRegistry = async (
 };
 
 import {
-  phaseForTier,
   buildRoutingDecision,
   decideRouting,
   runClassifier,
   extractTextFromContent,
   hasImageAttachment,
-  getLastPromptText,
+  getLastUserText,
 } from './routing';
 
 export const createErrorMessage = (
@@ -258,8 +257,23 @@ export const registerRouterProvider = (
             model.id,
             profile,
             state.lastDecision,
-            state.currentConfig.rules,
           );
+
+          // Preserve grade during toolResult loop (user prompt only, non-Google; Google handled separately)
+          const lastMessageForLoop = context.messages[context.messages.length - 1];
+          const isGoogleThinkingLoop = state.lastDecision?.targetProvider === 'google' && state.lastDecision?.thinking !== 'off';
+          const isToolLoop = lastMessageForLoop?.role === 'toolResult' && state.lastDecision?.profile === model.id && !!state.lastDecision && !isGoogleThinkingLoop;
+          if (isToolLoop && state.lastDecision) {
+            decision = buildRoutingDecision(
+              model.id,
+              profile,
+              state.lastDecision.tier,
+              `Preserved ${state.lastDecision.tier} tier during toolResult loop`,
+              false,
+            );
+            decision.isVectorHit = state.lastDecision.isVectorHit;
+            decision.vectorSimilarity = state.lastDecision.vectorSimilarity;
+          }
 
           // Priority: profile classifierModel > global classifierModel > profile low model
           const effectiveClassifier = resolveEffectiveClassifier(
@@ -268,13 +282,14 @@ export const registerRouterProvider = (
           );
 
           // --- Vector Cache Lookup (before LLM classifier) ---
+          // Only for user prompts, not toolResult loops
           let queryEmbedding: number[] | undefined;
           let vectorHit = false;
           const vectorCache = state.currentConfig.vectorCache;
-          const shouldUseVector = !!vectorCache?.enabled && !decision.isRuleMatched;
+          const shouldUseVector = !!vectorCache?.enabled && !isToolLoop;
 
           if (shouldUseVector && vectorCache) {
-            const promptForVector = getLastPromptText(context);
+            const promptForVector = getLastUserText(context);
             // Skip vector cache if prompt exceeds embedding context window -> directly use LLM
             if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
               // Exceeds embedding model context, bypass vector cache
@@ -293,7 +308,6 @@ export const registerRouterProvider = (
                         model.id,
                         profile,
                         hit.tier,
-                        phaseForTier(hit.tier),
                         `vector-cache hit similarity ${hit.similarity.toFixed(2)} (threshold ${vectorCache.threshold}) tier=${hit.tier} ${hit.reasoning ? `orig:${hit.reasoning}` : ''}`.trim(),
                         false,
                       );
@@ -348,7 +362,7 @@ export const registerRouterProvider = (
             }
           }
 
-          if (!vectorHit && effectiveClassifier && !decision.isRuleMatched) {
+          if (!isToolLoop && !vectorHit && effectiveClassifier) {
             const classifierResult = await runClassifier(
               effectiveClassifier.model,
               registry,
@@ -360,16 +374,15 @@ export const registerRouterProvider = (
                 model.id,
                 profile,
                 classifierResult.tier,
-                phaseForTier(classifierResult.tier),
                 `Classifier: ${classifierResult.reasoning}`,
                 true,
               );
             }
           }
 
-          // Persist current prompt to vector cache if not already a hit (learn from LLM or default)
-          if (!vectorHit && vectorCache?.enabled) {
-            const promptForVector = getLastPromptText(context);
+          // Persist only user prompts, not toolResult loops
+          if (!vectorHit && vectorCache?.enabled && !isToolLoop) {
+            const promptForVector = getLastUserText(context);
             if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
               // Too long for embedding model, skip caching
             } else {
@@ -408,7 +421,6 @@ export const registerRouterProvider = (
             decision = {
               ...decision,
               tier: previousDecision.tier,
-              phase: previousDecision.phase,
               targetProvider: previousDecision.targetProvider,
               targetModelId: previousDecision.targetModelId,
               targetLabel: previousDecision.targetLabel,
@@ -462,7 +474,6 @@ export const registerRouterProvider = (
                   model.id,
                   profile,
                   foundTier,
-                  phaseForTier(foundTier),
                   `Forced ${foundTier} tier because the originally routed ${decision.tier} tier does not support image attachments.`,
                   false,
                 );

@@ -10,7 +10,6 @@ import type {
   ConfigLoadResult,
   ParsedConfigFile,
   RouterTier,
-  RoutingRule,
   ClassifierConfig,
   VectorCacheConfig,
 } from './types';
@@ -356,7 +355,6 @@ export const mergeConfig = (
   return {
     debug: override.debug ?? base.debug,
     classifierModel: override.classifierModel ?? base.classifierModel,
-    rules: override.rules ?? base.rules,
     profiles: mergedProfiles,
     ...(mergedVectorCache ? { vectorCache: mergedVectorCache } : {}),
   };
@@ -485,30 +483,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     normalizedProfiles[name] = { high, medium, low, ...(classifierModel ? { classifierModel } : {}) };
   }
 
-  const rules: RoutingRule[] = [];
-  if (Array.isArray(raw.rules)) {
-    for (const rule of raw.rules) {
-      if (isObjectRecord(rule)) {
-        const matches = rule.matches;
-        const tier = rule.tier;
-        if (
-          (typeof matches === 'string' || Array.isArray(matches)) &&
-          isRouterTier(tier)
-        ) {
-          rules.push({
-            matches,
-            tier,
-            reason: typeof rule.reason === 'string' ? rule.reason : undefined,
-          });
-        } else {
-          warnings.push(
-            `Ignored invalid routing rule: ${JSON.stringify(rule)}`,
-          );
-        }
-      }
-    }
-  }
-
   const classifierModel = normalizeClassifierConfig(
     raw.classifierModel as unknown,
     warnings,
@@ -524,7 +498,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     config: {
       debug: typeof raw.debug === 'boolean' ? raw.debug : false,
       classifierModel,
-      rules: rules.length > 0 ? rules : undefined,
       profiles: normalizedProfiles,
       ...(vectorCache ? { vectorCache } : {}),
     },

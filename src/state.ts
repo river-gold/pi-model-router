@@ -31,7 +31,6 @@ export const buildPersistedState = (
     selectedProfile: selectedProfile ?? '',
     debugEnabled,
     debugHistory,
-    lastPhase: lastDecision?.phase,
     lastDecision,
     lastNonRouterModel,
     accumulatedCost,

@@ -57,7 +57,6 @@ describe('commands.ts', () => {
     const lastDecision: RoutingDecision = {
       profile: 'balanced',
       tier: 'medium',
-      phase: 'implementation',
       targetProvider: 'openai',
       targetModelId: 'gpt-4o-mini',
       targetLabel: 'openai/gpt-4o-mini',
