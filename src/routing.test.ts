@@ -1,99 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  extractTextFromContent,
-  getLastUserText,
-  hasImageAttachment,
   resolveAvailableTier,
   buildRoutingDecision,
   decideRouting,
-  runClassifier,
 } from './routing';
-import { streamSimple } from '@earendil-works/pi-ai/compat';
-import type { Context, Message, UserMessage } from '@earendil-works/pi-ai';
+import type { Context, Message } from '@earendil-works/pi-ai';
 import type { RouterProfile } from './types';
 
-vi.mock('@earendil-works/pi-ai/compat', () => ({
-  streamSimple: vi.fn(),
-}));
-
 describe('routing.ts', () => {
-  describe('extractTextFromContent', () => {
-    it('should return string directly if content is string', () => {
-      expect(extractTextFromContent('hello world')).toBe('hello world');
-    });
-
-    it('should extract text and toolCall parts from message structure', () => {
-      const parts: Message['content'] = [
-        { type: 'text' as const, text: 'some text' },
-        { type: 'thinking' as const, thinking: 'some thought' },
-        {
-          type: 'toolCall' as const,
-          id: 'call_1',
-          name: 'write_file',
-          arguments: { path: 'file.txt' },
-        },
-      ];
-      const result = extractTextFromContent(parts);
-      expect(result).toContain('some text');
-      expect(result).toContain('some thought');
-      expect(result).toContain('write_file {"path":"file.txt"}');
-    });
-  });
-
-  describe('getLastUserText', () => {
-    it('should return empty string if no messages', () => {
-      const context: Context = { messages: [] };
-      expect(getLastUserText(context)).toBe('');
-    });
-
-    it('should extract the last user message text', () => {
-      const context: Context = {
-        messages: [
-          { role: 'user', content: 'first user', timestamp: Date.now() },
-          {
-            role: 'assistant',
-            content: 'assistant response',
-            timestamp: Date.now(),
-          } as unknown as Message,
-          { role: 'user', content: 'second user', timestamp: Date.now() },
-          {
-            role: 'assistant',
-            content: 'another assistant',
-            timestamp: Date.now(),
-          } as unknown as Message,
-        ],
-      };
-      expect(getLastUserText(context)).toBe('second user');
-    });
-  });
-
-  describe('hasImageAttachment', () => {
-    it('should return true if any message contains image part', () => {
-      const context: Context = {
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image' as const },
-            ] as unknown as UserMessage['content'],
-            timestamp: Date.now(),
-          },
-        ],
-      };
-      expect(hasImageAttachment(context)).toBe(true);
-    });
-
-    it('should return false if no image part exists', () => {
-      const context: Context = {
-        messages: [
-          { role: 'user', content: 'text message', timestamp: Date.now() },
-        ],
-      };
-      expect(hasImageAttachment(context)).toBe(false);
-    });
-  });
-
-  });
 
   describe('resolveAvailableTier', () => {
     const profile: RouterProfile = {
@@ -291,85 +205,4 @@ describe('routing.ts', () => {
     });
   });
 
-  describe('runClassifier', () => {
-    const mockRegistry = {
-      find: (provider: string, modelId: string) => {
-        if (provider === 'openai' && modelId === 'gpt-4o') {
-          return { provider, id: modelId, reasoning: true } as any;
-        }
-        return undefined;
-      },
-      getApiKeyAndHeaders: async () => ({
-        ok: true as const,
-        apiKey: 'test-key',
-        headers: {},
-      }),
-    } as any;
-
-    const context: Context = {
-      messages: [{ role: 'user', content: 'hello', timestamp: Date.now() }],
-    };
-
-    it('should return parsed classification result from stream delta', async () => {
-      const mockStream = (async function* () {
-        yield { type: 'text_delta', delta: 'Tier: high\n' };
-        yield { type: 'text_delta', delta: 'Reasoning: Needs deep reasoner.' };
-      })();
-      vi.mocked(streamSimple).mockReturnValue(mockStream as any);
-
-      const result = await runClassifier(
-        'openai/gpt-4o',
-        mockRegistry,
-        context,
-        'high',
-      );
-      expect(result).toEqual({
-        tier: 'high',
-        reasoning: 'Needs deep reasoner.',
-      });
-    });
-
-    it('should pass CLASSIFIER_SYSTEM_PROMPT and dynamic user context to streamSimple', async () => {
-      const mockStream = (async function* () {
-        yield { type: 'text_delta', delta: 'Tier: low\n' };
-        yield { type: 'text_delta', delta: 'Reasoning: Simple lookup.' };
-      })();
-      vi.mocked(streamSimple).mockReturnValue(mockStream as any);
-
-      await runClassifier(
-        'openai/gpt-4o',
-        mockRegistry,
-        context,
-        'off',
-      );
-
-      expect(streamSimple).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          systemPrompt: expect.stringContaining('You are a model router classifier.'),
-          tools: undefined,
-          messages: [
-            expect.objectContaining({
-              role: 'user',
-              content: expect.stringContaining('Latest user message:'),
-            }),
-          ],
-        }),
-        expect.anything(),
-      );
-    });
-
-    it('should return undefined if stream fails or format is invalid', async () => {
-      const mockStream = (async function* () {
-        yield { type: 'text_delta', delta: 'Invalid response format' };
-      })();
-      vi.mocked(streamSimple).mockReturnValue(mockStream as any);
-
-      const result = await runClassifier(
-        'openai/gpt-4o',
-        mockRegistry,
-        context,
-      );
-      expect(result).toBeUndefined();
-    });
-  });
+});

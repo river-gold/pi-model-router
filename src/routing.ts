@@ -6,18 +6,6 @@ import type {
 } from './types';
 import { parseCanonicalModelRef } from './config';
 
-// Re-export context utilities and classifier for backward compat (tests import from routing)
-export {
-  extractTextFromContent,
-  getLastUserText,
-  getHistoryPairsText,
-  getPromptWithHistory,
-  hasImageAttachment,
-  estimateTokens,
-  truncateContext,
-} from './context';
-export { runClassifier, CLASSIFIER_SYSTEM_PROMPT } from './classifier';
-
 export const resolveAvailableTier = (
   profile: RouterProfile,
   preferred: RouterTier,

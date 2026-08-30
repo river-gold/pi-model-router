@@ -77,12 +77,14 @@ export const waitForRegistry = async (
 import {
   buildRoutingDecision,
   decideRouting,
-  runClassifier,
+} from './routing';
+import { runClassifier } from './classifier';
+import {
   extractTextFromContent,
   hasImageAttachment,
   getLastUserText,
   getPromptWithHistory,
-} from './routing';
+} from './context';
 
 export const createErrorMessage = (
   model: Model<Api>,
