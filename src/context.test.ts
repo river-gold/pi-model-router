@@ -2,13 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   extractTextFromContent,
   getLastUserText,
-  getRecentConversationText,
   getHistoryPairsText,
   getPromptWithHistory,
-  countToolResults,
-  countWords,
   hasImageAttachment,
-  containsAny,
   estimateTokens,
   truncateContext,
 } from './context';
@@ -45,19 +41,6 @@ describe('context.ts', () => {
         ],
       };
       expect(getLastUserText(ctx)).toBe('second');
-    });
-  });
-
-  describe('getRecentConversationText', () => {
-    it('should combine last N lowercased', () => {
-      const ctx: Context = {
-        messages: [
-          { role: 'user', content: 'First', timestamp: 1 },
-          { role: 'user', content: 'Second', timestamp: 2 },
-          { role: 'user', content: 'Third', timestamp: 3 },
-        ],
-      };
-      expect(getRecentConversationText(ctx, 2)).toBe('second\nthird');
     });
   });
 
@@ -109,26 +92,6 @@ describe('context.ts', () => {
     });
   });
 
-  describe('countToolResults', () => {
-    it('should count toolResult messages', () => {
-      const ctx: Context = {
-        messages: [
-          { role: 'user', content: 'hi', timestamp: 1 },
-          { role: 'toolResult', toolCallId: '1', toolName: 't', content: 'r1', isError: false, timestamp: 2 } as unknown as Message,
-          { role: 'toolResult', toolCallId: '2', toolName: 't', content: 'r2', isError: false, timestamp: 3 } as unknown as Message,
-        ],
-      };
-      expect(countToolResults(ctx)).toBe(2);
-    });
-  });
-
-  describe('countWords', () => {
-    it('should count words', () => {
-      expect(countWords('  a b  c\n d ')).toBe(4);
-      expect(countWords('')).toBe(0);
-    });
-  });
-
   describe('hasImageAttachment', () => {
     it('should detect image', () => {
       const ctx = {
@@ -139,13 +102,6 @@ describe('context.ts', () => {
     it('should not detect', () => {
       const ctx = { messages: [{ role: 'user', content: 'hi', timestamp: 1 }] } as unknown as Context;
       expect(hasImageAttachment(ctx)).toBe(false);
-    });
-  });
-
-  describe('containsAny', () => {
-    it('should check', () => {
-      expect(containsAny('hello world', ['world'])).toBe(true);
-      expect(containsAny('hello world', ['mars'])).toBe(false);
     });
   });
 

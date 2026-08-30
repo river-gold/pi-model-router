@@ -28,36 +28,7 @@ export const getLastUserText = (context: Context): string => {
   return '';
 };
 
-export const getLastPromptText = (context: Context): string => {
-  if (context.messages.length === 0) return '';
-  const last = context.messages[context.messages.length - 1];
-  if (last.role === 'toolResult' || last.role === 'user') {
-    const text = extractTextFromContent(last.content).trim();
-    if (text) return text;
-  }
-  return getLastUserText(context);
-};
 
-export const getRecentConversationText = (
-  context: Context,
-  limit = 6,
-): string => {
-  return context.messages
-    .slice(-limit)
-    .map((message) => extractTextFromContent(message.content).trim())
-    .filter(Boolean)
-    .join('\n')
-    .toLowerCase();
-};
-
-export const countToolResults = (context: Context): number => {
-  return context.messages.filter((message) => message.role === 'toolResult')
-    .length;
-};
-
-export const countWords = (text: string): number => {
-  return text.split(/\s+/).filter(Boolean).length;
-};
 
 export const hasImageAttachment = (context: Context): boolean => {
   return context.messages.some(
@@ -65,10 +36,6 @@ export const hasImageAttachment = (context: Context): boolean => {
       Array.isArray(message.content) &&
       message.content.some((part) => part.type === 'image'),
   );
-};
-
-export const containsAny = (text: string, keywords: string[]): boolean => {
-  return keywords.some((keyword) => text.includes(keyword));
 };
 
 export const getHistoryPairsText = (context: Context, pairCount: number): string => {

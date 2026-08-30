@@ -10,14 +10,9 @@ import { parseCanonicalModelRef } from './config';
 export {
   extractTextFromContent,
   getLastUserText,
-  getLastPromptText,
-  getRecentConversationText,
   getHistoryPairsText,
   getPromptWithHistory,
-  countToolResults,
-  countWords,
   hasImageAttachment,
-  containsAny,
   estimateTokens,
   truncateContext,
 } from './context';

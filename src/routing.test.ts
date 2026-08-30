@@ -2,11 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   extractTextFromContent,
   getLastUserText,
-  getRecentConversationText,
-  countToolResults,
-  countWords,
   hasImageAttachment,
-  containsAny,
   resolveAvailableTier,
   buildRoutingDecision,
   decideRouting,
@@ -71,55 +67,6 @@ describe('routing.ts', () => {
     });
   });
 
-  describe('getRecentConversationText', () => {
-    it('should combine last N messages in lowercase', () => {
-      const context: Context = {
-        messages: [
-          { role: 'user', content: 'First', timestamp: Date.now() },
-          { role: 'user', content: 'Second', timestamp: Date.now() },
-          { role: 'user', content: 'Third', timestamp: Date.now() },
-        ],
-      };
-      const result = getRecentConversationText(context, 2);
-      expect(result).toBe('second\nthird');
-    });
-  });
-
-  describe('countToolResults', () => {
-    it('should count messages with role toolResult', () => {
-      const context: Context = {
-        messages: [
-          { role: 'user', content: 'hey', timestamp: Date.now() },
-          {
-            role: 'toolResult',
-            toolCallId: '1',
-            toolName: 't',
-            content: 'result 1',
-            isError: false,
-            timestamp: Date.now(),
-          } as unknown as Message,
-          { role: 'user', content: 'ok', timestamp: Date.now() },
-          {
-            role: 'toolResult',
-            toolCallId: '2',
-            toolName: 't',
-            content: 'result 2',
-            isError: false,
-            timestamp: Date.now(),
-          } as unknown as Message,
-        ],
-      };
-      expect(countToolResults(context)).toBe(2);
-    });
-  });
-
-  describe('countWords', () => {
-    it('should count words correctly', () => {
-      expect(countWords('   one two   three\nfour ')).toBe(4);
-      expect(countWords('')).toBe(0);
-    });
-  });
-
   describe('hasImageAttachment', () => {
     it('should return true if any message contains image part', () => {
       const context: Context = {
@@ -143,13 +90,6 @@ describe('routing.ts', () => {
         ],
       };
       expect(hasImageAttachment(context)).toBe(false);
-    });
-  });
-
-  describe('containsAny', () => {
-    it('should check if string contains any keyword', () => {
-      expect(containsAny('hello world', ['earth', 'world'])).toBe(true);
-      expect(containsAny('hello world', ['mars'])).toBe(false);
     });
   });
 
