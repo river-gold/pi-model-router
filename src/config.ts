@@ -20,8 +20,6 @@ import {
 
 export const ROUTER_TIERS = ['high', 'medium', 'low'] as const;
 
-export const ROUTER_PIN_VALUES = ['auto', 'high', 'medium', 'low'] as const;
-
 export const DEFAULT_HISTORY_SIZE = 0;
 
 export const isObjectRecord = (
@@ -187,11 +185,15 @@ export const normalizeClassifierConfig = (
     if (modelRef) {
       try {
         parseCanonicalModelRef(modelRef);
+              const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
         const thinking =
-          typeof raw.thinking === 'string' && raw.thinking.length > 0
+          typeof raw.thinking === 'string' && (allowedThinking as string[]).includes(raw.thinking)
             ? (raw.thinking as ThinkingLevel)
             : undefined;
-        return { model: modelRef, thinking };
+        if (typeof raw.thinking === 'string' && raw.thinking.length > 0 && !thinking) {
+          warnings.push(`Invalid ${contextLabel} thinking "${raw.thinking}": expected one of ${allowedThinking.join(', ')}.`);
+        }
+        return { model: modelRef, ...(thinking ? { thinking } : {}) };
       } catch (error) {
         warnings.push(
           `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
@@ -295,9 +297,15 @@ export const normalizeTierConfig = (
     return undefined;
   }
 
-  const thinking = typeof value.thinking === 'string' && value.thinking.length > 0
-    ? (value.thinking as ThinkingLevel)
-    : 'medium';
+  const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  let thinking: ThinkingLevel = 'medium';
+  if (typeof value.thinking === 'string' && value.thinking.length > 0) {
+    if ((allowedThinking as string[]).includes(value.thinking)) {
+      thinking = value.thinking as ThinkingLevel;
+    } else {
+      warnings.push(`Invalid thinking "${value.thinking}" for profile "${profileName}" ${tier} tier: expected one of ${allowedThinking.join(', ')}. Using default medium.`);
+    }
+  }
 
   let fallbacks: string[] | undefined = undefined;
   if (Array.isArray(value.fallbacks)) {
@@ -390,7 +398,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     config: {
       debug: typeof raw.debug === 'boolean' ? raw.debug : false,
       classifierModel,
-      historySize,
+      historySize: historySize ?? DEFAULT_HISTORY_SIZE,
       profiles: normalizedProfiles,
     },
     warnings,

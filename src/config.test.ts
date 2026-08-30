@@ -399,8 +399,9 @@ describe('config.ts', () => {
       };
       const { config, warnings } = normalizeConfig(raw as unknown as RouterConfig);
       expect(config.classifierModel?.model).toBe('openai/gpt-4o');
-      expect(config.classifierModel?.thinking).toBe('super-invalid');
-      expect(warnings.length).toBe(0);
+      expect(config.classifierModel?.thinking).toBeUndefined();
+      expect(warnings.length).toBe(1);
+      expect(warnings[0]).toContain('Invalid classifierModel thinking');
     });
 
     it('should warn when classifierModel object is missing model field', () => {

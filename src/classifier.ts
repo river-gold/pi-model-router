@@ -96,11 +96,12 @@ export const runClassifier = async (
     if (tierLine) {
       const tierValue = tierLine.split(':')[1].trim().toLowerCase();
       if (isRouterTier(tierValue)) {
+        const reasoningText = reasoningLine
+          ? reasoningLine.substring(reasoningLine.indexOf(':') + 1).trim()
+          : 'Classifier decision.';
         return {
           tier: tierValue,
-          reasoning: reasoningLine
-            ? reasoningLine.split(':')[1].trim()
-            : 'Classifier decision.',
+          reasoning: reasoningText,
         };
       }
     }
