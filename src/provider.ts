@@ -228,11 +228,11 @@ export const registerRouterProvider = (
             const timeoutFn = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout;
             const anyFn = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
             if (s) {
-              const t = timeoutFn?.(5000);
+              const t = timeoutFn?.(30000);
               if (t && anyFn) return anyFn([s, t]);
               return s;
             }
-            return timeoutFn?.(5000);
+            return timeoutFn?.(30000);
           })();
 
           await withCommitMutex(async () => {
