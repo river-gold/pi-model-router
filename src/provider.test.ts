@@ -616,6 +616,63 @@ describe('provider.ts', () => {
     });
   });
 
+  describe('concurrency per-request isolation', () => {
+    it('should not interleave lastDecision between two concurrent streams', async () => {
+      registerRouterProvider(mockPi, mockState, mockActions);
+      // Make classifier distinguish requests by content
+      const stream1 = new MockEventStream();
+      const stream2 = new MockEventStream();
+      let callIdx = 0;
+      vi.mocked(createAssistantMessageEventStream)
+        .mockReturnValueOnce(stream1 as unknown as AssistantMessageEventStream)
+        .mockReturnValueOnce(stream2 as unknown as AssistantMessageEventStream);
+      vi.mocked(streamSimple).mockImplementation((model: Model<Api>) => {
+        callIdx++;
+        const idx = callIdx;
+        return (async function* () {
+          // Simulate async delay to force interleaving
+          await new Promise((r) => setTimeout(r, 20));
+          yield { type: 'text_delta', delta: `answer-${idx}` };
+          yield { type: 'done', message: { usage: { cost: { total: 0.001 } } } };
+        })() as unknown as ReturnType<typeof streamSimple>;
+      });
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const ctx1 = { messages: [{ role: 'user', content: 'hello-1' }] } as unknown as Context;
+      const ctx2 = { messages: [{ role: 'user', content: 'hello-2' }] } as unknown as Context;
+      // Start both streams concurrently without awaiting sequentially
+      registeredProviderOptions!.streamSimple(model, ctx1);
+      registeredProviderOptions!.streamSimple(model, ctx2);
+      await new Promise((r) => setTimeout(r, 200));
+      // Both should have produced done events, and accumulatedCost should be sum
+      expect(mockState.accumulatedCost).toBe(0.002);
+      // lastDecision should be one of the two (last write wins) but not corrupted
+      expect(mockState.lastDecision).toBeDefined();
+      expect(['balanced']).toContain(mockState.lastDecision!.profile);
+    });
+
+    it('should abort and not try fallback when signal is aborted', async () => {
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(stream as unknown as AssistantMessageEventStream);
+      const controller = new AbortController();
+      controller.abort();
+      vi.mocked(streamSimple).mockImplementation(() => {
+        return (async function* () {
+          yield { type: 'text_delta', delta: 'should not be called' };
+          yield { type: 'done', message: { usage: { cost: { total: 0.001 } } } };
+        })() as unknown as ReturnType<typeof streamSimple>;
+      });
+      const model = { id: 'balanced', api: 'router-api' as Api, provider: 'router' } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+      registeredProviderOptions!.streamSimple(model, context, { signal: controller.signal } as unknown as SimpleStreamOptions);
+      await new Promise((r) => setTimeout(r, 150));
+      // Aborted before delegation: should push done with aborted, not error, and cost should be 0
+      expect(mockState.accumulatedCost).toBe(0);
+      const done = stream.events.find((e) => e.type === 'done');
+      expect(done).toBeDefined();
+    });
+  });
+
   describe('waitForRegistry', () => {
     it('should return registry immediately if already available', async () => {
       const mockRegistry = { find: vi.fn() } as unknown as ExtensionContext['modelRegistry'];

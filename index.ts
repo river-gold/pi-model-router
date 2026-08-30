@@ -36,29 +36,31 @@ const routerExtension = (pi: ExtensionAPI) => {
   let lastConfigWarnings: string[] = [];
   let lastPersistedSnapshot: string | undefined;
   let isInitialized = false;
-  let isInternalModelSwitch = false;
-  let isInternalThinkingChange = false;
+  let isInternalModelSwitch = 0;
+  // Delay to allow pi internal registry/session initialization to settle
+  // before reading model registry and session branch. Keep small and
+  // explicit; consider replacing with deterministic readiness signal
+  // (e.g. waitForRegistry) if the race reappears.
+  const SESSION_RESTORE_DELAY_MS = 50;
 
   const setModelInternally = async (
     model: NonNullable<ExtensionContext['model']>,
   ) => {
-    isInternalModelSwitch = true;
+    isInternalModelSwitch++;
     try {
       return await pi.setModel(model);
     } catch {
       return false;
     } finally {
-      isInternalModelSwitch = false;
+      isInternalModelSwitch--;
     }
   };
 
   const setThinkingLevelInternally = (level: ThinkingLevel) => {
-    isInternalThinkingChange = true;
     try {
       pi.setThinkingLevel(level);
     } catch {
-    } finally {
-      isInternalThinkingChange = false;
+      // ignore - thinking level may not be supported by current model
     }
   };
 
@@ -145,6 +147,38 @@ const routerExtension = (pi: ExtensionAPI) => {
       );
       routerEnabled = false;
       selectedProfile = undefined;
+      const tryFallback = async (ref: string): Promise<boolean> => {
+        const slashIndex = ref.indexOf('/');
+        if (slashIndex === -1) return false;
+        const provider = ref.slice(0, slashIndex);
+        const modelId = ref.slice(slashIndex + 1);
+        try {
+          const m = ctx.modelRegistry.find(provider, modelId);
+          if (m) {
+            const ok = await setModelInternally(m);
+            return ok;
+          }
+        } catch {
+          // ignore
+        }
+        return false;
+      };
+      if (lastNonRouterModel) {
+        if (await tryFallback(lastNonRouterModel)) return;
+      }
+      // lastNonRouterModel missing or unavailable: try first available model from registry list
+      try {
+        const anyModel = (ctx.modelRegistry as unknown as { list?: () => { provider: string; id: string }[] }).list?.()?.[0]
+          ?? (ctx.modelRegistry as unknown as { models?: { provider: string; id: string }[] }).models?.[0];
+        if (anyModel) {
+          const ref = `${anyModel.provider}/${anyModel.id}`;
+          if (await tryFallback(ref)) return;
+        }
+      } catch {
+        // ignore
+      }
+      // No fallback available: stay disabled, notify only (no hard error)
+      ctx.ui.notify('Router disabled: no fallback model available. Select a model manually.', 'warning');
     },
     registerRouterProvider: () => {
       registerRouterProvider(
@@ -207,7 +241,7 @@ const routerExtension = (pi: ExtensionAPI) => {
     currentModelRegistry = ctx.modelRegistry;
     currentCwd = ctx.cwd;
     actions.reloadConfig(ctx);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, SESSION_RESTORE_DELAY_MS));
     routerEnabled = ctx.model?.provider === 'router';
     selectedProfile = ctx.model?.provider === 'router'
       ? resolveProfileName(currentConfig, ctx.model.id)
@@ -309,6 +343,9 @@ const routerExtension = (pi: ExtensionAPI) => {
       get debugHistory() {
         return debugHistory;
       },
+      set debugHistory(v) {
+        debugHistory = v;
+      },
       get lastConfigWarnings() {
         return lastConfigWarnings;
       },
@@ -342,11 +379,29 @@ const routerExtension = (pi: ExtensionAPI) => {
 
   pi.on('model_select', async (event, ctx) => {
     ensureInitializedFromContext(ctx);
-    if (!isInitialized || isInternalModelSwitch) return;
+    if (!isInitialized || isInternalModelSwitch > 0) return;
     if (event.model.provider === 'router') {
       const profileName = resolveProfileName(currentConfig, event.model.id);
       if (!profileName) {
         ctx.ui.notify(`Unknown router profile: ${event.model.id}`, 'error');
+        routerEnabled = false;
+        selectedProfile = undefined;
+        const tryFallback = async (ref: string): Promise<boolean> => {
+          const i = ref.indexOf('/');
+          if (i === -1) return false;
+          try {
+            const m = ctx.modelRegistry.find(ref.slice(0, i), ref.slice(i + 1));
+            if (m) return await setModelInternally(m);
+          } catch { /* ignore */ }
+          return false;
+        };
+        if (lastNonRouterModel && await tryFallback(lastNonRouterModel)) return;
+        try {
+          const anyModel = (ctx.modelRegistry as unknown as { list?: () => { provider: string; id: string }[] }).list?.()?.[0]
+            ?? (ctx.modelRegistry as unknown as { models?: { provider: string; id: string }[] }).models?.[0];
+          if (anyModel && await tryFallback(`${anyModel.provider}/${anyModel.id}`)) return;
+        } catch { /* ignore */ }
+        ctx.ui.notify('Router disabled: no fallback model available. Select a model manually.', 'warning');
         return;
       }
       const registryModel = ctx.modelRegistry.find('router', profileName);
@@ -380,11 +435,10 @@ const routerExtension = (pi: ExtensionAPI) => {
     actions.updateStatus(ctx);
   });
 
-  pi.on('thinking_level_select', (_event, ctx) => {
-    ensureInitializedFromContext(ctx);
-    if (!isInitialized || !routerEnabled || !selectedProfile) return;
-    if (isInternalThinkingChange) return;
-  });
+  // Note: pi-agent-core does not emit a 'session_tree' event. Branch navigation
+  // (fork/resume) reuses session_start with reason 'fork'/'resume', which already
+  // restores the correct branch state via the handler above. No separate
+  // session_tree handler is needed; a stale handler would be dead code.
 };
 
 export default routerExtension;

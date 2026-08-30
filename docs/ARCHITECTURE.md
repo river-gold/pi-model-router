@@ -1,6 +1,6 @@
 # Architecture: Pi Model Router Extension
 
-The `pi-model-router` is an extension-first model router for the `pi` coding agent. It registers a custom logical provider (`router`) that exposes "profiles" as models (e.g., `router/balanced`). For every turn, the router intelligently selects an underlying concrete model based on task complexity, conversation phase, and user-defined rules.
+The `pi-model-router` is an extension-first model router for the `pi` coding agent. It registers a custom logical provider (`router`) that exposes "profiles" as models (e.g., `router/balanced`). For every turn, the router intelligently selects an underlying concrete model based on task complexity and optional classifier.
 
 ## Core Concepts
 
@@ -20,9 +20,8 @@ The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. 
 
 For every request sent to a `router/*` model, the following logic is executed:
 
-1. **Custom Rules**: Keyword-based rules defined in the config are checked against the user prompt.
-2. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
-3. **Default**: If no rule or classifier decides, the router defaults to `medium` tier.
+1. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
+2. **Default**: If no classifier is configured or it fails, the router defaults to `medium` tier.
 
 ## Module Architecture
 
@@ -30,7 +29,7 @@ The extension is modularized for maintainability:
 
 - `index.ts`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together.
 - `src/provider.ts`: Implements the `router` provider and the delegation/retry loop.
-- `src/routing.ts`: Core decision logic (rules/classifier) and the LLM classifier.
+- `src/routing.ts`: Core decision logic (tier resolution) and routing helpers.
 - `src/config.ts`: Loads, merges, and normalizes the JSON configuration.
 - `src/commands.ts`: Registers all `/router` subcommands and their autocompletions.
 - `src/ui.ts`: Manages the router status line.

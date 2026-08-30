@@ -117,7 +117,7 @@ export const stripJsonc = (text: string): string => {
     }
     if (char === ',') {
       let j = i + 1;
-      while (j < result.length && /\s/.test(result[j] ?? '')) j++;
+      for (; j < result.length && /\s/.test(result[j] ?? ''); j++) {}
       const nextNonSpace = result[j] ?? '';
       if (nextNonSpace === '}' || nextNonSpace === ']') {
         continue;
@@ -185,7 +185,12 @@ export const normalizeClassifierConfig = (
     if (modelRef) {
       try {
         parseCanonicalModelRef(modelRef);
-              const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+        const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+        // Handle deprecated 'max' -> map to 'xhigh' with warning
+        if (typeof raw.thinking === 'string' && raw.thinking === 'max') {
+          warnings.push(`Invalid ${contextLabel} thinking "max": "max" is deprecated, mapped to "xhigh".`);
+          return { model: modelRef, thinking: 'xhigh' as ThinkingLevel };
+        }
         const thinking =
           typeof raw.thinking === 'string' && (allowedThinking as string[]).includes(raw.thinking)
             ? (raw.thinking as ThinkingLevel)
@@ -213,7 +218,6 @@ export const resolveEffectiveClassifier = (
 ): ClassifierConfig | undefined => {
   if (profile.classifierModel) return profile.classifierModel;
   if (globalClassifier) return globalClassifier;
-  if (profile.low) return { model: profile.low.model, thinking: profile.low.thinking };
   return undefined;
 };
 
@@ -223,6 +227,9 @@ export const mergeConfig = (
 ): RouterConfig => {
   const mergedProfiles: Record<string, RouterProfile> = { ...base.profiles };
   for (const [name, profile] of Object.entries(override.profiles ?? {})) {
+    if (!isObjectRecord(profile)) {
+      continue;
+    }
     const existing = mergedProfiles[name];
     const nextProfile = profile as Partial<RouterProfile>;
     mergedProfiles[name] = {
@@ -233,6 +240,7 @@ export const mergeConfig = (
     };
   }
 
+  // historyLimit is a legacy alias for historySize (kept for backwards compatibility)
   const mergedHistorySize =
     (override as unknown as Record<string, unknown>).historySize !== undefined
       ? (override as unknown as Record<string, unknown>).historySize as number
@@ -297,10 +305,13 @@ export const normalizeTierConfig = (
     return undefined;
   }
 
-  const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
   let thinking: ThinkingLevel = 'medium';
   if (typeof value.thinking === 'string' && value.thinking.length > 0) {
-    if ((allowedThinking as string[]).includes(value.thinking)) {
+    if (value.thinking === 'max') {
+      warnings.push(`Invalid thinking "max" for profile "${profileName}" ${tier} tier: "max" is deprecated, mapped to "xhigh". Using xhigh.`);
+      thinking = 'xhigh' as ThinkingLevel;
+    } else if ((allowedThinking as string[]).includes(value.thinking)) {
       thinking = value.thinking as ThinkingLevel;
     } else {
       warnings.push(`Invalid thinking "${value.thinking}" for profile "${profileName}" ${tier} tier: expected one of ${allowedThinking.join(', ')}. Using default medium.`);
@@ -354,9 +365,23 @@ export const normalizeTierConfig = (
 export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   const warnings: string[] = [];
 
+  // Warn on unknown top-level fields
+  {
+    const allowedKeys = new Set(['debug', 'classifierModel', 'historySize', 'historyLimit', 'profiles']);
+    for (const key of Object.keys(raw as unknown as Record<string, unknown>)) {
+      if (!allowedKeys.has(key)) {
+        warnings.push(`Unknown config field "${key}" ignored.`);
+      }
+    }
+  }
+
   const normalizedProfiles: Record<string, RouterProfile> = {};
 
   for (const [name, profile] of Object.entries(raw.profiles ?? {})) {
+    if (!isObjectRecord(profile)) {
+      warnings.push(`Profile "${name}" is not an object. Skipped.`);
+      continue;
+    }
     const high = normalizeTierConfig(profile?.high, name, 'high', warnings);
     const medium = normalizeTierConfig(profile?.medium, name, 'medium', warnings);
     const low = normalizeTierConfig(profile?.low, name, 'low', warnings);
@@ -454,6 +479,11 @@ export const resolveContextWindow = (
   const tierConfig = profile[tier];
   if (!tierConfig) return DEFAULT_CONTEXT_WINDOW;
 
+  // User-specified contextWindow takes precedence over registry
+  if (tierConfig.contextWindow !== undefined && tierConfig.contextWindow > 0) {
+    return tierConfig.contextWindow;
+  }
+
   if (modelRegistry) {
     try {
       const { provider, modelId } = parseCanonicalModelRef(tierConfig.model);
@@ -472,6 +502,11 @@ export const resolveMaxTokens = (
 ): number => {
   const tierConfig = profile[tier];
   if (!tierConfig) return DEFAULT_MAX_TOKENS;
+
+  // User-specified maxTokens takes precedence over registry
+  if (tierConfig.maxTokens !== undefined && tierConfig.maxTokens > 0) {
+    return tierConfig.maxTokens;
+  }
 
   if (modelRegistry) {
     try {

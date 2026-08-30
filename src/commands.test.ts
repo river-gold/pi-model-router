@@ -295,7 +295,7 @@ describe('commands.ts', () => {
 
       await cmd.handler('debug on extra', ctx as any);
       expect(ctx.ui.notify).toHaveBeenCalledWith(
-        'Usage: /router debug <on|off|show|clear>',
+        'Usage: /router debug <on|off|toggle|show|clear>',
         'error',
       );
     });

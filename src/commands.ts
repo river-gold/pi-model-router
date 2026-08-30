@@ -17,7 +17,7 @@ export const registerCommands = (
     lastNonRouterModel: string | undefined;
     readonly accumulatedCost: number;
     debugEnabled: boolean;
-    readonly debugHistory: RoutingDecision[];
+    debugHistory: RoutingDecision[];
     readonly lastConfigWarnings: string[];
   },
   actions: {
@@ -88,14 +88,19 @@ export const registerCommands = (
 
   const handleDebug = async (args: string[], ctx: ExtensionContext) => {
     if (args.length > 1) {
-      ctx.ui.notify('Usage: /router debug <on|off|show|clear>', 'error');
+      ctx.ui.notify('Usage: /router debug <on|off|toggle|show|clear>', 'error');
       return;
     }
     const cmd = args[0]?.toLowerCase();
     if (cmd === 'on') state.debugEnabled = true;
     else if (cmd === 'off') state.debugEnabled = false;
-    else if (cmd === 'clear') state.debugHistory.length = 0;
-    else if (cmd === 'show') {
+    else if (cmd === 'toggle') state.debugEnabled = !state.debugEnabled;
+    else if (cmd === 'clear') {
+      state.debugHistory = [];
+      actions.persistState();
+      ctx.ui.notify('Router debug cleared.', 'info');
+      return;
+    } else if (cmd === 'show') {
       if (state.debugHistory.length === 0) {
         ctx.ui.notify('No recent routing decisions.', 'info');
       } else {
@@ -108,8 +113,11 @@ export const registerCommands = (
         ctx.ui.notify(`Recent Routing Decisions:\n${history}`, 'info');
       }
       return;
-    } else {
+    } else if (cmd === undefined || cmd === '') {
       state.debugEnabled = !state.debugEnabled;
+    } else {
+      ctx.ui.notify('Usage: /router debug <on|off|toggle|show|clear>', 'error');
+      return;
     }
     actions.persistState();
     ctx.ui.notify(
@@ -192,10 +200,10 @@ export const registerCommands = (
           ctx.ui.notify(
             [
               'Router Subcommands:',
-              '  status                      Show current status, profile, cost, and last decision.',
-              '  debug <on|off|show|clear>   Control routing debug logging to notifications and history.',
-              '  reload                      Hot-reload the configuration JSON from .pi/model-router.json.',
-              '  help, ?                     Show this help message.',
+              '  status                           Show current status, profile, cost, and last decision.',
+              '  debug <on|off|toggle|show|clear> Control routing debug logging to notifications and history.',
+              '  reload                           Hot-reload the configuration JSON from .pi/model-router.json.',
+              '  help, ?                          Show this help message.',
             ].join('\n'),
             'info',
           );

@@ -30,6 +30,17 @@ import {
   resolveDelegatedModel,
   type RegistryWithProviderAuth,
 } from './constants';
+import {
+  buildRoutingDecision,
+  decideRouting,
+} from './routing';
+import { runClassifier } from './classifier';
+import {
+  hasImageAttachment,
+  getLastUserText,
+  estimateTokens,
+  truncateContext,
+} from './context';
 // Hook for local providers like pi-agent-bridge to register without hardcoding.
 // pi-agent-bridge can do: (globalThis as any).__piModelRouterLocalHandlers?.set("pi-agent-bridge://", handler)
 const getLocalHandlers = (): Map<string, (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream> => {
@@ -65,26 +76,12 @@ export const waitForRegistry = async (
   if (state.currentModelRegistry) return state.currentModelRegistry;
 
   const start = Date.now();
-  let delay = REGISTRY_WAIT_INITIAL_DELAY_MS;
-  while (Date.now() - start < timeoutMs) {
+  for (let delay = REGISTRY_WAIT_INITIAL_DELAY_MS; Date.now() - start < timeoutMs; delay = Math.min(delay * 2, REGISTRY_WAIT_MAX_DELAY_MS)) {
     await new Promise((resolve) => setTimeout(resolve, delay));
     if (state.currentModelRegistry) return state.currentModelRegistry;
-    delay = Math.min(delay * 2, REGISTRY_WAIT_MAX_DELAY_MS);
   }
   return undefined;
 };
-
-import {
-  buildRoutingDecision,
-  decideRouting,
-} from './routing';
-import { runClassifier } from './classifier';
-import {
-  hasImageAttachment,
-  getLastUserText,
-  estimateTokens,
-  truncateContext,
-} from './context';
 
 export const createErrorMessage = (
   model: Model<Api>,
@@ -133,6 +130,21 @@ export const registerRouterProvider = (
     syncPiThinkingLevel: (level: ThinkingLevel) => void;
   },
 ) => {
+  // Serialize commits to shared mutable state (lastDecision, accumulatedCost,
+  // selectedProfile, routerEnabled) so concurrent router requests do not
+  // interleave partial writes. Read path uses per-request snapshots.
+  let commitMutex: Promise<void> = Promise.resolve();
+  const withCommitMutex = async <T>(fn: () => T | Promise<T>): Promise<T> => {
+    const prev = commitMutex;
+    let release!: () => void;
+    commitMutex = new Promise<void>((r) => { release = r; });
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  };
   const profileList = profileNames(state.currentConfig);
 
   // Map profiles to their capacities
@@ -207,37 +219,57 @@ export const registerRouterProvider = (
             throw new Error(`Unknown router profile: ${model.id}`);
           }
 
-          state.selectedProfile = model.id;
-          state.routerEnabled = true;
+          // Per-request isolation: snapshot shared state and work with locals.
+          // All reads of lastDecision use the snapshot to avoid races with
+          // concurrent requests. Shared writes are committed via mutex.
+          const snapshotLastDecision = state.lastDecision;
+          const effectiveSignal: AbortSignal | undefined = (() => {
+            const s = options?.signal;
+            const timeoutFn = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout;
+            const anyFn = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+            if (s) {
+              const t = timeoutFn?.(5000);
+              if (t && anyFn) return anyFn([s, t]);
+              return s;
+            }
+            return timeoutFn?.(5000);
+          })();
+
+          await withCommitMutex(async () => {
+            state.selectedProfile = model.id;
+            state.routerEnabled = true;
+          });
 
           let decision: RoutingDecision = decideRouting(
             context,
             model.id,
             profile,
-            state.lastDecision,
+            snapshotLastDecision,
           );
 
-          // Preserve grade during toolResult loop (user prompt only, non-Google; Google handled separately)
           const lastMessageForLoop = context.messages[context.messages.length - 1];
-          const isGoogleThinkingLoop = state.lastDecision?.targetProvider === 'google' && state.lastDecision?.thinking !== 'off';
-          const isToolLoop = lastMessageForLoop?.role === 'toolResult' && state.lastDecision?.profile === model.id && !!state.lastDecision && !isGoogleThinkingLoop;
-          if (isToolLoop && state.lastDecision) {
+          const isGoogleThinkingLoop = snapshotLastDecision?.targetProvider === 'google' && snapshotLastDecision?.thinking !== 'off';
+          const isToolLoop = lastMessageForLoop?.role === 'toolResult' && snapshotLastDecision?.profile === model.id && snapshotLastDecision !== undefined && !isGoogleThinkingLoop;
+          const shouldSkipClassifier = isToolLoop || isGoogleThinkingLoop;
+          if (isToolLoop && snapshotLastDecision) {
             decision = buildRoutingDecision(
               model.id,
               profile,
-              state.lastDecision.tier,
-              `Preserved ${state.lastDecision.tier} tier during toolResult loop`,
+              snapshotLastDecision.tier,
+              `Preserved ${snapshotLastDecision.tier} tier during toolResult loop`,
               false,
             );
           }
 
-          // Priority: profile classifierModel > global classifierModel > profile low model
           const effectiveClassifier = resolveEffectiveClassifier(
             profile,
             state.currentConfig.classifierModel,
           );
 
-          if (!isToolLoop && effectiveClassifier) {
+          if (!shouldSkipClassifier && effectiveClassifier) {
+            if (effectiveSignal?.aborted) {
+              throw new Error('aborted');
+            }
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
             const classifierResult = await runClassifier(
               effectiveClassifier.model,
@@ -245,7 +277,9 @@ export const registerRouterProvider = (
               context,
               effectiveHistorySize,
               effectiveClassifier.thinking,
+              effectiveSignal,
             );
+            if (effectiveSignal?.aborted) throw new Error('aborted');
             if (classifierResult) {
               decision = buildRoutingDecision(
                 model.id,
@@ -258,7 +292,7 @@ export const registerRouterProvider = (
           }
 
           const lastMessage = context.messages[context.messages.length - 1];
-          const previousDecision = state.lastDecision;
+          const previousDecision = snapshotLastDecision;
           const isGoogleThinkingToolContinuation =
             lastMessage?.role === 'toolResult' &&
             previousDecision?.profile === model.id &&
@@ -333,7 +367,9 @@ export const registerRouterProvider = (
             }
           }
 
-          state.lastDecision = decision;
+          await withCommitMutex(async () => {
+            state.lastDecision = decision;
+          });
           actions.recordDebugDecision(decision);
 
           // Sync pi's thinking level display with the router's effective thinking.
@@ -355,7 +391,7 @@ export const registerRouterProvider = (
           if (imageAttached) {
             modelsToTry = modelsToTry.filter(checkModelSupportsImage);
             if (modelsToTry.length === 0) {
-              modelsToTry = [decision.targetLabel];
+              throw new Error('No image-capable model available for this profile. Attachments would be silently dropped as placeholder text.');
             }
           }
           let lastError: unknown;
@@ -403,15 +439,35 @@ export const registerRouterProvider = (
               targetModel,
             );
 
+            if (effectiveSignal?.aborted) {
+              throw new Error('aborted');
+            }
+            let contentReceivedForTry = false;
+            let pendingCostDelta = 0;
             try {
               // HONESTY CHECK & AUTO-TRUNCATION
               // If the picked model has a smaller context than what we reported, truncate now.
+              // Resolve limit per attempted model, not the original tier, so a small fallback does not overflow.
+              // Note: estimateTokens uses chars/3 which underestimates CJK (≈1-1.5 tok/char); truncation may still be insufficient for heavy CJK histories.
               let effectiveContext = context;
-              const targetLimit = resolveContextWindow(
-                decision.tier,
-                profile,
-                registry,
-              );
+              let targetLimit: number;
+              {
+                let tierForModel: RouterTier | undefined;
+                for (const t of ROUTER_TIERS) {
+                  const tc = profile[t];
+                  if (!tc) continue;
+                  if (tc.model === modelRef || tc.fallbacks?.includes(modelRef)) {
+                    tierForModel = t;
+                    break;
+                  }
+                }
+                if (tierForModel) {
+                  targetLimit = resolveContextWindow(tierForModel, profile, registry);
+                } else {
+                  const found = registry.find(targetProvider, targetModelId);
+                  targetLimit = found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
+                }
+              }
               if (targetLimit < model.contextWindow!) {
                 effectiveContext = truncateContext(context, targetLimit);
               }
@@ -436,8 +492,13 @@ export const registerRouterProvider = (
               }
 
               // Strip pi's reasoning from options — the router controls thinking
-              const { reasoning: _piReasoning, ...delegationOptions } =
-                options ?? {};
+              // Keep effectiveSignal as the signal for delegated calls
+              const { reasoning: _piReasoning, signal: _piSignal, ...delegationOptionsBase } =
+                (options ?? {}) as SimpleStreamOptions & { signal?: AbortSignal };
+              const delegationOptions = {
+                ...delegationOptionsBase,
+                ...(effectiveSignal ? { signal: effectiveSignal } : {}),
+              };
 
               // Hook for local providers (e.g., pi-agent-bridge://) to handle without HTTP
               let delegatedStream: AssistantMessageEventStream | undefined;
@@ -476,38 +537,80 @@ export const registerRouterProvider = (
                 );
               }
 
-              let contentReceived = false;
+              // Buffer events until success to avoid pushing primary start/content before fallback succeeds (would duplicate partial assistant messages in core).
+              const bufferedEvents: unknown[] = [];
+              let gotDone = false;
+              let gotError = false;
+              let bufferedErrorMessage: string | undefined;
               if (!delegatedStream) throw new Error('No delegated stream available');
               for await (const event of delegatedStream) {
-                if (event.type === 'done') {
-                  const cost = event.message.usage?.cost?.total ?? 0;
-                  state.accumulatedCost += cost;
+                if (effectiveSignal?.aborted) {
+                  throw new Error('aborted');
                 }
-                if (event.type === 'error' && !contentReceived) {
-                  const errorMessage =
-                    'error' in event &&
-                    event.error &&
-                    typeof event.error === 'object' &&
-                    'errorMessage' in event.error &&
-                    typeof event.error.errorMessage === 'string'
-                      ? event.error.errorMessage
-                      : undefined;
-                  throw new Error(
-                    errorMessage || 'Model failed before sending content.',
-                  );
+                bufferedEvents.push(event);
+                if ((event as { type: string }).type === 'done') {
+                  gotDone = true;
+                  const cost = (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost?.total ?? 0;
+                  pendingCostDelta = cost;
+                }
+                if ((event as { type: string }).type === 'error') {
+                  gotError = true;
+                  const errObj = (event as { error?: unknown }).error;
+                  if (errObj && typeof errObj === 'object' && 'errorMessage' in errObj && typeof (errObj as { errorMessage?: unknown }).errorMessage === 'string') {
+                    bufferedErrorMessage = (errObj as { errorMessage: string }).errorMessage;
+                  }
                 }
                 const isContent =
-                  event.type === 'text_delta' ||
-                  event.type === 'thinking_delta' ||
-                  event.type === 'toolcall_delta' ||
-                  event.type === 'toolcall_end';
-                if (isContent) contentReceived = true;
-                stream.push(event);
+                  (event as { type: string }).type === 'text_delta' ||
+                  (event as { type: string }).type === 'thinking_delta' ||
+                  (event as { type: string }).type === 'toolcall_delta' ||
+                  (event as { type: string }).type === 'toolcall_end';
+                if (isContent) contentReceivedForTry = true;
               }
-              success = true;
-              if (i > 0) decision.isFallback = true;
-              break;
+              if (gotDone) {
+                for (const ev of bufferedEvents) stream.push(ev as never);
+                success = true;
+                if (pendingCostDelta) {
+                  await withCommitMutex(async () => {
+                    state.accumulatedCost += pendingCostDelta;
+                  });
+                }
+                if (i > 0) {
+                  const { provider: fp, modelId: fid } = parseCanonicalModelRef(modelRef);
+                  decision.isFallback = true;
+                  decision.targetProvider = fp;
+                  decision.targetModelId = fid;
+                  decision.targetLabel = modelRef;
+                  await withCommitMutex(async () => {
+                    // Keep state.lastDecision in sync with fallback target
+                    if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
+                      state.lastDecision = { ...decision };
+                    }
+                  });
+                  actions.recordDebugDecision(decision);
+                }
+                break;
+              }
+              if (gotError) {
+                if (contentReceivedForTry) {
+                  // Content already buffered from this attempt; do not try fallback to avoid duplicate partial output.
+                  for (const ev of bufferedEvents) stream.push(ev as never);
+                  throw new Error(`NON_RETRYABLE: ${bufferedErrorMessage || 'Model failed after sending content.'}`);
+                }
+                throw new Error(bufferedErrorMessage || 'Model failed before sending content.');
+              }
+              // Stream ended without terminal event -> treat as failure so fallback can be tried (if no content) or error surfaces.
+              throw new Error('Model stream ended without terminal event.');
             } catch (err) {
+              if (err instanceof Error && (err.message.startsWith('NON_RETRYABLE:') || err.message === 'aborted')) {
+                lastError = err instanceof Error && err.message.startsWith('NON_RETRYABLE:') ? new Error(err.message.slice('NON_RETRYABLE: '.length)) : err;
+                break;
+              }
+              // If content was sent before the thrown error, do not retry fallback to avoid duplicate output.
+              if (typeof contentReceivedForTry !== 'undefined' && contentReceivedForTry) {
+                lastError = err;
+                break;
+              }
               lastError = err;
             }
           }
@@ -526,6 +629,17 @@ export const registerRouterProvider = (
 
           stream.end();
         } catch (error) {
+          const isAborted = error instanceof Error && error.message === 'aborted';
+          if (isAborted) {
+            // User cancelled - graceful termination, no fallback, no error
+            stream.push({
+              type: 'done',
+              reason: 'stop',
+              message: createErrorMessage(model, 'aborted'),
+            });
+            stream.end();
+            return;
+          }
           // When a subagent session is torn down (e.g. by pi-dynamic-workflows),
           // the extension runtime is invalidated and any pi/ctx call throws a
           // stale-context error. Push a graceful done event so the stream's

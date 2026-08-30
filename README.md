@@ -1,18 +1,17 @@
 # pi-model-router
 
-Smart per-turn model router extension for the [pi-coding-agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) that optimizes your AI usage without sacrificing quality by dynamically routing each turn to the optimal LLM tier. It automatically selects between high, medium, and low-tier models based on task intent, context size, and custom rules — complete with automatic fallbacks and phase awareness.
+Smart per-turn model router extension for the [pi-coding-agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent) that optimizes your AI usage without sacrificing quality by dynamically routing each turn to the optimal LLM tier. It automatically selects between high, medium, and low-tier models based on task intent and classifier — complete with automatic fallbacks.
 
 ## What it does
 
 - **Logical Router Provider**: Registers a `router` provider that exposes stable profiles (e.g., `router/balanced`) as models.
 - **Per-Turn Routing**: Intelligently chooses between `high`, `medium`, and `low` tiers for every turn based on task intent and complexity.
-- **Rule-Based Routing**: Routes via pinned tier, custom `rules`, or `classifierModel` — no built-in keyword heuristics.
+- **Classifier-Based Routing**: Optionally use a fast `classifierModel` to categorize intent; otherwise defaults to `medium` tier.
 - **Advanced Controls**: Includes built-in support for:
-  - **LLM Intent Classifier**: Optionally use a fast model to categorize intent (overrides heuristics).
-  - **Custom Rules**: Define keyword-based tier overrides for specific patterns (e.g., `deploy` → `high`).
+  - **LLM Intent Classifier**: Optionally use a fast model to categorize intent.
   - **Fallback Chains**: Automatic retry with alternative models if the primary choice fails.
 - **Thinking Control**: Fixed per-tier `thinking` from `model-router.json` (no effort UI); delegated reasoning is clamped per target model.
-- **Persistent State**: Pins, profiles, costs, and debug history are remembered across agent restarts and conversation branches.
+- **Persistent State**: Profiles, costs, and debug history are remembered across agent restarts and conversation branches.
 
 ## Installation
 
@@ -35,7 +34,7 @@ pi install .
 Or load directly for one run:
 
 ```bash
-pi -e ./src/index.ts
+pi -e ./index.ts
 ```
 
 ## Configuration
@@ -64,8 +63,7 @@ Copy the example config to one of:
 
 | Field                   | Description                                                                       |
 | ----------------------- | --------------------------------------------------------------------------------- |
-| `classifierModel`       | (Optional) Model used to categorize intent. Supports model aliases. If omitted, defaults to `medium` when no `rules` or `pin` matches. |
-| `rules`                 | List of custom keyword rules (e.g. `{ "matches": "deploy", "tier": "high" }`).    |
+| `classifierModel`       | (Optional) Model used to categorize intent. Supports model aliases. If omitted, defaults to `medium`. |
 | `profiles`              | Map of profile definitions, each containing optional `high`, `medium`, and `low` tiers (at least one required). |
 
 ## Commands

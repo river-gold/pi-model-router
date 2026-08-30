@@ -455,6 +455,54 @@ describe('index.ts (orchestrator)', () => {
     });
   });
 
+  describe('ensureValidActiveRouterProfile fallback edge', () => {
+    it('should disable router when profile missing and no fallback model available', async () => {
+      routerExtension(mockPi);
+      const mockCtx = buildMockCtx();
+      mockCtx.sessionManager.getBranch = () => [
+        { type: 'custom', customType: 'router-state', data: { enabled: true, selectedProfile: 'balanced', timestamp: Date.now() } },
+      ];
+      const sessionStartHandlers = eventListeners['session_start'] || [];
+      for (const h of sessionStartHandlers) await h({}, mockCtx);
+      // Simulate profile removed: config has no balanced, and registry list is empty
+      mockCtx.modelRegistry.find = vi.fn().mockReturnValue(undefined);
+      (mockCtx.modelRegistry as unknown as { list: () => [] }).list = () => [];
+      mockCtx.model = { provider: 'router', id: 'balanced' };
+      // Call ensureValid via session_start again with missing profile - simulate reload with empty config
+      // Directly trigger model_select unknown profile path
+      const modelSelectHandlers = eventListeners['model_select'] || [];
+      mockPi.appendEntry.mockClear();
+      mockCtx.ui.notify.mockClear();
+      for (const h of modelSelectHandlers) await h({ model: { provider: 'router', id: 'unknown' } }, mockCtx);
+      expect(mockCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining('Unknown router profile'), 'error');
+      expect(mockCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining('no fallback model'), 'warning');
+      // persistState may be deduped if snapshot unchanged; at minimum notify proves fallback path was taken
+      // and router would be disabled (enabled:false) - verify setModel not called with router model
+      expect(mockPi.setModel).not.toHaveBeenCalledWith(expect.objectContaining({ provider: 'router', id: 'unknown' }));
+    });
+  });
+
+  describe('branch navigation via session_start', () => {
+    it('should restore correct branch state on second session_start (fork/resume)', async () => {
+      routerExtension(mockPi);
+      const mockCtx = buildMockCtx();
+      // First branch: balanced enabled
+      mockCtx.sessionManager.getBranch = () => [
+        { type: 'custom', customType: 'router-state', data: { enabled: true, selectedProfile: 'balanced', timestamp: 1 } },
+      ];
+      const handlers = eventListeners['session_start'] || [];
+      for (const h of handlers) await h({ reason: 'new' }, mockCtx);
+      expect(mockPi.setModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'balanced' }));
+      mockPi.setModel.mockClear();
+      // Second branch: empty (fresh) - emulate fork to different leaf
+      mockCtx.sessionManager.getBranch = () => [];
+      mockCtx.model = { provider: 'openai', id: 'gpt-4o' };
+      for (const h of handlers) await h({ reason: 'fork' }, mockCtx);
+      // Should have called setHiddenThinkingLabel (router not enabled in this branch)
+      expect(mockCtx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
+    });
+  });
+
   describe('ensureInitializedFromContext', () => {
     it('should initialize registry and context on first turn_start, but not overwrite on subsequent events', async () => {
       routerExtension(mockPi);

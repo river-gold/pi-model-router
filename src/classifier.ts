@@ -18,12 +18,16 @@ Return your decision in exactly two lines:
 Tier: [high|medium|low]
 Reasoning: [one short sentence]`;
 
+// Simplified overload: historySizeOrThinking accepts number (historySize) or
+// ThinkingLevel (thinking only, historySize=0). New optional signal param allows
+// caller (provider) to propagate AbortSignal for cancellation/timeout.
 export const runClassifier = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext['modelRegistry'],
   context: Context,
   historySizeOrThinking?: number | ThinkingLevel,
   thinkingMaybe?: ThinkingLevel,
+  signal?: AbortSignal,
 ): Promise<{ tier: RouterTier; reasoning: string } | undefined> => {
   let historySize = 0;
   let thinking: ThinkingLevel | undefined = undefined;
@@ -75,7 +79,8 @@ export const runClassifier = async (
       apiKey,
       headers,
       ...(reasoningOption ? { reasoning: reasoningOption } : {}),
-    });
+      ...(signal ? { signal } : {}),
+    } as unknown as Parameters<typeof streamSimple>[2]);
     let fullText = '';
     for await (const event of stream) {
       if (
@@ -105,8 +110,13 @@ export const runClassifier = async (
         };
       }
     }
-  } catch {
-    // Ignore classifier errors and fall back to heuristics
+  } catch (error) {
+    // Classifier failure is non-fatal: caller falls back to medium tier.
+    // Keep catch narrow; log at debug level when available for diagnostics.
+    if (signal?.aborted) return undefined;
+    // Avoid noisy logging in production; provider will continue with default tier.
+    // Debug hint: error instanceof Error ? error.message : String(error)
+    void error;
   }
   return undefined;
 };

@@ -48,10 +48,16 @@ export const getHistoryPairsText = (context: Context, pairCount: number): string
   }
   const lastUserIdx = userIndices.length > 0 ? userIndices[userIndices.length - 1] : -1;
   const historyUserIndices = lastUserIdx >= 0 ? userIndices.slice(0, -1).slice(-pairCount) : [];
+  // O(1) next-user lookup via position map instead of O(N) find per iteration
+  const userPosByIndex = new Map<number, number>();
+  for (let p = 0; p < userIndices.length; p++) {
+    userPosByIndex.set(userIndices[p], p);
+  }
   for (const uIdx of historyUserIndices) {
     const userText = extractTextFromContent(messages[uIdx].content).trim();
     if (!userText) continue;
-    const nextUserIdx = userIndices.find((idx) => idx > uIdx) ?? messages.length;
+    const pos = userPosByIndex.get(uIdx) ?? -1;
+    const nextUserIdx = pos >= 0 && pos + 1 < userIndices.length ? userIndices[pos + 1] : messages.length;
     let finalText = '';
     for (let j = nextUserIdx - 1; j > uIdx; j--) {
       const msg = messages[j];
@@ -72,6 +78,8 @@ export const getHistoryPairsText = (context: Context, pairCount: number): string
   return pairs.join('\n---\n');
 };
 
+ // Utility helper; production classifier builds its own prompt via getHistoryPairsText/getLastUserText
+// (src/classifier.ts composes history + latest message). Kept for tests/other callers.
 export const getPromptWithHistory = (context: Context, historySize: number): string => {
   const promptText = getLastUserText(context);
   if (!historySize || historySize <= 0) return promptText;
@@ -80,10 +88,18 @@ export const getPromptWithHistory = (context: Context, historySize: number): str
   return `${historyText}\n---\n${promptText}`;
 };
 
+// Rough token estimate. chars/3 underestimates CJK (한글 1 char ≈ 1–1.5 tokens);
+// a safer heuristic would be chars/2.5, but keep /3 for backward compat.
+// systemPrompt/tools/image tokens are not fully included in truncateContext —
+// callers must account for that budget externally.
 export const estimateTokens = (text: string): number => Math.ceil(text.length / 3);
 
 export const truncateContext = (context: Context, limit: number): Context => {
   const messages = [...context.messages];
+  // Single-message context: even if it exceeds limit we cannot safely drop the
+  // latest user prompt without data loss. Return as-is; caller must handle via
+  // compaction or explicit error. Token budget for systemPrompt/tools/image
+  // content is approximated via estimateTokens(systemPrompt) only.
   if (messages.length <= 1) return context;
 
   const systemTokens = context.systemPrompt ? estimateTokens(context.systemPrompt) : 0;
@@ -102,14 +118,42 @@ export const truncateContext = (context: Context, limit: number): Context => {
   let activeMessagesTokensSum = messageTokens.reduce((sum, t) => sum + t, 0);
 
   let startIndex = 0;
-  while (startIndex < messages.length) {
+  for (; startIndex < messages.length; startIndex++) {
     const currentTokens = systemTokens + latestTokens + activeMessagesTokensSum;
     if (currentTokens <= limit) break;
-
     activeMessagesTokensSum -= messageTokens[startIndex];
-    startIndex++;
   }
 
-  const finalMessages = [...messages.slice(startIndex), latestMessage];
+  // Align startIndex to next user boundary to avoid splitting a turn in the
+  // middle and to preserve toolCall/toolResult pairing. Further truncation
+  // keeps us within budget (more dropped => fewer tokens).
+  if (startIndex < messages.length) {
+    let aligned = startIndex;
+    for (let a = startIndex; a < messages.length; a++) {
+      if (messages[a].role === 'user') {
+        aligned = a;
+        break;
+      }
+      if (a === messages.length - 1) {
+        aligned = messages.length;
+      }
+    }
+    startIndex = aligned;
+  }
+
+  let finalMessages = [...messages.slice(startIndex), latestMessage];
+  // Drop leading orphan toolResult(s) that lost their assistant toolCall.
+  // Uses a for-loop (no while) to satisfy AGENTS.md style rule.
+  let orphanCount = 0;
+  for (let k = 0; k < finalMessages.length; k++) {
+    if (finalMessages[k].role === 'toolResult' && k === orphanCount) {
+      orphanCount++;
+    } else {
+      break;
+    }
+  }
+  if (orphanCount > 0) {
+    finalMessages = finalMessages.slice(orphanCount);
+  }
   return { ...context, messages: finalMessages };
 };

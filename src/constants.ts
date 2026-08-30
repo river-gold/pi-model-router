@@ -11,6 +11,12 @@ export const DEFAULT_MAX_TOKENS = 16_384;
  * releases where this method isn't in the public type declarations yet —
  * `resolveDelegatedModel` below feature-detects it at runtime and falls
  * back to the model's static `baseUrl` when it's unavailable.
+ *
+ * Note: the currently installed `@earendil-works/pi-coding-agent`
+ * exposes `ModelRegistry.getProviderAuthStatus()` instead, so this
+ * optional method is effectively no-op at runtime (optional chaining
+ * guards it). Keep the shim with explicit comment until upstream
+ * exposes `getProviderAuth` returning `{ auth: { baseUrl } }`.
  */
 export interface RegistryWithProviderAuth {
   getProviderAuth?: (
@@ -24,6 +30,9 @@ export interface RegistryWithProviderAuth {
  * model unchanged when no override is available (older pi-coding-agent
  * releases without `getProviderAuth`, no active credential, or a baseUrl
  * that matches the model's static default already).
+ * Currently guarded by optional chaining — no-op against the installed
+ * runtime that only provides `getProviderAuthStatus`. Isolation note:
+ * credential resolution is per-call; no global caching is performed here.
  */
 export const resolveDelegatedModel = async <
   TModel extends { provider: string; baseUrl: string },

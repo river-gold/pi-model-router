@@ -8,7 +8,7 @@
     "!src/*.test.ts",
     "!index.test.ts",
     "LICENSE",
-    "model-router.example.json",
+    "docs/model-router.example.json",
     "README.md"
   ],
   "description": "Smart per-turn model router for Pi that optimizes your AI usage by dynamically switching LLM tiers based on task complexity and phase awareness.",

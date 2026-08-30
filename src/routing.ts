@@ -57,6 +57,9 @@ export const decideRouting = (
   profile: RouterProfile,
   _previousDecision: RoutingDecision | undefined,
 ): RoutingDecision => {
+  // Intentionally simplified: _context and _previousDecision are currently unused.
+  // Routing defaults to medium; classifier (if configured) overrides this via provider.ts.
+  // Future heuristics / phase-bias may use these parameters.
   let tier: RouterTier = 'medium';
   let reasoning = 'Defaulted to medium tier for general coding work.';
 
