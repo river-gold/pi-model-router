@@ -165,12 +165,69 @@ Return your decision in exactly two lines:
 Tier: [high|medium|low]
 Reasoning: [one short sentence]`;
 
+export const getHistoryPairsText = (context: Context, pairCount: number): string => {
+  if (!pairCount || pairCount <= 0) return '';
+  const messages = context.messages;
+  // Find all user prompts with their final result
+  const pairs: string[] = [];
+  // Collect user indices
+  const userIndices: number[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === 'user') userIndices.push(i);
+  }
+  // Exclude the current (last) user prompt from history pairs (it is the prompt to classify)
+  const lastUserIdx = userIndices.length > 0 ? userIndices[userIndices.length - 1] : -1;
+  // Consider pairs up to but not including the current user prompt
+  const historyUserIndices = lastUserIdx >= 0 ? userIndices.slice(0, -1).slice(-pairCount) : [];
+  for (const uIdx of historyUserIndices) {
+    const userText = extractTextFromContent(messages[uIdx].content).trim();
+    if (!userText) continue;
+    // Find next user index to bound the segment
+    const nextUserIdx = userIndices.find((idx) => idx > uIdx) ?? messages.length;
+    // Within (uIdx+1 .. nextUserIdx-1), find final result: last assistant or toolResult with content
+    let finalText = '';
+    for (let j = nextUserIdx - 1; j > uIdx; j--) {
+      const msg = messages[j];
+      if (msg.role === 'assistant' || msg.role === 'toolResult') {
+        const txt = extractTextFromContent(msg.content).trim();
+        if (txt) {
+          finalText = txt;
+          break;
+        }
+      }
+    }
+    if (finalText) {
+      pairs.push(`${userText}\n${finalText}`);
+    } else {
+      pairs.push(userText);
+    }
+  }
+  return pairs.join('\n---\n');
+};
+
+export const getPromptWithHistory = (context: Context, historySize: number): string => {
+  const promptText = getLastUserText(context);
+  if (!historySize || historySize <= 0) return promptText;
+  const historyText = getHistoryPairsText(context, historySize);
+  if (!historyText) return promptText;
+  return `${historyText}\n---\n${promptText}`;
+};
+
 export const runClassifier = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext['modelRegistry'],
   context: Context,
-  thinking?: ThinkingLevel,
+  historySizeOrThinking?: number | ThinkingLevel,
+  thinkingMaybe?: ThinkingLevel,
 ): Promise<{ tier: RouterTier; reasoning: string } | undefined> => {
+  let historySize = 0;
+  let thinking: ThinkingLevel | undefined = undefined;
+  if (typeof historySizeOrThinking === 'number') {
+    historySize = historySizeOrThinking;
+    thinking = thinkingMaybe;
+  } else if (typeof historySizeOrThinking === 'string') {
+    thinking = historySizeOrThinking;
+  }
   try {
     const { provider, modelId } = parseCanonicalModelRef(classifierModelRef);
     const model = modelRegistry.find(provider, modelId);
@@ -192,9 +249,15 @@ export const runClassifier = async (
     );
 
     const promptText = getLastUserText(context);
-
-    const classifierUserPrompt = `Latest user message:
-${promptText}`.trim();
+    let classifierUserPrompt: string;
+    if (historySize > 0) {
+      const historyText = getHistoryPairsText(context, historySize);
+      classifierUserPrompt = historyText
+        ? `Recent history (user+final result pairs):\n${historyText}\n\nLatest user message:\n${promptText}`.trim()
+        : `Latest user message:\n${promptText}`.trim();
+    } else {
+      classifierUserPrompt = `Latest user message:\n${promptText}`.trim();
+    }
 
     const classifierContext: Context = {
       ...context,

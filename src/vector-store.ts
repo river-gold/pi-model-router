@@ -160,10 +160,13 @@ export class VectorStore {
       mkdirSync(dirname(this.dbPath), { recursive: true });
 
       const db = new DatabaseCtor(this.dbPath);
-      // Performance pragmas
-      db.pragma('journal_mode = WAL');
+      // Use DELETE mode so all data is in main DB file and visible to git immediately (no WAL)
+      // Previously WAL mode kept data in -wal file which is gitignored
+      try {
+        db.pragma('journal_mode = DELETE');
+      } catch {}
       db.pragma('busy_timeout = 5000');
-      db.pragma('synchronous = NORMAL');
+      db.pragma('synchronous = FULL');
 
       // Load sqlite-vec extension
       sqliteVecLoad(db);

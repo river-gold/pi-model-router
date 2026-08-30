@@ -20,6 +20,7 @@ import {
   DEFAULT_EMBEDDING_BASE_URL,
   DEFAULT_VECTOR_DIMENSIONS,
   DEFAULT_EMBEDDING_CONTEXT_WINDOW,
+  DEFAULT_HISTORY_SIZE,
 } from './config';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import type { RouterConfig, RouterProfile, RoutedTierConfig } from './types';
@@ -208,14 +209,10 @@ describe('config.ts', () => {
   });
 
   describe('normalizeConfig', () => {
-    it('should normalize profiles, classifierModel and ignore rules (removed)', () => {
+    it('should normalize profiles and classifierModel', () => {
       const raw = {
         debug: true,
         classifierModel: 'openai/gpt-4o',
-        rules: [
-          { matches: 'test', tier: 'high', reason: 'Rule reason' },
-          { matches: ['foo', 'bar'], tier: 'low' },
-        ],
         profiles: {
           balanced: {
             high: { model: 'google/gemini-2.5-pro' },
@@ -229,7 +226,6 @@ describe('config.ts', () => {
       expect(warnings).toEqual([]);
       expect(config.debug).toBe(true);
       expect(config.classifierModel?.model).toBe('openai/gpt-4o');
-      expect((config as unknown as Record<string, unknown>).rules).toBeUndefined();
       expect(config.profiles.balanced?.high?.model).toBe(
         'google/gemini-2.5-pro',
       );
@@ -450,6 +446,7 @@ describe('config.ts', () => {
         backgroundRefresh: false,
         dimensions: DEFAULT_VECTOR_DIMENSIONS,
         embeddingContextWindow: DEFAULT_EMBEDDING_CONTEXT_WINDOW,
+        historySize: DEFAULT_HISTORY_SIZE,
       });
       expect(warnings).toEqual([]);
     });
@@ -734,6 +731,7 @@ describe('config.ts', () => {
           backgroundRefresh: true,
           dimensions: 512,
           embeddingContextWindow: 4096,
+          historySize: 4,
           keepAlive: '5m',
         },
         warnings,
@@ -747,6 +745,7 @@ describe('config.ts', () => {
         backgroundRefresh: true,
         dimensions: 512,
         embeddingContextWindow: 4096,
+        historySize: 4,
         keepAlive: '5m',
       });
       expect(warnings).toEqual([]);
@@ -866,6 +865,7 @@ describe('config.ts', () => {
           backgroundRefresh: true,
           dimensions: 512,
           embeddingContextWindow: 4096,
+          historySize: 2,
           keepAlive: '5m',
         },
       };
@@ -880,6 +880,7 @@ describe('config.ts', () => {
         backgroundRefresh: true,
         dimensions: 512,
         embeddingContextWindow: 4096,
+        historySize: 2,
         keepAlive: '5m',
       });
     });

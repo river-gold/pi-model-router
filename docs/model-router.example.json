@@ -1,5 +1,6 @@
 {
   "debug": false,
+  "historySize": 0,
   "vectorCache": {
     "enabled": true,
     "threshold": 0.75,

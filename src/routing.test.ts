@@ -3,6 +3,8 @@ import {
   extractTextFromContent,
   getLastUserText,
   getRecentConversationText,
+  getHistoryPairsText,
+  getPromptWithHistory,
   countToolResults,
   countWords,
   hasImageAttachment,
@@ -243,8 +245,7 @@ describe('routing.ts', () => {
       expect(decisionLow.tier).toBe('medium');
     });
 
-    it('should maintain planning phase bias (stickiness)', () => {
-      // Heuristics removed: previous planning phase is retained as phase but tier defaults to medium.
+    it('should always return medium regardless of previous decision', () => {
       const context: Context = {
         messages: [
           {
@@ -252,12 +253,6 @@ describe('routing.ts', () => {
             content: 'how to design this',
             timestamp: Date.now(),
           },
-          {
-            role: 'user',
-            content: 'we should design X',
-            timestamp: Date.now(),
-          },
-          { role: 'user', content: 'why X?', timestamp: Date.now() },
         ],
       };
       const previous = buildRoutingDecision('p', profile, 'high', 'Initial plan',
@@ -266,7 +261,7 @@ describe('routing.ts', () => {
       expect(decision.tier).toBe('medium');
     });
 
-    it('should keep planning phase bias when previous phase was planning, no tools, and word count > lowThreshold', () => {
+    it('should always return medium for any prompt length', () => {
       const context: Context = {
         messages: [
           {
@@ -283,7 +278,7 @@ describe('routing.ts', () => {
       expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
-    it('should detect implementation from previous implementation phase', () => {
+    it('should always return medium even with previous medium', () => {
       const context: Context = {
         messages: [
           {
@@ -300,7 +295,7 @@ describe('routing.ts', () => {
       expect(decision.reasoning).toContain('Defaulted to medium');
     });
 
-    it('should detect implementation from toolResultCount > 0', () => {
+    it('should always return medium even with toolResult in history', () => {
       const context: Context = {
         messages: [
           {
@@ -444,6 +439,84 @@ describe('routing.ts', () => {
         context,
       );
       expect(result).toBeUndefined();
+    });
+
+    it('should include history pairs when historySize > 0', async () => {
+      const mockStream = (async function* () {
+        yield { type: 'text_delta', delta: 'Tier: medium\n' };
+        yield { type: 'text_delta', delta: 'Reasoning: With history.' };
+      })();
+      vi.mocked(streamSimple).mockReturnValue(mockStream as any);
+      const historyContext: Context = {
+        messages: [
+          { role: 'user', content: 'first prompt', timestamp: Date.now() },
+          { role: 'assistant', content: 'first result', timestamp: Date.now() } as unknown as Message,
+          { role: 'user', content: 'current', timestamp: Date.now() },
+        ],
+      };
+      await runClassifier('openai/gpt-4o', mockRegistry, historyContext, 1, 'off');
+      expect(streamSimple).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          messages: [expect.objectContaining({ content: expect.stringContaining('first prompt') })],
+        }),
+        expect.objectContaining({ apiKey: 'test-key' }),
+      );
+      const calledContent = vi.mocked(streamSimple).mock.calls.at(-1)?.[1].messages[0].content as string;
+      expect(calledContent).toContain('Recent history');
+      expect(calledContent).toContain('first prompt');
+      expect(calledContent).toContain('first result');
+    });
+  });
+
+  describe('getHistoryPairsText', () => {
+    it('should return empty for 0 or no history', () => {
+      const ctx: Context = { messages: [{ role: 'user', content: 'hello', timestamp: Date.now() }] };
+      expect(getHistoryPairsText(ctx, 0)).toBe('');
+      expect(getHistoryPairsText(ctx, 1)).toBe('');
+    });
+
+    it('should return user+final pairs', () => {
+      const ctx: Context = {
+        messages: [
+          { role: 'user', content: 'u1', timestamp: 1 },
+          { role: 'assistant', content: 'a1', timestamp: 2 } as unknown as Message,
+          { role: 'user', content: 'u2', timestamp: 3 },
+          { role: 'assistant', content: 'a2', timestamp: 4 } as unknown as Message,
+          { role: 'user', content: 'current', timestamp: 5 },
+        ],
+      };
+      expect(getHistoryPairsText(ctx, 1)).toBe('u2\na2');
+      expect(getHistoryPairsText(ctx, 2)).toBe('u1\na1\n---\nu2\na2');
+    });
+
+    it('should pick last toolResult as final if no assistant', () => {
+      const ctx: Context = {
+        messages: [
+          { role: 'user', content: 'u1', timestamp: 1 },
+          { role: 'toolResult', toolCallId: '1', toolName: 't', content: 'tool out', isError: false, timestamp: 2 } as unknown as Message,
+          { role: 'user', content: 'current', timestamp: 3 },
+        ],
+      };
+      expect(getHistoryPairsText(ctx, 1)).toBe('u1\ntool out');
+    });
+  });
+
+  describe('getPromptWithHistory', () => {
+    it('should return only prompt when historySize 0', () => {
+      const ctx: Context = { messages: [{ role: 'user', content: 'hello', timestamp: 1 }] };
+      expect(getPromptWithHistory(ctx, 0)).toBe('hello');
+    });
+
+    it('should combine history pairs and current prompt', () => {
+      const ctx: Context = {
+        messages: [
+          { role: 'user', content: 'u1', timestamp: 1 },
+          { role: 'assistant', content: 'a1', timestamp: 2 } as unknown as Message,
+          { role: 'user', content: 'current', timestamp: 3 },
+        ],
+      };
+      expect(getPromptWithHistory(ctx, 1)).toBe('u1\na1\n---\ncurrent');
     });
   });
 });

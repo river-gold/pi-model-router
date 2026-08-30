@@ -29,6 +29,7 @@ export const DEFAULT_EMBEDDING_MODEL = 'qwen3-embedding:0.6b';
 export const DEFAULT_EMBEDDING_BASE_URL = 'http://localhost:11434';
 export const DEFAULT_VECTOR_DIMENSIONS = 1024;
 export const DEFAULT_EMBEDDING_CONTEXT_WINDOW = 8192;
+export const DEFAULT_HISTORY_SIZE = 0;
 
 export const isObjectRecord = (
   value: unknown,
@@ -281,6 +282,16 @@ export const normalizeVectorCacheConfig = (
 
   const keepAlive = typeof raw.keepAlive === 'string' && raw.keepAlive.trim() ? raw.keepAlive.trim() : undefined;
 
+  let historySize = DEFAULT_HISTORY_SIZE;
+  const rawHistorySize = (raw as Record<string, unknown>).historySize ?? (raw as Record<string, unknown>).historyLimit ?? (raw as Record<string, unknown>).historyCount;
+  if (rawHistorySize !== undefined) {
+    if (typeof rawHistorySize === 'number' && Number.isInteger(rawHistorySize) && rawHistorySize >= 0 && rawHistorySize <= 20) {
+      historySize = rawHistorySize;
+    } else {
+      warnings.push(`Invalid vectorCache.historySize "${String(rawHistorySize)}": expected integer between 0 and 20. Using default ${DEFAULT_HISTORY_SIZE}.`);
+    }
+  }
+
   let embeddingContextWindow = DEFAULT_EMBEDDING_CONTEXT_WINDOW;
   const rawContextWindow =
     raw.embeddingContextWindow ??
@@ -312,6 +323,7 @@ export const normalizeVectorCacheConfig = (
     backgroundRefresh,
     dimensions,
     embeddingContextWindow,
+    historySize,
     ...(keepAlive ? { keepAlive } : {}),
   };
 };
@@ -352,9 +364,17 @@ export const mergeConfig = (
     }
   }
 
+  // historySize at top-level (preferred) or fall back to vectorCache.historySize for backward compat
+  const mergedHistorySize = (override as unknown as Record<string, unknown>).historySize !== undefined
+    ? (override as unknown as Record<string, unknown>).historySize as number
+    : (override as unknown as Record<string, unknown>).historyLimit !== undefined
+      ? (override as unknown as Record<string, unknown>).historyLimit as number
+      : base.historySize;
+
   return {
     debug: override.debug ?? base.debug,
     classifierModel: override.classifierModel ?? base.classifierModel,
+    historySize: mergedHistorySize ?? base.historySize,
     profiles: mergedProfiles,
     ...(mergedVectorCache ? { vectorCache: mergedVectorCache } : {}),
   };
@@ -494,10 +514,25 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     warnings,
   );
 
+  // Top-level historySize (preferred), fallback to vectorCache.historySize for backward compat
+  let historySize: number | undefined = undefined;
+  const rawHistorySize = (raw as unknown as Record<string, unknown>).historySize ?? (raw as unknown as Record<string, unknown>).historyLimit;
+  if (rawHistorySize !== undefined) {
+    if (typeof rawHistorySize === 'number' && Number.isInteger(rawHistorySize) && rawHistorySize >= 0 && rawHistorySize <= 20) {
+      historySize = rawHistorySize;
+    } else {
+      warnings.push(`Invalid historySize "${String(rawHistorySize)}": expected integer between 0 and 20. Using default ${DEFAULT_HISTORY_SIZE}.`);
+      historySize = DEFAULT_HISTORY_SIZE;
+    }
+  } else if (vectorCache?.historySize !== undefined) {
+    historySize = vectorCache.historySize;
+  }
+
   return {
     config: {
       debug: typeof raw.debug === 'boolean' ? raw.debug : false,
       classifierModel,
+      historySize,
       profiles: normalizedProfiles,
       ...(vectorCache ? { vectorCache } : {}),
     },

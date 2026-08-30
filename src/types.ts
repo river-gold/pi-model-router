@@ -34,12 +34,14 @@ export interface VectorCacheConfig {
   backgroundRefresh: boolean;
   dimensions: number;
   embeddingContextWindow: number;
+  historySize?: number;
   keepAlive?: string;
 }
 
 export interface RouterConfig {
   debug?: boolean;
   classifierModel?: ClassifierConfig;
+  historySize?: number;
   profiles: Record<string, RouterProfile>;
   vectorCache?: VectorCacheConfig;
 }

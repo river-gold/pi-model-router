@@ -83,6 +83,7 @@ import {
   extractTextFromContent,
   hasImageAttachment,
   getLastUserText,
+  getPromptWithHistory,
 } from './routing';
 
 export const createErrorMessage = (
@@ -289,7 +290,8 @@ export const registerRouterProvider = (
           const shouldUseVector = !!vectorCache?.enabled && !isToolLoop;
 
           if (shouldUseVector && vectorCache) {
-            const promptForVector = getLastUserText(context);
+            const effectiveHistorySize = state.currentConfig.historySize ?? vectorCache.historySize ?? 0;
+            const promptForVector = effectiveHistorySize > 0 ? getPromptWithHistory(context, effectiveHistorySize) : getLastUserText(context);
             // Skip vector cache if prompt exceeds embedding context window -> directly use LLM
             if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
               // Exceeds embedding model context, bypass vector cache
@@ -334,6 +336,7 @@ export const registerRouterProvider = (
                               bgClassifier.model,
                               registry,
                               context,
+                              state.currentConfig.historySize ?? vectorCache.historySize ?? 0,
                               bgClassifier.thinking,
                             );
                             if (classifierResult) {
@@ -363,10 +366,12 @@ export const registerRouterProvider = (
           }
 
           if (!isToolLoop && !vectorHit && effectiveClassifier) {
+            const effectiveHistorySize = state.currentConfig.historySize ?? vectorCache?.historySize ?? 0;
             const classifierResult = await runClassifier(
               effectiveClassifier.model,
               registry,
               context,
+              effectiveHistorySize,
               effectiveClassifier.thinking,
             );
             if (classifierResult) {
@@ -382,7 +387,8 @@ export const registerRouterProvider = (
 
           // Persist only user prompts, not toolResult loops
           if (!vectorHit && vectorCache?.enabled && !isToolLoop) {
-            const promptForVector = getLastUserText(context);
+            const effectiveHistorySize2 = state.currentConfig.historySize ?? vectorCache.historySize ?? 0;
+            const promptForVector = effectiveHistorySize2 > 0 ? getPromptWithHistory(context, effectiveHistorySize2) : getLastUserText(context);
             if (estimateTokens(promptForVector) > vectorCache.embeddingContextWindow) {
               // Too long for embedding model, skip caching
             } else {

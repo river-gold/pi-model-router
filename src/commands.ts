@@ -76,6 +76,9 @@ export const registerCommands = (
         ...(state.lastDecision.isVectorHit ? [`Vector hit: yes (similarity ${state.lastDecision.vectorSimilarity?.toFixed(2) ?? '?'})`] : []),
       );
     }
+    // History size (top-level preferred, fallback to vectorCache)
+    const effectiveHistorySize = state.currentConfig.historySize ?? state.currentConfig.vectorCache?.historySize ?? 0;
+    lines.push('', `History size: ${effectiveHistorySize} (0=off, 1~20 recent messages)`);
     // Vector cache status
     const vc = state.currentConfig.vectorCache;
     if (vc) {
@@ -90,6 +93,7 @@ export const registerCommands = (
         `  backgroundRefresh: ${vc.backgroundRefresh ? 'on' : 'off'}`,
         `  dimensions: ${vc.dimensions}`,
         `  embeddingContextWindow: ${vc.embeddingContextWindow}`,
+        `  historySize (vectorCache, deprecated): ${vc.historySize ?? 0}`,
       );
       try {
         const store = vc.enabled ? (getExistingVectorStore() ?? getVectorStore(vc.vectorFile, vc.dimensions)) : undefined;
