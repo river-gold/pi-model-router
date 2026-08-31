@@ -1,6 +1,6 @@
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 
-export type RouterTier = 'high' | 'medium' | 'low';
+export type RouterTier = 'xhigh' | 'high' | 'medium' | 'low' | 'minimal';
 
 export interface ClassifierConfig {
   model: string;
@@ -19,9 +19,11 @@ export interface RoutedTierConfig {
 }
 
 export interface RouterProfile {
+  xhigh?: RoutedTierConfig;
   high?: RoutedTierConfig;
   medium?: RoutedTierConfig;
   low?: RoutedTierConfig;
+  minimal?: RoutedTierConfig;
   classifierModels?: ClassifierConfig[];
 }
 

@@ -142,7 +142,7 @@ export const registerRouterProvider = (
       id: name,
       name: `Router ${name}`,
       reasoning: true,
-      thinkingLevelMap: { xhigh: 'xhigh', max: 'max' },
+      thinkingLevelMap: { minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
       input: ['text', 'image'] as ('text' | 'image')[],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: maxContextWindow,
@@ -317,12 +317,9 @@ export const registerRouterProvider = (
           if (imageAttached) {
             const tierModels = profile[decision.tier]?.models! ?? [decision.targetLabel];
             if (!tierModels.some(checkModelSupportsImage)) {
-              const tiersToTry: RouterTier[] =
-                decision.tier === 'low'
-                  ? ['medium', 'high']
-                  : decision.tier === 'medium'
-                    ? ['high']
-                    : [];
+              const tierOrder: RouterTier[] = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+              const startIdx = tierOrder.indexOf(decision.tier);
+              const tiersToTry: RouterTier[] = startIdx >= 0 ? tierOrder.slice(startIdx + 1) : [];
 
               let foundTier: RouterTier | undefined;
               for (const t of tiersToTry) {

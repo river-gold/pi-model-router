@@ -18,7 +18,7 @@ import {
   DEFAULT_MAX_TOKENS,
 } from './constants';
 
-export const ROUTER_TIERS = ['high', 'medium', 'low'] as const;
+export const ROUTER_TIERS = ['xhigh', 'high', 'medium', 'low', 'minimal'] as const;
 
 export const DEFAULT_HISTORY_SIZE = 0;
 
@@ -28,7 +28,7 @@ export const isObjectRecord = (
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const isRouterTier = (value: unknown): value is RouterTier =>
-  value === 'high' || value === 'medium' || value === 'low';
+  value === 'xhigh' || value === 'high' || value === 'medium' || value === 'low' || value === 'minimal';
 
 export const stripJsonc = (text: string): string => {
   let result = '';
@@ -276,9 +276,11 @@ export const mergeConfig = (
     const existing = mergedProfiles[name];
     const nextProfile = profile as Partial<RouterProfile>;
     mergedProfiles[name] = {
+      xhigh: mergeTier(existing?.xhigh, nextProfile.xhigh),
       high: mergeTier(existing?.high, nextProfile.high),
       medium: mergeTier(existing?.medium, nextProfile.medium),
       low: mergeTier(existing?.low, nextProfile.low),
+      minimal: mergeTier(existing?.minimal, nextProfile.minimal),
       classifierModels: (nextProfile.classifierModels as ClassifierConfig[] | undefined) ?? existing?.classifierModels,
     };
   }
@@ -430,11 +432,13 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       warnings.push(`Profile "${name}" is not an object. Skipped.`);
       continue;
     }
+    const xhigh = normalizeTierConfig((profile as Record<string, unknown>).xhigh, name, 'xhigh', warnings);
     const high = normalizeTierConfig(profile?.high, name, 'high', warnings);
     const medium = normalizeTierConfig(profile?.medium, name, 'medium', warnings);
     const low = normalizeTierConfig(profile?.low, name, 'low', warnings);
+    const minimal = normalizeTierConfig((profile as Record<string, unknown>).minimal, name, 'minimal', warnings);
 
-    if (!high && !medium && !low) {
+    if (!xhigh && !high && !medium && !low && !minimal) {
       warnings.push(
         `Profile "${name}" has no valid tiers. Skipped.`,
       );
@@ -452,9 +456,11 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     );
 
     normalizedProfiles[name] = {
+      ...(xhigh ? { xhigh } : {}),
       high,
       medium,
       low,
+      ...(minimal ? { minimal } : {}),
       ...(classifierModels ? { classifierModels } : {}),
     };
   }

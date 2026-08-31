@@ -11,13 +11,13 @@ import type { RouterProfile } from './types';
 describe('routing.ts', () => {
   describe('thinkingToTier', () => {
     it('maps thinking levels to tiers', () => {
+      expect(thinkingToTier('xhigh')).toBe('xhigh');
+      expect(thinkingToTier('max')).toBe('xhigh');
       expect(thinkingToTier('high')).toBe('high');
-      expect(thinkingToTier('xhigh')).toBe('high');
-      expect(thinkingToTier('max')).toBe('high');
       expect(thinkingToTier('medium')).toBe('medium');
       expect(thinkingToTier('low')).toBe('low');
-      expect(thinkingToTier('minimal')).toBe('low');
-      expect(thinkingToTier('off')).toBe('low');
+      expect(thinkingToTier('minimal')).toBe('minimal');
+      expect(thinkingToTier('off')).toBe('minimal');
     });
   });
   describe('resolveAvailableTier', () => {
