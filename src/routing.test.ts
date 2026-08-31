@@ -13,6 +13,7 @@ describe('routing.ts', () => {
     it('maps thinking levels to tiers', () => {
       expect(thinkingToTier('high')).toBe('high');
       expect(thinkingToTier('xhigh')).toBe('high');
+      expect(thinkingToTier('max')).toBe('high');
       expect(thinkingToTier('medium')).toBe('medium');
       expect(thinkingToTier('low')).toBe('low');
       expect(thinkingToTier('minimal')).toBe('low');

@@ -142,7 +142,7 @@ export const registerRouterProvider = (
       id: name,
       name: `Router ${name}`,
       reasoning: true,
-      thinkingLevelMap: { xhigh: 'xhigh' },
+      thinkingLevelMap: { xhigh: 'xhigh', max: 'max' },
       input: ['text', 'image'] as ('text' | 'image')[],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: maxContextWindow,

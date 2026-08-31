@@ -299,7 +299,7 @@ export const mergeConfig = (
   };
 };
 
-const ALLOWED_THINKING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+const ALLOWED_THINKING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 export const parseCanonicalModelRef = (
   value: string,
@@ -321,7 +321,6 @@ export const parseCanonicalModelRef = (
     );
   }
   if (thinkingRaw !== undefined) {
-    if (thinkingRaw === 'max') throw new Error(`Invalid thinking "max": use "xhigh" instead.`);
     if (thinkingRaw && !(ALLOWED_THINKING as readonly string[]).includes(thinkingRaw)) {
       throw new Error(`Invalid thinking "${thinkingRaw}": expected one of ${ALLOWED_THINKING.join(', ')}.`);
     }

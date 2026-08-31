@@ -68,6 +68,7 @@ describe('config.ts', () => {
     it('should parse correct references', () => {
       expect(parseCanonicalModelRef('openai/gpt-4o')).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
       expect(parseCanonicalModelRef('openai/gpt-4o#high')).toEqual({ provider: 'openai', modelId: 'gpt-4o', thinking: 'high' });
+      expect(parseCanonicalModelRef('openai/gpt-4o#max')).toEqual({ provider: 'openai', modelId: 'gpt-4o', thinking: 'max' });
       expect(parseCanonicalModelRef('openai/gpt-4o').thinking).toBeUndefined();
     });
     it('should throw on missing slash', () => {

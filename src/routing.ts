@@ -8,7 +8,7 @@ import type {
 import { parseCanonicalModelRef, formatModelRef } from './config';
 
 export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
-  if (thinking === 'high' || thinking === 'xhigh') return 'high';
+  if (thinking === 'high' || thinking === 'xhigh' || thinking === 'max') return 'high';
   if (thinking === 'medium') return 'medium';
   return 'low';
 };
