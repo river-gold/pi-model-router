@@ -17,11 +17,12 @@ The `pi-model-router` is an extension-first model router for the `pi` coding age
   - `index.ts`: Main entry point (orchestrator).
 
 ## Routing Decision Logic
-Routing follows a tiered system (`high`, `medium`, `low`) and an ordered decision flow:
-1. **LLM Classifier (Optional)**: Call `classifierModel` for intent categorization.
-2. **Default**: If no classifier is configured or it fails, defaults to `medium` tier.
+Routing follows a tiered system (`minimal`, `low`, `medium`, `high`, `xhigh`, `max`) and an ordered decision flow:
+1. **Manual Effort Override**: If `thinkingLevel !== 'off'`, map directly to the corresponding tier (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) then `resolveAvailableTier()` fallback.
+2. **LLM Classifier (Optional)**: If `thinkingLevel === 'off'` and `classifierModels` (or `low` tier fallback) is available, classify to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
+3. **Default**: If no classifier is configured or it fails, defaults to `medium` tier (with `resolveAvailableTier()` fallback).
 
-Note: Custom rules / heuristics / phase bias are not currently implemented; routing is intentionally simplified to classifier → medium fallback.
+Note: Custom rules / heuristics / phase bias are not currently implemented; routing is intentionally simplified to manual effort → classifier → medium fallback.
 
 ## Coding Standards
 - **TypeScript**: Strictly adhere to TypeScript. NEVER use the `any` type; prefer specific types or `unknown`.

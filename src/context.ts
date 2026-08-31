@@ -28,16 +28,6 @@ export const getLastUserText = (context: Context): string => {
   return '';
 };
 
-
-
-export const hasImageAttachment = (context: Context): boolean => {
-  return context.messages.some(
-    (message) =>
-      Array.isArray(message.content) &&
-      message.content.some((part) => part.type === 'image'),
-  );
-};
-
 export const getHistoryPairsText = (context: Context, pairCount: number): string => {
   if (!pairCount || pairCount <= 0) return '';
   const messages = context.messages;

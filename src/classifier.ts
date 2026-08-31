@@ -6,15 +6,18 @@ import { parseCanonicalModelRef, isRouterTier } from './config';
 import { getLastUserText, getHistoryPairsText } from './context';
 import { modelWithAuthBaseUrl, streamDelegated } from './stream';
 
-export const CLASSIFIER_SYSTEM_PROMPT = `You are a model router classifier. Your job is to categorize the user's latest request into one of three tiers: "high", "medium", or "low".
+export const CLASSIFIER_SYSTEM_PROMPT = `You are a model router classifier. Your job is to categorize the user's latest request into one of six tiers: "minimal", "low", "medium", "high", "xhigh", or "max".
 
 Tiers:
-- high: Architecture, design, planning, tradeoff analysis, broad debugging, large refactors, codebase research.
-- medium: Implementation of a known plan, multi-file edits, normal coding work, focused debugging, tests/fixes.
-- low: Summaries, changelogs, formatting, quick explanations, small bounded transforms, simple read-only lookup.
+- minimal: Mechanical transforms with no judgment: format, typo, rename, indent, template fill, quote-from-context.
+- low: Cheap language/lookup work: summaries, changelogs, commit messages, quick explanations, small bounded transforms, simple read-only lookup.
+- medium: Execute a known plan: spec-following implementation, multi-file edits, focused debugging with known cause, tests/fixes, routine wiring.
+- high: Local design under uncertainty: module architecture, planning, tradeoff analysis, broad debugging, large refactors, codebase research.
+- xhigh: Cross-cutting or high-blast-radius work: migrations, ambiguous RCA, security-sensitive changes, multi-repo/system design, risky refactors.
+- max: Novel or irreversible work: greenfield strategy, adversarial audit, long-horizon research with conflicting sources, eval/algorithm invention.
 
 Return your decision in exactly two lines:
-Tier: [high|medium|low]
+Tier: [minimal|low|medium|high|xhigh|max]
 Reasoning: [one short sentence]`;
 
 // Simplified overload: historySizeOrThinking accepts number (historySize) or

@@ -3,7 +3,6 @@ import {
   extractTextFromContent,
   getLastUserText,
   getHistoryPairsText,
-  hasImageAttachment,
   estimateTokens,
   truncateContext,
 } from './context';
@@ -71,19 +70,6 @@ describe('context.ts', () => {
         ],
       };
       expect(getHistoryPairsText(ctx, 1)).toBe('u1\ntool out');
-    });
-  });
-
-  describe('hasImageAttachment', () => {
-    it('should detect image', () => {
-      const ctx = {
-        messages: [{ role: 'user', content: [{ type: 'image' as const }] , timestamp: 1 } as unknown as Message],
-      } as unknown as Context;
-      expect(hasImageAttachment(ctx)).toBe(true);
-    });
-    it('should not detect', () => {
-      const ctx = { messages: [{ role: 'user', content: 'hi', timestamp: 1 }] } as unknown as Context;
-      expect(hasImageAttachment(ctx)).toBe(false);
     });
   });
 

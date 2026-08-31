@@ -45,6 +45,12 @@ describe('routing.ts', () => {
         'low',
       );
     });
+
+    it('should fall from missing minimal to low', () => {
+      expect(resolveAvailableTier({ low: { models: ['a'] }, medium: { models: ['b'] } }, 'minimal')).toBe(
+        'low',
+      );
+    });
   });
 
   describe('buildRoutingDecision', () => {

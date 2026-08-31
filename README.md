@@ -6,7 +6,7 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 
 - **Logical Router Provider**: Registers a `router` provider that exposes stable profiles (e.g., `router/balanced`) as models.
 - **Per-Turn Routing**: Intelligently chooses between `max` / `xhigh` / `high` / `medium` / `low` / `minimal` tiers for every turn based on task intent and complexity.
-- **Classifier-Based Routing**: Auto classifier maps to `high` / `medium` / `low` (or `off` → classifier). Manual effort selects any tier including `max` / `xhigh` / `minimal`.
+- **Classifier-Based Routing**: Auto classifier maps to `minimal` / `low` / `medium` / `high` / `xhigh` / `max` (or `off` → classifier). Manual effort selects any tier directly.
 - **Manual Effort Override**: `minimal` / `low` / `medium` / `high` / `xhigh` / `max` thinking levels map directly to tiers; missing tier falls back to nearest available.
 - **Advanced Controls**: Includes built-in support for:
   - **LLM Intent Classifier**: Optionally use a fast model to categorize intent.
@@ -73,19 +73,19 @@ Copy the example config to one of:
 
 | Tier | Auto classifier | Manual effort (`thinkingLevel`) | Fallback when tier missing |
 |------|-----------------|----------------------------------|----------------------------|
-| `max` | — (manual only) | `max` | nearest: `xhigh` → `high` → `medium` → `low` → `minimal` |
-| `xhigh` | — (manual only) | `xhigh` | nearest: `max` / `high` → `medium` → `low` → `minimal` |
-| `high` | `high` | `high` | `max` / `xhigh` / `medium` / `low` / `minimal` |
-| `medium` | `medium` | `medium` | `high` / `low` / `max` / `xhigh` / `minimal` |
-| `low` | `low` | `low` | `medium` → `high` → `xhigh` → `max` / `minimal` |
-| `minimal` | — (manual only) | `minimal` | nearest: `low` → `medium` → `high` → `xhigh` → `max` |
-| _(auto)_ | — | `off` → classifier (`high`/`medium`/`low`) | — |
+| `minimal` | `minimal` | `minimal` | nearest: `low` → `medium` → `high` → `xhigh` → `max` |
+| `low` | `low` | `low` | `medium` → `high` → `xhigh` → `max` → `minimal` |
+| `medium` | `medium` | `medium` | `high` → `xhigh` → `max` → `low` → `minimal` |
+| `high` | `high` | `high` | `xhigh` → `max` → `medium` → `low` → `minimal` |
+| `xhigh` | `xhigh` | `xhigh` | `max` → `high` → `medium` → `low` → `minimal` |
+| `max` | `max` | `max` | nearest: `xhigh` → `high` → `medium` → `low` → `minimal` |
+| _(auto)_ | — | `off` → classifier (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) | — |
 
 ### Configuration Fields
 
 | Field | Description |
 |-------|-------------|
-| `classifierModels` / `classifierModel` | (Optional) Model(s) used to categorize intent (`provider/model#thinking`). Auto classifier returns `high`/`medium`/`low` only. If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. |
+| `classifierModels` / `classifierModel` | (Optional) Model(s) used to categorize intent (`provider/model#thinking`). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. |
 | `profiles` | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required). |
 | `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning. |
 | `historySize` | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0). |

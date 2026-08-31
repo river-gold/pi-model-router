@@ -28,7 +28,7 @@ export const isObjectRecord = (
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const isRouterTier = (value: unknown): value is RouterTier =>
-  value === 'max' || value === 'xhigh' || value === 'high' || value === 'medium' || value === 'low' || value === 'minimal';
+  (ROUTER_TIERS as readonly string[]).includes(value as string);
 
 export const stripJsonc = (text: string): string => {
   let result = '';

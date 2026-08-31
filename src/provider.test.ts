@@ -207,6 +207,40 @@ describe('provider.ts', () => {
       expect(mockState.lastDecision!.reasoning).toContain('mapped to high tier');
     });
 
+    it('should fall from missing minimal thinking tier to low', async () => {
+      vi.mocked(mockPi.getThinkingLevel).mockReturnValue('minimal');
+      mockState.currentConfig.profiles.balanced.low = {
+        models: ['openai/gpt-4o-micro'],
+        model: 'openai/gpt-4o-micro',
+        resolvedContextWindow: 5000,
+      };
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(
+        stream as unknown as AssistantMessageEventStream,
+      );
+      vi.mocked(streamSimple).mockReturnValue(
+        (async function* () {
+          yield { type: 'text_delta', delta: 'ok' };
+          yield { type: 'done', message: { usage: { cost: { total: 0 } } } };
+        })() as unknown as ReturnType<typeof streamSimple>,
+      );
+
+      const model = {
+        id: 'balanced',
+        api: 'router-api' as Api,
+        provider: 'router',
+      } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockState.lastDecision!.tier).toBe('low');
+      expect(mockState.lastDecision!.reasoning).toContain('resolved to low');
+    });
+
     it('should error when off and no classifier is available', async () => {
       vi.mocked(mockPi.getThinkingLevel).mockReturnValue('off');
 
@@ -340,62 +374,6 @@ describe('provider.ts', () => {
       expect(mockState.lastDecision!.targetModelId).toBe('gemini-2.5-pro');
       expect(mockState.lastDecision!.reasoning).toContain(
         'Preserved google/gemini-2.5-pro for a Google tool-result continuation',
-      );
-    });
-
-    it('should force higher tier if current tier does not support image attachments', async () => {
-      registerRouterProvider(mockPi, mockState, mockActions);
-      const stream = new MockEventStream();
-      vi.mocked(createAssistantMessageEventStream).mockReturnValue(
-        stream as unknown as AssistantMessageEventStream,
-      );
-      vi.mocked(streamSimple).mockReturnValue(
-        (async function* () {
-          yield { type: 'text_delta', delta: 'done' };
-        })() as unknown as ReturnType<typeof streamSimple>,
-      );
-
-      // Define medium tier model and fallback without image support, high tier model with image support
-      mockState.currentModelRegistry!.find = (
-        provider: string,
-        modelId: string,
-      ) => {
-        if (modelId === 'gpt-4o') {
-          return { provider, id: modelId, input: ['text', 'image'] as const } as unknown as Model<Api>; // high does support image
-        }
-        return { provider, id: modelId, input: ['text'] as const } as unknown as Model<Api>; // medium and fallback gemini-1.5-flash don't support image
-      };
-
-      // Force a medium tier routing decision originally
-
-      const model = {
-        id: 'balanced',
-        api: 'router-api' as Api,
-        provider: 'router',
-      } as unknown as Model<Api>;
-      const context = {
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image' as const,
-                image: { mimeType: 'image/png', data: 'data' },
-              },
-            ],
-            timestamp: Date.now(),
-          },
-        ],
-      } as unknown as Context;
-
-      registeredProviderOptions!.streamSimple(model, context);
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // It should force switch to high tier because medium doesn't support images
-      expect(mockState.lastDecision!.tier).toBe('high');
-      expect(mockState.lastDecision!.reasoning).toContain(
-        'Forced high tier because the originally routed medium tier does not support image attachments',
       );
     });
 

@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import routerExtension from './index';
 
-vi.mock('./src/config', () => ({
+vi.mock('./src/config', () => {
+  const ROUTER_TIERS = ['max', 'xhigh', 'high', 'medium', 'low', 'minimal'] as const;
+  return {
   loadRouterConfig: () => ({
     config: {
       profiles: {
@@ -22,18 +24,10 @@ vi.mock('./src/config', () => ({
   }),
   resolveContextWindow: () => 100000,
   resolveMaxTokens: () => 4000,
-  ROUTER_TIERS: ['high', 'medium', 'low'] as const,
-  ROUTER_PIN_VALUES: ['auto', 'high', 'medium', 'low'] as const,
-  THINKING_LEVELS: [
-    'off',
-    'minimal',
-    'low',
-    'medium',
-    'high',
-    'xhigh',
-  ] as const,
-  isRouterTier: (v: unknown) => v === 'high' || v === 'medium' || v === 'low',
-}));
+  ROUTER_TIERS,
+  isRouterTier: (v: unknown) => (ROUTER_TIERS as readonly string[]).includes(v as string),
+  };
+});
 
 describe('index.ts (orchestrator)', () => {
   let mockPi: any;

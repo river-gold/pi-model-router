@@ -29,13 +29,11 @@ import {
 import {
   buildRoutingDecision,
   decideRouting,
+  resolveAvailableTier,
   thinkingToTier,
 } from './routing';
 import { runClassifierWithFallbacksDetailed } from './classifier';
-import {
-  hasImageAttachment,
-  truncateContext,
-} from './context';
+import { truncateContext } from './context';
 import { modelWithAuthBaseUrl, streamDelegated } from './stream';
 import {
   CLASSIFIER_CHAIN_KEY,
@@ -234,12 +232,17 @@ export const registerRouterProvider = (
               false,
             );
           } else if (thinkingLevel !== 'off' && !isToolLoop) {
-            const tier = thinkingToTier(thinkingLevel);
+            const preferred = thinkingToTier(thinkingLevel);
+            const tier = resolveAvailableTier(profile, preferred);
+            let reasoning = `Thinking level ${thinkingLevel} mapped to ${tier} tier.`;
+            if (tier !== preferred) {
+              reasoning = `Thinking level ${thinkingLevel} mapped to ${preferred} tier, resolved to ${tier} (${preferred} tier is not configured).`;
+            }
             decision = buildRoutingDecision(
               model.id,
               profile,
               tier,
-              `Thinking level ${thinkingLevel} mapped to ${tier} tier.`,
+              reasoning,
               false,
             );
           }
@@ -289,16 +292,22 @@ export const registerRouterProvider = (
             }
 
             if (classifierResult) {
+              const preferred = classifierResult.tier;
+              const tier = resolveAvailableTier(profile, preferred);
+              let reasoning = `Classifier: ${classifierResult.reasoning}`;
+              if (tier !== preferred) {
+                reasoning = `Resolved from ${preferred} to ${tier} tier (${preferred} tier is not configured). Original: ${reasoning}`;
+              }
               decision = buildRoutingDecision(
                 model.id,
                 profile,
-                classifierResult.tier,
-                `Classifier: ${classifierResult.reasoning}`,
+                tier,
+                reasoning,
                 true,
               );
             } else {
               const attempted = attempts.map((a) => `${a.model}${a.thinking ? `#${a.thinking}` : ''} (${a.error})`).join(', ');
-              throw new Error(`Classifier failed to determine a tier. Source: ${classifierSource}. Attempted: ${attempted || 'none'}. Models may be unregistered, missing API keys, or returned invalid format (expected "Tier: high|medium|low").`);
+              throw new Error(`Classifier failed to determine a tier. Source: ${classifierSource}. Attempted: ${attempted || 'none'}. Models may be unregistered, missing API keys, or returned invalid format (expected "Tier: minimal|low|medium|high|xhigh|max").`);
             }
           }
 
@@ -327,48 +336,6 @@ export const registerRouterProvider = (
                 `Preserved ${previousDecision.targetLabel} for a Google tool-result continuation ` +
                 `to avoid thought-signature replay errors. (Original: ${decision.reasoning})`,
             };
-          }
-
-          const imageAttached = hasImageAttachment(context);
-          const checkModelSupportsImage = (modelRef: string) => {
-            try {
-              const { provider, modelId } = parseCanonicalModelRef(modelRef);
-              const m = registry.find(provider, modelId);
-              return m?.input?.includes('image') ?? false;
-            } catch {
-              return false;
-            }
-          };
-
-          if (imageAttached) {
-            const tierModels = profile[decision.tier]?.models! ?? [decision.targetLabel];
-            if (!tierModels.some(checkModelSupportsImage)) {
-              const tierOrder: RouterTier[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-              const startIdx = tierOrder.indexOf(decision.tier);
-              const tiersToTry: RouterTier[] = startIdx >= 0 ? tierOrder.slice(startIdx + 1) : [];
-
-              let foundTier: RouterTier | undefined;
-              for (const t of tiersToTry) {
-                const tierConfig = profile[t];
-                if (!tierConfig) continue;
-                const tModels = tierConfig.models ?? [] as string[];
-                if (tModels.some(checkModelSupportsImage)) {
-                  foundTier = t;
-                  break;
-                }
-              }
-
-              if (foundTier) {
-                const forced = buildRoutingDecision(
-                  model.id,
-                  profile,
-                  foundTier,
-                  `Forced ${foundTier} tier because the originally routed ${decision.tier} tier does not support image attachments.`,
-                  false,
-                );
-                decision = forced;
-              }
-            }
           }
 
           await withCommitMutex(async () => {
@@ -411,12 +378,6 @@ export const registerRouterProvider = (
               throw new Error(
                 `All models in ${decision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(', ')}). Run /router reset-failures to retry.`,
               );
-            }
-          }
-          if (imageAttached) {
-            modelsToTry = modelsToTry.filter(checkModelSupportsImage);
-            if (modelsToTry.length === 0) {
-              throw new Error('No image-capable model available for this profile. Attachments would be silently dropped as placeholder text.');
             }
           }
           let lastError: unknown;

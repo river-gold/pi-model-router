@@ -8,12 +8,12 @@ The `pi-model-router` is an extension-first model router for the `pi` coding age
 
 The router is organized into **Profiles** (e.g., `balanced`, `cheap`, `deep`, `grok`). Each profile defines up to six **Tiers** (at least one required):
 
-- **max**: Maximum reasoning — exhaustive analysis, highest budget. Manual effort only (`max`).
-- **xhigh**: Extended reasoning — large refactors, deep research, heavy trade-off analysis. Manual effort only (`xhigh`).
-- **High**: Architecture, design, complex debugging, and planning. Classifier `high` or manual `high`.
-- **Medium**: Default for standard implementation, multi-file edits, and focused fixes. Classifier `medium` or manual `medium`.
-- **Low**: Summaries, changelogs, formatting, and simple read-only lookups. Classifier `low` or manual `low`.
-- **minimal**: Minimal reasoning — quick transforms, trivial lookups. Manual effort only (`minimal`).
+- **minimal**: Mechanical transforms with no judgment: format, typo, rename, indent, template fill, quote-from-context. Classifier `minimal` or manual `minimal`.
+- **low**: Cheap language/lookup work: summaries, changelogs, commit messages, quick explanations, small bounded transforms, simple read-only lookup. Classifier `low` or manual `low`.
+- **medium**: Execute a known plan: spec-following implementation, multi-file edits, focused debugging with known cause, tests/fixes, routine wiring. Classifier `medium` or manual `medium`.
+- **high**: Local design under uncertainty: module architecture, planning, tradeoff analysis, broad debugging, large refactors, codebase research. Classifier `high` or manual `high`.
+- **xhigh**: Cross-cutting or high-blast-radius work: migrations, ambiguous RCA, security-sensitive changes, multi-repo/system design, risky refactors. Classifier `xhigh` or manual `xhigh`.
+- **max**: Novel or irreversible work: greenfield strategy, adversarial audit, long-horizon research with conflicting sources, eval/algorithm invention. Classifier `max` or manual `max`.
 
 ### 2. Custom Provider Implementation
 
@@ -24,7 +24,7 @@ The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. 
 For every request sent to a `router/*` model, the following logic is executed:
 
 1. **Manual Effort Override**: If `pi.getThinkingLevel() !== 'off'`, map `minimal`→`minimal`, `low`→`low`, `medium`→`medium`, `high`→`high`, `xhigh`→`xhigh`, `max`→`max`, then `resolveAvailableTier()` to nearest configured tier.
-2. **LLM Classifier (Optional)**: If `thinkingLevel === 'off'` and `classifierModels` (or `low` tier fallback) is available, classify to `high`/`medium`/`low`.
+2. **LLM Classifier (Optional)**: If `thinkingLevel === 'off'` and `classifierModels` (or `low` tier fallback) is available, classify to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
 3. **Default**: If no classifier is configured or it fails, defaults to `medium` (with `resolveAvailableTier()` fallback).
 
 ## Module Architecture
