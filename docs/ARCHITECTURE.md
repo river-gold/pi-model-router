@@ -6,11 +6,14 @@ The `pi-model-router` is an extension-first model router for the `pi` coding age
 
 ### 1. Profiles & Tiers
 
-The router is organized into **Profiles** (e.g., `balanced`, `cheap`, `deep`). Each profile defines up to three **Tiers** (at least one required):
+The router is organized into **Profiles** (e.g., `balanced`, `cheap`, `deep`, `grok`). Each profile defines up to six **Tiers** (at least one required):
 
-- **High**: Reserved for architecture, design, complex debugging, and planning. Uses high-reasoning models.
-- **Medium**: The default for standard implementation, multi-file edits, and focused fixes.
-- **Low**: Used for summaries, changelogs, formatting, and simple read-only lookups.
+- **max**: Maximum reasoning — exhaustive analysis, highest budget. Manual effort only (`max`).
+- **xhigh**: Extended reasoning — large refactors, deep research, heavy trade-off analysis. Manual effort only (`xhigh`).
+- **High**: Architecture, design, complex debugging, and planning. Classifier `high` or manual `high`.
+- **Medium**: Default for standard implementation, multi-file edits, and focused fixes. Classifier `medium` or manual `medium`.
+- **Low**: Summaries, changelogs, formatting, and simple read-only lookups. Classifier `low` or manual `low`.
+- **minimal**: Minimal reasoning — quick transforms, trivial lookups. Manual effort only (`minimal`).
 
 ### 2. Custom Provider Implementation
 
@@ -20,8 +23,9 @@ The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. 
 
 For every request sent to a `router/*` model, the following logic is executed:
 
-1. **LLM Classifier (Optional)**: If `classifierModel` is configured, a fast LLM is called to categorize the user's intent.
-2. **Default**: If no classifier is configured or it fails, the router defaults to `medium` tier.
+1. **Manual Effort Override**: If `pi.getThinkingLevel() !== 'off'`, map `minimal`→`minimal`, `low`→`low`, `medium`→`medium`, `high`→`high`, `xhigh`→`xhigh`, `max`→`max`, then `resolveAvailableTier()` to nearest configured tier.
+2. **LLM Classifier (Optional)**: If `thinkingLevel === 'off'` and `classifierModels` (or `low` tier fallback) is available, classify to `high`/`medium`/`low`.
+3. **Default**: If no classifier is configured or it fails, defaults to `medium` (with `resolveAvailableTier()` fallback).
 
 ## Module Architecture
 

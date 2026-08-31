@@ -317,7 +317,7 @@ export const registerRouterProvider = (
           if (imageAttached) {
             const tierModels = profile[decision.tier]?.models! ?? [decision.targetLabel];
             if (!tierModels.some(checkModelSupportsImage)) {
-              const tierOrder: RouterTier[] = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+              const tierOrder: RouterTier[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
               const startIdx = tierOrder.indexOf(decision.tier);
               const tiersToTry: RouterTier[] = startIdx >= 0 ? tierOrder.slice(startIdx + 1) : [];
 

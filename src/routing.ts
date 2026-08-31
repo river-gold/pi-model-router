@@ -8,7 +8,8 @@ import type {
 import { parseCanonicalModelRef, formatModelRef } from './config';
 
 export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
-  if (thinking === 'xhigh' || thinking === 'max') return 'xhigh';
+  if (thinking === 'max') return 'max';
+  if (thinking === 'xhigh') return 'xhigh';
   if (thinking === 'high') return 'high';
   if (thinking === 'medium') return 'medium';
   if (thinking === 'low') return 'low';
@@ -20,7 +21,7 @@ export const resolveAvailableTier = (
   preferred: RouterTier,
 ): RouterTier => {
   if (profile[preferred]) return preferred;
-  const order: RouterTier[] = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+  const order: RouterTier[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
   const startIdx = order.indexOf(preferred);
   for (let i = startIdx + 1; i < order.length; i++) {
     if (profile[order[i]]) return order[i];
