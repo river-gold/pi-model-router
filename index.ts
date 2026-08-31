@@ -36,6 +36,7 @@ const routerExtension = (pi: ExtensionAPI) => {
   let lastPersistedSnapshot: string | undefined;
   let isInitialized = false;
   let isInternalModelSwitch = 0;
+  const failedByChain = new Map<string, Set<string>>();
   // Delay to allow pi internal registry/session initialization to settle
   // before reading model registry and session branch. Keep small and
   // explicit; consider replacing with deterministic readiness signal
@@ -213,6 +214,9 @@ const routerExtension = (pi: ExtensionAPI) => {
           set accumulatedCost(v) {
             accumulatedCost = v;
           },
+          get failedByChain() {
+            return failedByChain;
+          },
         },
         {
           persistState,
@@ -335,6 +339,9 @@ const routerExtension = (pi: ExtensionAPI) => {
       },
       get lastConfigWarnings() {
         return lastConfigWarnings;
+      },
+      get failedByChain() {
+        return failedByChain;
       },
     },
     actions,

@@ -65,6 +65,7 @@ describe('commands.ts', () => {
       debugEnabled: false,
       debugHistory: [lastDecision],
       lastConfigWarnings: [],
+      failedByChain: new Map<string, Set<string>>(),
     };
   };
 

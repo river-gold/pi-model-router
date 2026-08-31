@@ -116,6 +116,7 @@ describe('provider.ts', () => {
       routerEnabled: false,
       lastDecision: undefined,
       accumulatedCost: 0,
+      failedByChain: new Map<string, Set<string>>(),
     };
 
     mockActions = {

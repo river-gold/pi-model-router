@@ -29,13 +29,24 @@ export const runClassifierWithFallbacksDetailed = async (
   historySize: number,
   signal?: AbortSignal,
   onAttempt?: (entry: { model: string; thinking?: ThinkingLevel; source?: string }) => void,
+  failedSet?: Set<string>,
 ): Promise<{ result?: { tier: RouterTier; reasoning: string }; attempts: ClassifierAttempt[] }> => {
   const attempts: ClassifierAttempt[] = [];
   for (const entry of classifierModels) {
+    const normalizedRef = entry.model.trim();
+    if (failedSet?.has(normalizedRef)) {
+      attempts.push({ model: entry.model, thinking: entry.thinking, error: 'skipped: failed this session (chain-local)' });
+      continue;
+    }
     onAttempt?.(entry);
     const result = await runClassifier(entry.model, modelRegistry, context, historySize, entry.thinking, signal);
     if (result) return { result, attempts: [...attempts, { model: entry.model, thinking: entry.thinking }] };
-    attempts.push({ model: entry.model, thinking: entry.thinking, error: 'no tier parsed or model/auth/stream failed' });
+    if (signal?.aborted) {
+      attempts.push({ model: entry.model, thinking: entry.thinking, error: 'aborted' });
+    } else {
+      attempts.push({ model: entry.model, thinking: entry.thinking, error: 'no tier parsed or model/auth/stream failed' });
+      failedSet?.add(normalizedRef);
+    }
   }
   return { attempts };
 };

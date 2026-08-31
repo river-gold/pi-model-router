@@ -19,6 +19,7 @@ export const registerCommands = (
     debugEnabled: boolean;
     debugHistory: RoutingDecision[];
     readonly lastConfigWarnings: string[];
+    readonly failedByChain: Map<string, Set<string>>;
   },
   actions: {
     persistState: () => void;
@@ -34,6 +35,8 @@ export const registerCommands = (
     { name: 'status', desc: 'Show current router status' },
     { name: 'debug', desc: 'Toggle or clear router debug history' },
     { name: 'reload', desc: 'Reload the model router configuration' },
+    { name: 'reset-failures', desc: 'Clear session failure memory (chain-local, in-memory)' },
+    { name: 'clear-failures', desc: 'Alias for reset-failures' },
     { name: 'help', desc: 'Show usage help for subcommands' },
   ];
 
@@ -75,6 +78,15 @@ export const registerCommands = (
     }
     const historySize = state.currentConfig.historySize ?? 0;
     lines.push('', `History size: ${historySize} (0=off, 1~20 pairs)`);
+    if (state.failedByChain.size === 0) {
+      lines.push('Session failures: none (in-memory, chain-local)');
+    } else {
+      lines.push('Session failures (in-memory, chain-local):');
+      for (const [chain, set] of state.failedByChain.entries()) {
+        if (set.size === 0) continue;
+        lines.push(`  ${chain}: ${[...set].join(', ')}`);
+      }
+    }
     if (state.lastConfigWarnings && state.lastConfigWarnings.length > 0) {
       lines.push(
         '',
@@ -139,6 +151,15 @@ export const registerCommands = (
     );
   };
 
+  const handleResetFailures = async (args: string[], ctx: ExtensionContext) => {
+    if (args.length > 0) {
+      ctx.ui.notify('Usage: /router reset-failures (no arguments)', 'error');
+      return;
+    }
+    state.failedByChain.clear();
+    ctx.ui.notify('Router session failures cleared (in-memory, chain-local).', 'info');
+  };
+
   pi.registerCommand('router', {
     description: 'Model router control center',
     getArgumentCompletions: (prefix) => {
@@ -191,6 +212,10 @@ export const registerCommands = (
         case 'status':
           await handleStatus(subArgs, ctx);
           break;
+        case 'reset-failures':
+        case 'clear-failures':
+          await handleResetFailures(subArgs, ctx);
+          break;
         case 'help':
         case '?':
           if (subArgs.length > 0) {
@@ -203,6 +228,7 @@ export const registerCommands = (
               '  status                           Show current status, profile, cost, and last decision.',
               '  debug <on|off|toggle|show|clear> Control routing debug logging to notifications and history.',
               '  reload                           Hot-reload the configuration JSON from .pi/model-router.json.',
+              '  reset-failures, clear-failures   Clear session failure memory (in-memory, chain-local).',
               '  help, ?                          Show this help message.',
             ].join('\n'),
             'info',
