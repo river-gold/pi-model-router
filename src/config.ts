@@ -171,8 +171,8 @@ export const normalizeClassifierConfig = (
 ): ClassifierConfig | undefined => {
   if (typeof raw === 'string' && raw.trim()) {
     try {
-      parseCanonicalModelRef(raw.trim());
-      return { model: raw.trim() };
+      const { provider, modelId, thinking } = parseCanonicalModelRef(raw.trim());
+      return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
     } catch (error) {
       warnings.push(
         `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
@@ -183,22 +183,12 @@ export const normalizeClassifierConfig = (
   if (isObjectRecord(raw)) {
     const modelRef = typeof raw.model === 'string' ? raw.model.trim() : '';
     if (modelRef) {
+      if (raw.thinking !== undefined) {
+        warnings.push(`${contextLabel}: separate "thinking" field is removed, use "model#thinking" format. Ignored.`);
+      }
       try {
-        parseCanonicalModelRef(modelRef);
-        const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
-        // Handle deprecated 'max' -> map to 'xhigh' with warning
-        if (typeof raw.thinking === 'string' && raw.thinking === 'max') {
-          warnings.push(`Invalid ${contextLabel} thinking "max": "max" is deprecated, mapped to "xhigh".`);
-          return { model: modelRef, thinking: 'xhigh' as ThinkingLevel };
-        }
-        const thinking =
-          typeof raw.thinking === 'string' && (allowedThinking as string[]).includes(raw.thinking)
-            ? (raw.thinking as ThinkingLevel)
-            : undefined;
-        if (typeof raw.thinking === 'string' && raw.thinking.length > 0 && !thinking) {
-          warnings.push(`Invalid ${contextLabel} thinking "${raw.thinking}": expected one of ${allowedThinking.join(', ')}.`);
-        }
-        return { model: modelRef, ...(thinking ? { thinking } : {}) };
+        const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
+        return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
       } catch (error) {
         warnings.push(
           `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
@@ -212,12 +202,39 @@ export const normalizeClassifierConfig = (
   return undefined;
 };
 
+export const normalizeClassifierModels = (
+  raw: unknown,
+  warnings: string[],
+  contextLabel: string,
+): ClassifierConfig[] | undefined => {
+  if (raw === undefined) return undefined;
+  if (typeof raw === 'string') {
+    const single = normalizeClassifierConfig(raw, warnings, contextLabel);
+    return single ? [single] : undefined;
+  }
+  if (Array.isArray(raw)) {
+    const out: ClassifierConfig[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      const c = normalizeClassifierConfig(raw[i], warnings, `${contextLabel}[${i}]`);
+      if (c) out.push(c);
+    }
+    return out.length > 0 ? out : undefined;
+  }
+  if (isObjectRecord(raw)) {
+    // support legacy { model, thinking } object as single entry
+    const single = normalizeClassifierConfig(raw, warnings, contextLabel);
+    return single ? [single] : undefined;
+  }
+  warnings.push(`Invalid ${contextLabel}: expected string or array of strings.`);
+  return undefined;
+};
+
 export const resolveEffectiveClassifier = (
   profile: RouterProfile,
-  globalClassifier: ClassifierConfig | undefined,
-): ClassifierConfig | undefined => {
-  if (profile.classifierModel) return profile.classifierModel;
-  if (globalClassifier) return globalClassifier;
+  globalClassifiers: ClassifierConfig[] | undefined,
+): ClassifierConfig[] | undefined => {
+  if (profile.classifierModels && profile.classifierModels.length > 0) return profile.classifierModels;
+  if (globalClassifiers && globalClassifiers.length > 0) return globalClassifiers;
   return undefined;
 };
 
@@ -236,7 +253,7 @@ export const mergeConfig = (
       high: mergeTier(existing?.high, nextProfile.high),
       medium: mergeTier(existing?.medium, nextProfile.medium),
       low: mergeTier(existing?.low, nextProfile.low),
-      classifierModel: (nextProfile.classifierModel as ClassifierConfig | undefined) ?? existing?.classifierModel,
+      classifierModels: (nextProfile.classifierModels as ClassifierConfig[] | undefined) ?? existing?.classifierModels,
     };
   }
 
@@ -250,30 +267,44 @@ export const mergeConfig = (
 
   return {
     debug: override.debug ?? base.debug,
-    classifierModel: override.classifierModel ?? base.classifierModel,
+    classifierModels: override.classifierModels ?? base.classifierModels,
     historySize: mergedHistorySize ?? base.historySize,
     profiles: mergedProfiles,
   };
 };
 
+const ALLOWED_THINKING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+
 export const parseCanonicalModelRef = (
   value: string,
-): { provider: string; modelId: string } => {
-  const slashIndex = value.indexOf('/');
+): { provider: string; modelId: string; thinking?: ThinkingLevel } => {
+  const hashIndex = value.indexOf('#');
+  const rawRef = hashIndex === -1 ? value : value.slice(0, hashIndex);
+  const thinkingRaw = hashIndex === -1 ? undefined : value.slice(hashIndex + 1).trim();
+  const slashIndex = rawRef.indexOf('/');
   if (slashIndex === -1) {
     throw new Error(
-      `Invalid model reference "${value}". Expected "provider/model".`,
+      `Invalid model reference "${value}". Expected "provider/model[#thinking]".`,
     );
   }
-  const provider = value.slice(0, slashIndex).trim();
-  const modelId = value.slice(slashIndex + 1).trim();
+  const provider = rawRef.slice(0, slashIndex).trim();
+  const modelId = rawRef.slice(slashIndex + 1).trim();
   if (!provider || !modelId) {
     throw new Error(
-      `Invalid model reference "${value}". Expected "provider/model".`,
+      `Invalid model reference "${value}". Expected "provider/model[#thinking]".`,
     );
   }
-  return { provider, modelId };
+  if (thinkingRaw !== undefined) {
+    if (thinkingRaw === 'max') throw new Error(`Invalid thinking "max": use "xhigh" instead.`);
+    if (thinkingRaw && !(ALLOWED_THINKING as readonly string[]).includes(thinkingRaw)) {
+      throw new Error(`Invalid thinking "${thinkingRaw}": expected one of ${ALLOWED_THINKING.join(', ')}.`);
+    }
+  }
+  return { provider, modelId, ...(thinkingRaw ? { thinking: thinkingRaw as ThinkingLevel } : {}) };
 };
+
+export const formatModelRef = (provider: string, modelId: string, thinking?: ThinkingLevel): string =>
+  thinking ? `${provider}/${modelId}#${thinking}` : `${provider}/${modelId}`;
 
 export const normalizeTierConfig = (
   value: unknown,
@@ -285,55 +316,47 @@ export const normalizeTierConfig = (
     return undefined;
   }
 
-  const rawModel = typeof value.model === 'string' ? value.model.trim() : '';
+  if (value.thinking !== undefined) {
+    warnings.push(`Profile "${profileName}" ${tier} tier: separate "thinking" field is removed, use "model#thinking" format. Ignored.`);
+  }
+  if (value.fallbacks !== undefined) {
+    warnings.push(`Profile "${profileName}" ${tier} tier: "fallbacks" is removed, use "models" array with priority order. Ignored.`);
+  }
+  if (typeof value.model === 'string') {
+    warnings.push(`Profile "${profileName}" ${tier} tier: "model" is removed, use "models" array. Ignored.`);
+  }
 
-  if (!rawModel) {
+  const rawModels = (value as Record<string, unknown>).models;
+  if (!Array.isArray(rawModels) || rawModels.length === 0) {
     warnings.push(
-      `Profile "${profileName}" ${tier} tier is missing a model. Tier disabled.`,
+      `Profile "${profileName}" ${tier} tier is missing "models" array. Tier disabled.`,
     );
     return undefined;
   }
 
-  let parsedModel: string;
-  try {
-    parseCanonicalModelRef(rawModel);
-    parsedModel = rawModel;
-  } catch (error) {
-    warnings.push(
-      `Profile "${profileName}" ${tier} tier: ${error instanceof Error ? error.message : String(error)} Tier disabled.`,
-    );
+  const models: string[] = [];
+  for (const m of rawModels) {
+    if (typeof m !== 'string' || !m.trim()) {
+      warnings.push(`Invalid model entry "${String(m)}" in profile "${profileName}" ${tier} tier.`);
+      continue;
+    }
+    try {
+      parseCanonicalModelRef(m.trim());
+      models.push(m.trim());
+    } catch (error) {
+      warnings.push(
+        `Invalid model "${m}" in profile "${profileName}" ${tier} tier: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  if (models.length === 0) {
+    warnings.push(`Profile "${profileName}" ${tier} tier has no valid models. Tier disabled.`);
     return undefined;
   }
 
-  const allowedThinking: string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
-  let thinking: ThinkingLevel = 'medium';
-  if (typeof value.thinking === 'string' && value.thinking.length > 0) {
-    if (value.thinking === 'max') {
-      warnings.push(`Invalid thinking "max" for profile "${profileName}" ${tier} tier: "max" is deprecated, mapped to "xhigh". Using xhigh.`);
-      thinking = 'xhigh' as ThinkingLevel;
-    } else if ((allowedThinking as string[]).includes(value.thinking)) {
-      thinking = value.thinking as ThinkingLevel;
-    } else {
-      warnings.push(`Invalid thinking "${value.thinking}" for profile "${profileName}" ${tier} tier: expected one of ${allowedThinking.join(', ')}. Using default medium.`);
-    }
-  }
-
-  let fallbacks: string[] | undefined = undefined;
-  if (Array.isArray(value.fallbacks)) {
-    fallbacks = [];
-    for (const f of value.fallbacks) {
-      if (typeof f === 'string') {
-        try {
-          parseCanonicalModelRef(f);
-          fallbacks.push(f);
-        } catch (error) {
-          warnings.push(
-            `Invalid fallback model "${f}" in profile "${profileName}" ${tier} tier: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
-    }
-  }
+  const primaryParsed = parseCanonicalModelRef(models[0]);
+  const parsedModel = formatModelRef(primaryParsed.provider, primaryParsed.modelId);
+  const thinking: ThinkingLevel = primaryParsed.thinking ?? 'medium';
 
   const tierContextWindow =
     typeof value.contextWindow === 'number' && value.contextWindow > 0
@@ -351,9 +374,9 @@ export const normalizeTierConfig = (
     typeof value.reasoning === 'boolean' ? value.reasoning : undefined;
 
   return {
+    models,
     model: parsedModel,
     thinking,
-    fallbacks,
     contextWindow: tierContextWindow,
     maxTokens: tierMaxTokens,
     reasoning: tierReasoning,
@@ -367,7 +390,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 
   // Warn on unknown top-level fields
   {
-    const allowedKeys = new Set(['debug', 'classifierModel', 'historySize', 'historyLimit', 'profiles']);
+    const allowedKeys = new Set(['debug', 'classifierModels', 'classifierModel', 'historySize', 'historyLimit', 'profiles']);
     for (const key of Object.keys(raw as unknown as Record<string, unknown>)) {
       if (!allowedKeys.has(key)) {
         warnings.push(`Unknown config field "${key}" ignored.`);
@@ -393,19 +416,27 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       continue;
     }
 
-    const classifierModel = normalizeClassifierConfig(
-      (profile as Record<string, unknown>)?.classifierModel,
+    if ((profile as Record<string, unknown>).classifierModel !== undefined) {
+      warnings.push(`Profile "${name}" classifierModel is deprecated, use classifierModels.`);
+    }
+    const rawClassifier = (profile as Record<string, unknown>).classifierModels ?? (profile as Record<string, unknown>).classifierModel;
+    const classifierModels = normalizeClassifierModels(
+      rawClassifier,
       warnings,
-      `Profile "${name}" classifierModel`,
+      `Profile "${name}" classifierModels`,
     );
 
-    normalizedProfiles[name] = { high, medium, low, ...(classifierModel ? { classifierModel } : {}) };
+    normalizedProfiles[name] = { high, medium, low, ...(classifierModels ? { classifierModels } : {}) };
   }
 
-  const classifierModel = normalizeClassifierConfig(
-    raw.classifierModel as unknown,
+  if ((raw as unknown as Record<string, unknown>).classifierModel !== undefined) {
+    warnings.push('classifierModel is deprecated, use classifierModels.');
+  }
+  const rawGlobalClassifier = (raw as unknown as Record<string, unknown>).classifierModels ?? (raw as unknown as Record<string, unknown>).classifierModel;
+  const classifierModels = normalizeClassifierModels(
+    rawGlobalClassifier as unknown,
     warnings,
-    'classifierModel',
+    'classifierModels',
   );
 
   let historySize: number | undefined = undefined;
@@ -422,7 +453,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   return {
     config: {
       debug: typeof raw.debug === 'boolean' ? raw.debug : false,
-      classifierModel,
+      classifierModels,
       historySize: historySize ?? DEFAULT_HISTORY_SIZE,
       profiles: normalizedProfiles,
     },
@@ -486,7 +517,8 @@ export const resolveContextWindow = (
 
   if (modelRegistry) {
     try {
-      const { provider, modelId } = parseCanonicalModelRef(tierConfig.model);
+      const ref = tierConfig.models!?.[0] ?? tierConfig.model ?? "";
+      const { provider, modelId } = parseCanonicalModelRef(ref);
       const registryModel = modelRegistry.find(provider, modelId);
       if (registryModel?.contextWindow) return registryModel.contextWindow;
     } catch { /* ignore */ }
@@ -510,7 +542,8 @@ export const resolveMaxTokens = (
 
   if (modelRegistry) {
     try {
-      const { provider, modelId } = parseCanonicalModelRef(tierConfig.model);
+      const ref = tierConfig.models!?.[0] ?? tierConfig.model ?? "";
+      const { provider, modelId } = parseCanonicalModelRef(ref);
       const registryModel = modelRegistry.find(provider, modelId);
       if (registryModel?.maxTokens) return registryModel.maxTokens;
     } catch { /* ignore */ }

@@ -36,11 +36,11 @@ describe('commands.ts', () => {
     const config: RouterConfig = {
       profiles: {
         balanced: {
-          high: { model: 'openai/gpt-4o' },
-          medium: { model: 'openai/gpt-4o-mini' },
+          high: { models: ['openai/gpt-4o'] },
+          medium: { models: ['openai/gpt-4o-mini'] },
         },
         cheap: {
-          low: { model: 'openai/gpt-4o-micro' },
+          low: { models: ['openai/gpt-4o-micro'] },
         },
       },
     };

@@ -10,26 +10,26 @@ import type { RouterProfile } from './types';
 describe('routing.ts', () => {
   describe('resolveAvailableTier', () => {
     const profile: RouterProfile = {
-      medium: { model: 'openai/gpt-4o' },
+      medium: { models: ['openai/gpt-4o'] },
     };
 
     it('should return preferred if available', () => {
       expect(
         resolveAvailableTier(
-          { high: { model: 'a' }, medium: { model: 'b' } },
+          { high: { models: ['a'] }, medium: { models: ['b'] } },
           'high',
         ),
       ).toBe('high');
     });
 
     it('should fall up if preferred is unavailable', () => {
-      expect(resolveAvailableTier({ high: { model: 'a' } }, 'low')).toBe(
+      expect(resolveAvailableTier({ high: { models: ['a'] } }, 'low')).toBe(
         'high',
       );
     });
 
     it('should fall down if falling up finds nothing', () => {
-      expect(resolveAvailableTier({ low: { model: 'a' } }, 'medium')).toBe(
+      expect(resolveAvailableTier({ low: { models: ['a'] } }, 'medium')).toBe(
         'low',
       );
     });
@@ -37,7 +37,7 @@ describe('routing.ts', () => {
 
   describe('buildRoutingDecision', () => {
     const profile: RouterProfile = {
-      high: { model: 'openai/gpt-4o-pro', thinking: 'high' },
+      high: { models: ['openai/gpt-4o-pro'], thinking: 'high' },
     };
 
     it('should construct correct decision object', () => {
@@ -60,9 +60,9 @@ describe('routing.ts', () => {
 
   describe('decideRouting', () => {
     const profile: RouterProfile = {
-      high: { model: 'openai/gpt-4o', resolvedContextWindow: 100 },
-      medium: { model: 'openai/gpt-4o-mini', resolvedContextWindow: 100 },
-      low: { model: 'openai/gpt-4o-micro', resolvedContextWindow: 100 },
+      high: { models: ['openai/gpt-4o'], resolvedContextWindow: 100 },
+      medium: { models: ['openai/gpt-4o-mini'], resolvedContextWindow: 100 },
+      low: { models: ['openai/gpt-4o-micro'], resolvedContextWindow: 100 },
     };
 
     it('should always return medium', () => {

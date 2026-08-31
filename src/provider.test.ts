@@ -79,11 +79,11 @@ describe('provider.ts', () => {
     const config: RouterConfig = {
       profiles: {
         balanced: {
-          high: { model: 'openai/gpt-4o', resolvedContextWindow: 10000 },
+          high: { models: ['openai/gpt-4o'], model: 'openai/gpt-4o', resolvedContextWindow: 10000 },
           medium: {
+            models: ['openai/gpt-4o-mini', 'google/gemini-1.5-flash'],
             model: 'openai/gpt-4o-mini',
             resolvedContextWindow: 5000,
-            fallbacks: ['google/gemini-1.5-flash'],
           },
         },
       },
@@ -247,13 +247,9 @@ describe('provider.ts', () => {
       };
 
       // Configure profile tiers to use google provider models
-      mockState.currentConfig.profiles.balanced.high = {
-        model: 'google/gemini-2.5-pro',
-        thinking: 'high' as ThinkingLevel,
+      mockState.currentConfig.profiles.balanced.high = { models: ['google/gemini-2.5-pro'], thinking: 'high' as ThinkingLevel,
       };
-      mockState.currentConfig.profiles.balanced.medium = {
-        model: 'google/gemini-2.5-flash',
-        thinking: 'medium' as ThinkingLevel,
+      mockState.currentConfig.profiles.balanced.medium = { models: ['google/gemini-2.5-flash'], thinking: 'medium' as ThinkingLevel,
       };
 
       // Set up registry search

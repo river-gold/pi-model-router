@@ -1,46 +1,30 @@
 {
   "debug": false,
   "historySize": 0,
-  "classifierModel": "google/gemini-flash-latest",
+  "classifierModels": ["google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
   "profiles": {
     "auto": {
-      "high": {
-        "model": "openai/gpt-5.4-pro",
-        "thinking": "high",
-        "fallbacks": ["anthropic/claude-3-5-sonnet-20241022"]
-      },
-      "medium": { "model": "google/gemini-flash-latest", "thinking": "medium" },
-      "low": { "model": "openai/gpt-5.4-nano", "thinking": "low" }
+      "high": { "models": ["openai/gpt-5.4-pro#high", "anthropic/claude-3-5-sonnet-20241022#high", "openai/gpt-4o#off"] },
+      "medium": { "models": ["google/gemini-flash-latest#medium"] },
+      "low": { "models": ["openai/gpt-5.4-nano#low"] }
     },
     "cheap": {
-      "classifierModel": "google/gemini-flash-lite-latest",
-      "high": { "model": "google/gemini-flash-latest", "thinking": "low" },
-      "medium": { "model": "openai/gpt-5.4-nano", "thinking": "off" },
-      "low": { "model": "google/gemini-flash-lite-latest", "thinking": "off" }
+      "classifierModels": ["google/gemini-flash-lite-latest#low"],
+      "high": { "models": ["google/gemini-flash-latest#low"] },
+      "medium": { "models": ["openai/gpt-5.4-nano#off"] },
+      "low": { "models": ["google/gemini-flash-lite-latest#off"] }
     },
     "deep": {
-      "classifierModel": {
-        "model": "openai/gpt-5.4-pro",
-        "thinking": "low"
-      },
-      "high": { "model": "openai/o1-preview", "thinking": "xhigh" },
-      "medium": { "model": "openai/gpt-5.4-pro", "thinking": "medium" },
-      "low": { "model": "google/gemini-flash-latest", "thinking": "low" }
+      "classifierModels": ["openai/gpt-5.4-pro#low"],
+      "high": { "models": ["openai/o1-preview#xhigh"] },
+      "medium": { "models": ["openai/gpt-5.4-pro#medium"] },
+      "low": { "models": ["google/gemini-flash-latest#low"] }
     },
-    "anthropic": {
-      "classifierModel": {
-        "model": "anthropic/claude-3-haiku-20240307",
-        "thinking": "off"
-      },
-      "high": {
-        "model": "anthropic/claude-3-5-sonnet-20241022",
-        "thinking": "high"
-      },
-      "medium": {
-        "model": "anthropic/claude-3-5-sonnet-20241022",
-        "thinking": "medium"
-      },
-      "low": { "model": "anthropic/claude-3-haiku-20240307", "thinking": "low" }
+    "minimal": {
+      "classifierModels": ["google/gemini-flash-latest"],
+      "high": { "models": ["openai/gpt-5.4-pro"] },
+      "medium": { "models": ["google/gemini-flash-latest"] },
+      "low": { "models": ["openai/gpt-5.4-nano#off"] }
     }
   }
 }

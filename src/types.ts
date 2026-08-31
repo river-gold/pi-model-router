@@ -8,9 +8,9 @@ export interface ClassifierConfig {
 }
 
 export interface RoutedTierConfig {
-  model: string;
-  thinking?: ThinkingLevel;
-  fallbacks?: string[];
+  models?: string[];
+  model?: string; // primary (models[0] normalized without #thinking)
+  thinking?: ThinkingLevel; // thinking of primary (default medium)
   contextWindow?: number;
   maxTokens?: number;
   reasoning?: boolean;
@@ -22,12 +22,13 @@ export interface RouterProfile {
   high?: RoutedTierConfig;
   medium?: RoutedTierConfig;
   low?: RoutedTierConfig;
-  classifierModel?: ClassifierConfig;
+  classifierModels?: ClassifierConfig[];
 }
 
 export interface RouterConfig {
   debug?: boolean;
-  classifierModel?: ClassifierConfig;
+  classifierModels?: ClassifierConfig[];
+  classifierModel?: ClassifierConfig; // deprecated alias
   historySize?: number;
   profiles: Record<string, RouterProfile>;
 }

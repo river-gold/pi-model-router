@@ -18,6 +18,7 @@ import type { RouterConfig, RoutingDecision, RouterTier } from './types';
 import {
   profileNames,
   parseCanonicalModelRef,
+  formatModelRef,
   ROUTER_TIERS,
   resolveContextWindow,
   resolveMaxTokens,
@@ -34,7 +35,7 @@ import {
   buildRoutingDecision,
   decideRouting,
 } from './routing';
-import { runClassifier } from './classifier';
+import { runClassifierWithFallbacks } from './classifier';
 import {
   hasImageAttachment,
   getLastUserText,
@@ -231,20 +232,20 @@ export const registerRouterProvider = (
             );
           }
 
-          const effectiveClassifier = resolveEffectiveClassifier(
+          const effectiveClassifiers = resolveEffectiveClassifier(
             profile,
-            state.currentConfig.classifierModel,
+            state.currentConfig.classifierModels,
           );
 
-          if (!shouldSkipClassifier && effectiveClassifier) {
+          if (!shouldSkipClassifier && effectiveClassifiers) {
             if (options?.signal?.aborted) throw new Error('aborted');
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
-            const classifierResult = await runClassifier(
-              effectiveClassifier.model,
+            const classifierResult = await runClassifierWithFallbacks(
+              effectiveClassifiers,
               registry,
               context,
               effectiveHistorySize,
-              effectiveClassifier.thinking,
+              options?.signal,
             );
             if (classifierResult) {
               decision = buildRoutingDecision(
@@ -294,10 +295,7 @@ export const registerRouterProvider = (
           };
 
           if (imageAttached) {
-            const tierModels = [
-              decision.targetLabel,
-              ...(profile[decision.tier]?.fallbacks ?? []),
-            ];
+            const tierModels = profile[decision.tier]?.models! ?? [decision.targetLabel];
             if (!tierModels.some(checkModelSupportsImage)) {
               const tiersToTry: RouterTier[] =
                 decision.tier === 'low'
@@ -310,10 +308,7 @@ export const registerRouterProvider = (
               for (const t of tiersToTry) {
                 const tierConfig = profile[t];
                 if (!tierConfig) continue;
-                const tModels = [
-                  tierConfig.model,
-                  ...(tierConfig.fallbacks ?? []),
-                ];
+                const tModels = tierConfig.models ?? [] as string[];
                 if (tModels.some(checkModelSupportsImage)) {
                   foundTier = t;
                   break;
@@ -350,10 +345,7 @@ export const registerRouterProvider = (
             // Stale extension context — skip non-critical UI updates.
           }
 
-          let modelsToTry = [...new Set([
-            decision.targetLabel,
-            ...(profile[decision.tier]?.fallbacks ?? []),
-          ])];
+          let modelsToTry = [...new Set(profile[decision.tier]?.models! ?? [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)])];
           if (imageAttached) {
             modelsToTry = modelsToTry.filter(checkModelSupportsImage);
             if (modelsToTry.length === 0) {
@@ -365,8 +357,9 @@ export const registerRouterProvider = (
 
           for (let i = 0; i < modelsToTry.length; i++) {
             const modelRef = modelsToTry[i];
-            const { provider: targetProvider, modelId: targetModelId } =
+            const { provider: targetProvider, modelId: targetModelId, thinking: refThinking } =
               parseCanonicalModelRef(modelRef);
+            const tryThinking = refThinking ?? decision.thinking;
 
             if (targetProvider === 'router') continue;
 
@@ -420,7 +413,7 @@ export const registerRouterProvider = (
                 for (const t of ROUTER_TIERS) {
                   const tc = profile[t];
                   if (!tc) continue;
-                  if (tc.model === modelRef || tc.fallbacks?.includes(modelRef)) {
+                  if (tc.models!.includes(modelRef)) {
                     tierForModel = t;
                     break;
                   }
@@ -438,7 +431,7 @@ export const registerRouterProvider = (
 
               const delegatedReasoning = resolveDelegatedReasoning(
                 targetModel,
-                decision.thinking,
+                tryThinking,
               ) as SimpleStreamOptions['reasoning'] | undefined;
 
               try {
@@ -533,11 +526,12 @@ export const registerRouterProvider = (
                   });
                 }
                 if (i > 0) {
-                  const { provider: fp, modelId: fid } = parseCanonicalModelRef(modelRef);
+                  const { provider: fp, modelId: fid, thinking: ft } = parseCanonicalModelRef(modelRef);
                   decision.isFallback = true;
                   decision.targetProvider = fp;
                   decision.targetModelId = fid;
-                  decision.targetLabel = modelRef;
+                  decision.targetLabel = formatModelRef(fp, fid);
+                  decision.thinking = ft ?? decision.thinking;
                   await withCommitMutex(async () => {
                     if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
                       state.lastDecision = { ...decision };

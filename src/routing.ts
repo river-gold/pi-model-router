@@ -4,7 +4,7 @@ import type {
   RouterProfile,
   RoutingDecision,
 } from './types';
-import { parseCanonicalModelRef } from './config';
+import { parseCanonicalModelRef, formatModelRef } from './config';
 
 export const resolveAvailableTier = (
   profile: RouterProfile,
@@ -33,17 +33,16 @@ export const buildRoutingDecision = (
   if (!routed) {
     throw new Error(`Profile "${profileName}" has no configuration for the ${tier} tier.`);
   }
-  const { provider, modelId } = parseCanonicalModelRef(routed.model);
-  const effectiveThinking =
-    routed.thinking ??
-    (tier === 'high' ? 'high' : tier === 'low' ? 'low' : 'medium');
+  const primaryRef = routed.models![0];
+  const { provider, modelId, thinking } = parseCanonicalModelRef(primaryRef);
+  const effectiveThinking = thinking ?? routed.thinking ?? 'medium';
 
   return {
     profile: profileName,
     tier,
     targetProvider: provider,
     targetModelId: modelId,
-    targetLabel: routed.model,
+    targetLabel: formatModelRef(provider, modelId),
     reasoning,
     thinking: effectiveThinking,
     timestamp: Date.now(),

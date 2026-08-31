@@ -21,6 +21,20 @@ Reasoning: [one short sentence]`;
 // Simplified overload: historySizeOrThinking accepts number (historySize) or
 // ThinkingLevel (thinking only, historySize=0). New optional signal param allows
 // caller (provider) to propagate AbortSignal for cancellation/timeout.
+export const runClassifierWithFallbacks = async (
+  classifierModels: { model: string; thinking?: ThinkingLevel }[],
+  modelRegistry: ExtensionContext['modelRegistry'],
+  context: Context,
+  historySize: number,
+  signal?: AbortSignal,
+): Promise<{ tier: RouterTier; reasoning: string } | undefined> => {
+  for (const entry of classifierModels) {
+    const result = await runClassifier(entry.model, modelRegistry, context, historySize, entry.thinking, signal);
+    if (result) return result;
+  }
+  return undefined;
+};
+
 export const runClassifier = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext['modelRegistry'],
