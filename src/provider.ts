@@ -219,9 +219,21 @@ export const registerRouterProvider = (
             );
           }
 
+          const singleTier = ROUTER_TIERS.find((t) => profile[t]) as RouterTier | undefined;
+          const validTierCount = ROUTER_TIERS.filter((t) => profile[t]).length;
+          const isSingleTier = validTierCount === 1 && singleTier !== undefined;
+
           // pi's thinking level selects the tier directly; off = auto (classifier).
           const thinkingLevel = pi.getThinkingLevel();
-          if (thinkingLevel !== 'off' && !isToolLoop) {
+          if (isSingleTier && !isToolLoop) {
+            decision = buildRoutingDecision(
+              model.id,
+              profile,
+              singleTier,
+              `Single tier "${singleTier}" defined — skipping classifier/thinking mapping.`,
+              false,
+            );
+          } else if (thinkingLevel !== 'off' && !isToolLoop) {
             const tier = thinkingToTier(thinkingLevel);
             decision = buildRoutingDecision(
               model.id,
@@ -237,7 +249,9 @@ export const registerRouterProvider = (
             state.currentConfig.classifierModels,
           );
 
-          if (!shouldSkipClassifier && thinkingLevel === 'off') {
+          if (isSingleTier) {
+            // already resolved above — skip classifier entirely regardless of thinkingLevel
+          } else if (!shouldSkipClassifier && thinkingLevel === 'off') {
             if (!effectiveClassifiers) {
               throw new Error('No classifier available for auto (off) mode. Configure classifierModels or add a low tier.');
             }
