@@ -245,9 +245,6 @@ export const registerRouterProvider = (
 
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
             const classifierFailedSet = state.failedByChain.get(CLASSIFIER_CHAIN_KEY) ?? new Set<string>();
-            if (!state.failedByChain.has(CLASSIFIER_CHAIN_KEY) && classifierFailedSet.size === 0) {
-              // ensure map entry exists when first failure is recorded
-            }
             const { result: classifierResult, attempts } = await runClassifierWithFallbacksDetailed(
               effectiveClassifiers,
               registry,
@@ -378,6 +375,12 @@ export const registerRouterProvider = (
           let modelsToTry = [...new Set(profile[decision.tier]?.models! ?? [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)])];
           // Session-scoped failure memory: chain-local (profile+tier), in-memory only
           const routeChainKey = chainKeyForRoute(model.id, decision.tier);
+          const recordRouteFailure = (ref: string) => {
+            const norm = normalizeFailedRef(ref);
+            let s = state.failedByChain.get(routeChainKey);
+            if (!s) { s = new Set<string>(); state.failedByChain.set(routeChainKey, s); }
+            s.add(norm);
+          };
           const routeFailedSet = state.failedByChain.get(routeChainKey);
           let skippedDueToMemory: string[] = [];
           if (routeFailedSet && routeFailedSet.size > 0) {
@@ -421,12 +424,7 @@ export const registerRouterProvider = (
               lastError = new Error(
                 `Routed model not found: ${targetProvider}/${targetModelId}`,
               );
-              if (isRecordablePreStreamError(lastError)) {
-                const norm = normalizeFailedRef(modelRef);
-                let s = state.failedByChain.get(routeChainKey);
-                if (!s) { s = new Set<string>(); state.failedByChain.set(routeChainKey, s); }
-                s.add(norm);
-              }
+              if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
               continue;
             }
 
@@ -438,12 +436,7 @@ export const registerRouterProvider = (
                   ? `No API key for routed model: ${targetProvider}/${targetModelId}`
                   : `Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`,
               );
-              if (isRecordablePreStreamError(lastError)) {
-                const norm = normalizeFailedRef(modelRef);
-                let s = state.failedByChain.get(routeChainKey);
-                if (!s) { s = new Set<string>(); state.failedByChain.set(routeChainKey, s); }
-                s.add(norm);
-              }
+              if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
               continue;
             }
             const apiKey = auth.apiKey;
@@ -586,18 +579,12 @@ export const registerRouterProvider = (
                 lastError = new Error(err.message.slice('NON_RETRYABLE: '.length));
                 break;
               }
-              // If content was sent before the thrown error, do not retry fallback to avoid duplicate output.
-              if (typeof contentReceivedForTry !== 'undefined' && contentReceivedForTry) {
+              if (contentReceivedForTry) {
                 lastError = err;
                 break;
               }
               lastError = err;
-              if (!contentReceivedForTry && isRecordablePreStreamError(err)) {
-                const norm = normalizeFailedRef(modelRef);
-                let s = state.failedByChain.get(routeChainKey);
-                if (!s) { s = new Set<string>(); state.failedByChain.set(routeChainKey, s); }
-                s.add(norm);
-              }
+              if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
             }
           }
 

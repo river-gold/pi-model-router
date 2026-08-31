@@ -140,12 +140,7 @@ export const runClassifier = async (
       }
     }
   } catch (error) {
-    // Classifier failure is non-fatal: caller falls back to medium tier.
-    // Keep catch narrow; log at debug level when available for diagnostics.
     if (signal?.aborted) return undefined;
-    // Avoid noisy logging in production; provider will continue with default tier.
-    // Debug hint: error instanceof Error ? error.message : String(error)
-    void error;
   }
   return undefined;
 };

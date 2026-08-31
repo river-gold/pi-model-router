@@ -56,6 +56,26 @@ const routerExtension = (pi: ExtensionAPI) => {
     }
   };
 
+  const tryFallbackByRef = async (ctx: ExtensionContext, ref: string): Promise<boolean> => {
+    const slashIndex = ref.indexOf('/');
+    if (slashIndex === -1) return false;
+    try {
+      const m = ctx.modelRegistry.find(ref.slice(0, slashIndex), ref.slice(slashIndex + 1));
+      if (m) return await setModelInternally(m);
+    } catch { /* ignore */ }
+    return false;
+  };
+
+  const tryRestoreFallback = async (ctx: ExtensionContext): Promise<boolean> => {
+    if (lastNonRouterModel && await tryFallbackByRef(ctx, lastNonRouterModel)) return true;
+    try {
+      const anyModel = (ctx.modelRegistry as unknown as { list?: () => { provider: string; id: string }[] }).list?.()?.[0]
+        ?? (ctx.modelRegistry as unknown as { models?: { provider: string; id: string }[] }).models?.[0];
+      if (anyModel && await tryFallbackByRef(ctx, `${anyModel.provider}/${anyModel.id}`)) return true;
+    } catch { /* ignore */ }
+    return false;
+  };
+
   const recordDebugDecision = (decision: RoutingDecision) => {
     debugHistory = [...debugHistory, decision].slice(-MAX_DEBUG_HISTORY);
   };
@@ -138,37 +158,7 @@ const routerExtension = (pi: ExtensionAPI) => {
       );
       routerEnabled = false;
       selectedProfile = undefined;
-      const tryFallback = async (ref: string): Promise<boolean> => {
-        const slashIndex = ref.indexOf('/');
-        if (slashIndex === -1) return false;
-        const provider = ref.slice(0, slashIndex);
-        const modelId = ref.slice(slashIndex + 1);
-        try {
-          const m = ctx.modelRegistry.find(provider, modelId);
-          if (m) {
-            const ok = await setModelInternally(m);
-            return ok;
-          }
-        } catch {
-          // ignore
-        }
-        return false;
-      };
-      if (lastNonRouterModel) {
-        if (await tryFallback(lastNonRouterModel)) return;
-      }
-      // lastNonRouterModel missing or unavailable: try first available model from registry list
-      try {
-        const anyModel = (ctx.modelRegistry as unknown as { list?: () => { provider: string; id: string }[] }).list?.()?.[0]
-          ?? (ctx.modelRegistry as unknown as { models?: { provider: string; id: string }[] }).models?.[0];
-        if (anyModel) {
-          const ref = `${anyModel.provider}/${anyModel.id}`;
-          if (await tryFallback(ref)) return;
-        }
-      } catch {
-        // ignore
-      }
-      // No fallback available: stay disabled, notify only (no hard error)
+      if (await tryRestoreFallback(ctx)) return;
       ctx.ui.notify('Router disabled: no fallback model available. Select a model manually.', 'warning');
     },
     registerRouterProvider: () => {
@@ -380,21 +370,7 @@ const routerExtension = (pi: ExtensionAPI) => {
         ctx.ui.notify(`Unknown router profile: ${event.model.id}`, 'error');
         routerEnabled = false;
         selectedProfile = undefined;
-        const tryFallback = async (ref: string): Promise<boolean> => {
-          const i = ref.indexOf('/');
-          if (i === -1) return false;
-          try {
-            const m = ctx.modelRegistry.find(ref.slice(0, i), ref.slice(i + 1));
-            if (m) return await setModelInternally(m);
-          } catch { /* ignore */ }
-          return false;
-        };
-        if (lastNonRouterModel && await tryFallback(lastNonRouterModel)) return;
-        try {
-          const anyModel = (ctx.modelRegistry as unknown as { list?: () => { provider: string; id: string }[] }).list?.()?.[0]
-            ?? (ctx.modelRegistry as unknown as { models?: { provider: string; id: string }[] }).models?.[0];
-          if (anyModel && await tryFallback(`${anyModel.provider}/${anyModel.id}`)) return;
-        } catch { /* ignore */ }
+        if (await tryRestoreFallback(ctx)) return;
         ctx.ui.notify('Router disabled: no fallback model available. Select a model manually.', 'warning');
         return;
       }
