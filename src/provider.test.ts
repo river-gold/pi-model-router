@@ -109,6 +109,7 @@ describe('provider.ts', () => {
       lastExtensionContext: {
         ui: {
           setHiddenThinkingLabel: vi.fn(),
+          setWorkingMessage: vi.fn(),
         },
       } as unknown as ExtensionContext,
       selectedProfile: undefined,

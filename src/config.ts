@@ -232,18 +232,21 @@ export const normalizeClassifierModels = (
 export const resolveEffectiveClassifier = (
   profile: RouterProfile,
   globalClassifiers: ClassifierConfig[] | undefined,
-): ClassifierConfig[] | undefined => {
-  if (profile.classifierModels && profile.classifierModels.length > 0) return profile.classifierModels;
-  if (globalClassifiers && globalClassifiers.length > 0) return globalClassifiers;
+): { classifiers: ClassifierConfig[] | undefined; source: 'profile' | 'global' | 'low' | 'none' } => {
+  if (profile.classifierModels && profile.classifierModels.length > 0) return { classifiers: profile.classifierModels, source: 'profile' };
+  if (globalClassifiers && globalClassifiers.length > 0) return { classifiers: globalClassifiers, source: 'global' };
   // Fallback: use the low tier models as the classifier chain (follows low tier config).
   const lowModels = profile.low?.models;
   if (lowModels && lowModels.length > 0) {
-    return lowModels.map((m) => {
-      const { provider, modelId, thinking } = parseCanonicalModelRef(m);
-      return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
-    });
+    return {
+      classifiers: lowModels.map((m) => {
+        const { provider, modelId, thinking } = parseCanonicalModelRef(m);
+        return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
+      }),
+      source: 'low',
+    };
   }
-  return undefined;
+  return { classifiers: undefined, source: 'none' };
 };
 
 export const mergeConfig = (

@@ -31,7 +31,7 @@ import {
   decideRouting,
   thinkingToTier,
 } from './routing';
-import { runClassifierWithFallbacks } from './classifier';
+import { runClassifierWithFallbacksDetailed } from './classifier';
 import {
   hasImageAttachment,
   truncateContext,
@@ -226,24 +226,50 @@ export const registerRouterProvider = (
             );
           }
 
-          const effectiveClassifiers = resolveEffectiveClassifier(
+          const { classifiers: effectiveClassifiers, source: classifierSource } = resolveEffectiveClassifier(
             profile,
             state.currentConfig.classifierModels,
           );
 
           if (!shouldSkipClassifier && thinkingLevel === 'off') {
             if (!effectiveClassifiers) {
-              throw new Error('No classifier available for auto (off) mode.');
+              throw new Error('No classifier available for auto (off) mode. Configure classifierModels or add a low tier.');
             }
             if (options?.signal?.aborted) throw new Error('aborted');
+
+            // Show classifying status instead of the default "Working...".
+            const classifierLabel = effectiveClassifiers
+              .map((c) => `${c.model}${c.thinking ? `#${c.thinking}` : ''}`)
+              .join(', ');
+            const srcLabel =
+              classifierSource === 'profile'
+                ? 'profile classifier'
+                : classifierSource === 'global'
+                  ? 'global classifier'
+                  : 'low tier fallback';
+            try {
+              state.lastExtensionContext?.ui.setWorkingMessage(
+                `Classifying via ${srcLabel} (${classifierLabel})...`,
+              );
+            } catch {
+              // Stale extension context — skip non-critical UI updates.
+            }
+
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
-            const classifierResult = await runClassifierWithFallbacks(
+            const { result: classifierResult, attempts } = await runClassifierWithFallbacksDetailed(
               effectiveClassifiers,
               registry,
               context,
               effectiveHistorySize,
               options?.signal,
             );
+
+            try {
+              state.lastExtensionContext?.ui.setWorkingMessage(undefined);
+            } catch {
+              // Stale extension context — skip non-critical UI updates.
+            }
+
             if (classifierResult) {
               decision = buildRoutingDecision(
                 model.id,
@@ -253,7 +279,9 @@ export const registerRouterProvider = (
                 true,
               );
             } else {
-              throw new Error('Classifier failed to determine a tier.');
+              const attempted = attempts.map((a) => `${a.model}${a.thinking ? `#${a.thinking}` : ''} (${a.error})`).join(', ');
+              const src = classifierSource === 'low' ? 'low tier fallback' : classifierSource;
+              throw new Error(`Classifier failed to determine a tier. Source: ${src}. Attempted: ${attempted || 'none'}. Models may be unregistered, missing API keys, or returned invalid format (expected "Tier: high|medium|low").`);
             }
           }
 

@@ -137,23 +137,26 @@ describe('config.ts', () => {
         classifierModels: [{ model: 'openai/gpt-4o', thinking: 'low' }],
         low: { models: ['google/gemini-flash#low'] },
       };
-      expect(resolveEffectiveClassifier(profile, undefined)?.[0].model).toBe('openai/gpt-4o');
+      expect(resolveEffectiveClassifier(profile, undefined).classifiers?.[0].model).toBe('openai/gpt-4o');
+      expect(resolveEffectiveClassifier(profile, undefined).source).toBe('profile');
     });
     it('falls back to low tier model as classifier (follows low tier thinking)', () => {
       const profile: RouterProfile = {
         low: { models: ['google/gemini-flash#high', 'openai/gpt-4o-mini#off'] },
       };
       const result = resolveEffectiveClassifier(profile, undefined);
-      expect(result).toEqual([
+      expect(result.classifiers).toEqual([
         { model: 'google/gemini-flash', thinking: 'high' },
         { model: 'openai/gpt-4o-mini', thinking: 'off' },
       ]);
+      expect(result.source).toBe('low');
     });
     it('returns undefined when no classifier and no low tier', () => {
       const profile: RouterProfile = {
         high: { models: ['openai/gpt-4o'] },
       };
-      expect(resolveEffectiveClassifier(profile, undefined)).toBeUndefined();
+      expect(resolveEffectiveClassifier(profile, undefined).classifiers).toBeUndefined();
+      expect(resolveEffectiveClassifier(profile, undefined).source).toBe('none');
     });
   });
 });
