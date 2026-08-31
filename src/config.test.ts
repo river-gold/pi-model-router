@@ -11,6 +11,7 @@ import {
   resolveContextWindow,
   resolveMaxTokens,
   resolveDelegatedReasoning,
+  resolveEffectiveClassifier,
   isObjectRecord,
   isRouterTier,
 } from './config';
@@ -128,6 +129,31 @@ describe('config.ts', () => {
     it('resolves', () => {
       expect(resolveDelegatedReasoning({ reasoning: true } as unknown as Model<Api>, 'off')).toBeUndefined();
       expect(resolveDelegatedReasoning({ reasoning: true } as unknown as Model<Api>, 'high')).toBe('high');
+    });
+  });
+  describe('resolveEffectiveClassifier', () => {
+    it('returns profile classifier first', () => {
+      const profile: RouterProfile = {
+        classifierModels: [{ model: 'openai/gpt-4o', thinking: 'low' }],
+        low: { models: ['google/gemini-flash#low'] },
+      };
+      expect(resolveEffectiveClassifier(profile, undefined)?.[0].model).toBe('openai/gpt-4o');
+    });
+    it('falls back to low tier model as classifier (follows low tier thinking)', () => {
+      const profile: RouterProfile = {
+        low: { models: ['google/gemini-flash#high', 'openai/gpt-4o-mini#off'] },
+      };
+      const result = resolveEffectiveClassifier(profile, undefined);
+      expect(result).toEqual([
+        { model: 'google/gemini-flash', thinking: 'high' },
+        { model: 'openai/gpt-4o-mini', thinking: 'off' },
+      ]);
+    });
+    it('returns undefined when no classifier and no low tier', () => {
+      const profile: RouterProfile = {
+        high: { models: ['openai/gpt-4o'] },
+      };
+      expect(resolveEffectiveClassifier(profile, undefined)).toBeUndefined();
     });
   });
 });

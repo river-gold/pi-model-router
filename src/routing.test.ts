@@ -3,11 +3,22 @@ import {
   resolveAvailableTier,
   buildRoutingDecision,
   decideRouting,
+  thinkingToTier,
 } from './routing';
 import type { Context, Message } from '@earendil-works/pi-ai';
 import type { RouterProfile } from './types';
 
 describe('routing.ts', () => {
+  describe('thinkingToTier', () => {
+    it('maps thinking levels to tiers', () => {
+      expect(thinkingToTier('high')).toBe('high');
+      expect(thinkingToTier('xhigh')).toBe('high');
+      expect(thinkingToTier('medium')).toBe('medium');
+      expect(thinkingToTier('low')).toBe('low');
+      expect(thinkingToTier('minimal')).toBe('low');
+      expect(thinkingToTier('off')).toBe('low');
+    });
+  });
   describe('resolveAvailableTier', () => {
     const profile: RouterProfile = {
       medium: { models: ['openai/gpt-4o'] },

@@ -235,6 +235,14 @@ export const resolveEffectiveClassifier = (
 ): ClassifierConfig[] | undefined => {
   if (profile.classifierModels && profile.classifierModels.length > 0) return profile.classifierModels;
   if (globalClassifiers && globalClassifiers.length > 0) return globalClassifiers;
+  // Fallback: use the low tier models as the classifier chain (follows low tier config).
+  const lowModels = profile.low?.models;
+  if (lowModels && lowModels.length > 0) {
+    return lowModels.map((m) => {
+      const { provider, modelId, thinking } = parseCanonicalModelRef(m);
+      return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
+    });
+  }
   return undefined;
 };
 
@@ -426,7 +434,12 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       `Profile "${name}" classifierModels`,
     );
 
-    normalizedProfiles[name] = { high, medium, low, ...(classifierModels ? { classifierModels } : {}) };
+    normalizedProfiles[name] = {
+      high,
+      medium,
+      low,
+      ...(classifierModels ? { classifierModels } : {}),
+    };
   }
 
   if ((raw as unknown as Record<string, unknown>).classifierModel !== undefined) {

@@ -71,6 +71,7 @@ describe('provider.ts', () => {
         registeredProviderName = name;
         registeredProviderOptions = options as unknown as RegisteredProviderOptions;
       },
+      getThinkingLevel: vi.fn().mockReturnValue('medium'),
     } as unknown as ExtensionAPI;
 
     const config: RouterConfig = {
@@ -120,7 +121,6 @@ describe('provider.ts', () => {
       persistState: vi.fn(),
       recordDebugDecision: vi.fn(),
       updateStatus: vi.fn(),
-      syncPiThinkingLevel: vi.fn(),
     };
   });
 
@@ -174,6 +174,59 @@ describe('provider.ts', () => {
       expect(mockState.routerEnabled).toBe(true);
       expect(mockState.accumulatedCost).toBe(0.0015);
       expect(mockActions.persistState).toHaveBeenCalled();
+    });
+
+    it('should select tier from thinking level when effort is set', async () => {
+      vi.mocked(mockPi.getThinkingLevel).mockReturnValue('high');
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(
+        stream as unknown as AssistantMessageEventStream,
+      );
+      vi.mocked(streamSimple).mockReturnValue(
+        (async function* () {
+          yield { type: 'text_delta', delta: 'ok' };
+          yield { type: 'done', message: { usage: { cost: { total: 0 } } } };
+        })() as unknown as ReturnType<typeof streamSimple>,
+      );
+
+      const model = {
+        id: 'balanced',
+        api: 'router-api' as Api,
+        provider: 'router',
+      } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockState.lastDecision!.tier).toBe('high');
+      expect(mockState.lastDecision!.reasoning).toContain('mapped to high tier');
+    });
+
+    it('should error when off and no classifier is available', async () => {
+      vi.mocked(mockPi.getThinkingLevel).mockReturnValue('off');
+
+      registerRouterProvider(mockPi, mockState, mockActions);
+      const stream = new MockEventStream();
+      vi.mocked(createAssistantMessageEventStream).mockReturnValue(
+        stream as unknown as AssistantMessageEventStream,
+      );
+
+      const model = {
+        id: 'balanced',
+        api: 'router-api' as Api,
+        provider: 'router',
+      } as unknown as Model<Api>;
+      const context = { messages: [{ role: 'user', content: 'hello' }] } as unknown as Context;
+
+      registeredProviderOptions!.streamSimple(model, context);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const errorEvent = stream.events.find((e) => e.type === 'error');
+      expect(errorEvent).toBeDefined();
+      expect(errorEvent?.error?.errorMessage).toContain('No classifier available');
     });
 
     it('should try fallbacks if the primary model fails', async () => {

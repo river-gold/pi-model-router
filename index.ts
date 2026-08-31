@@ -2,7 +2,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
-import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 import {
   type RouterConfig,
   type RouterPersistedState,
@@ -56,14 +55,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     }
   };
 
-  const setThinkingLevelInternally = (level: ThinkingLevel) => {
-    try {
-      pi.setThinkingLevel(level);
-    } catch {
-      // ignore - thinking level may not be supported by current model
-    }
-  };
-
   const recordDebugDecision = (decision: RoutingDecision) => {
     debugHistory = [...debugHistory, decision].slice(-MAX_DEBUG_HISTORY);
   };
@@ -102,7 +93,6 @@ const routerExtension = (pi: ExtensionAPI) => {
 
   const actions = {
     persistState,
-    syncPiThinkingLevel: setThinkingLevelInternally,
     updateStatus: (ctx: ExtensionContext) =>
       updateStatus(
         ctx,
@@ -228,7 +218,6 @@ const routerExtension = (pi: ExtensionAPI) => {
           persistState,
           recordDebugDecision,
           updateStatus: actions.updateStatus,
-          syncPiThinkingLevel: setThinkingLevelInternally,
         },
       );
     },
@@ -286,8 +275,6 @@ const routerExtension = (pi: ExtensionAPI) => {
             'warning',
           );
           routerEnabled = false;
-        } else if (lastDecision) {
-          setThinkingLevelInternally(lastDecision.thinking);
         }
       } else {
         ctx.ui.notify(

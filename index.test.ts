@@ -45,7 +45,6 @@ describe('index.ts (orchestrator)', () => {
       registerProvider: vi.fn(),
       registerCommand: vi.fn(),
       setModel: vi.fn().mockResolvedValue(true),
-      setThinkingLevel: vi.fn(),
       appendEntry: vi.fn(),
       on: vi.fn().mockImplementation((event: string, handler: Function) => {
         if (!eventListeners[event]) {
@@ -374,8 +373,10 @@ describe('index.ts (orchestrator)', () => {
         await handler({}, mockCtx);
       }
 
-      // setModel succeeds (default mock), lastDecision exists => should sync thinking level
-      expect(mockPi.setThinkingLevel).toHaveBeenCalledWith('high');
+      // setModel succeeds (default mock), lastDecision exists => should restore router model
+      expect(mockPi.setModel).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'router', id: 'balanced' }),
+      );
     });
   });
 

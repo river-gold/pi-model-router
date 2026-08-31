@@ -11,7 +11,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
-import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { RouterConfig, RoutingDecision, RouterTier } from './types';
 import {
   profileNames,
@@ -30,6 +29,7 @@ import {
 import {
   buildRoutingDecision,
   decideRouting,
+  thinkingToTier,
 } from './routing';
 import { runClassifierWithFallbacks } from './classifier';
 import {
@@ -91,7 +91,6 @@ export const registerRouterProvider = (
     persistState: () => void;
     recordDebugDecision: (decision: RoutingDecision) => void;
     updateStatus: (ctx: ExtensionContext) => void;
-    syncPiThinkingLevel: (level: ThinkingLevel) => void;
   },
 ) => {
   // Serialize commits to shared mutable state (lastDecision, accumulatedCost,
@@ -136,13 +135,14 @@ export const registerRouterProvider = (
       if (mot > maxMaxTokens) maxMaxTokens = mot;
     }
 
-    // Router models are fixed-thinking: never expose thinking levels.
-    // Tier thinking comes from model-router.json; delegated reasoning is
-    // clamped per-target model via resolveDelegatedReasoning.
+    // Router models expose thinking levels so pi's effort/thinking level can
+    // select the tier (off = auto/classifier). Delegated reasoning is clamped
+    // per-target model via resolveDelegatedReasoning.
     return {
       id: name,
       name: `Router ${name}`,
-      reasoning: false,
+      reasoning: true,
+      thinkingLevelMap: { xhigh: 'xhigh' },
       input: ['text', 'image'] as ('text' | 'image')[],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: maxContextWindow,
@@ -213,12 +213,28 @@ export const registerRouterProvider = (
             );
           }
 
+          // pi's thinking level selects the tier directly; off = auto (classifier).
+          const thinkingLevel = pi.getThinkingLevel();
+          if (thinkingLevel !== 'off' && !isToolLoop) {
+            const tier = thinkingToTier(thinkingLevel);
+            decision = buildRoutingDecision(
+              model.id,
+              profile,
+              tier,
+              `Thinking level ${thinkingLevel} mapped to ${tier} tier.`,
+              false,
+            );
+          }
+
           const effectiveClassifiers = resolveEffectiveClassifier(
             profile,
             state.currentConfig.classifierModels,
           );
 
-          if (!shouldSkipClassifier && effectiveClassifiers) {
+          if (!shouldSkipClassifier && thinkingLevel === 'off') {
+            if (!effectiveClassifiers) {
+              throw new Error('No classifier available for auto (off) mode.');
+            }
             if (options?.signal?.aborted) throw new Error('aborted');
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
             const classifierResult = await runClassifierWithFallbacks(
@@ -236,6 +252,8 @@ export const registerRouterProvider = (
                 `Classifier: ${classifierResult.reasoning}`,
                 true,
               );
+            } else {
+              throw new Error('Classifier failed to determine a tier.');
             }
           }
 
@@ -314,11 +332,9 @@ export const registerRouterProvider = (
           });
           actions.recordDebugDecision(decision);
 
-          // Sync pi's thinking level display with the router's effective thinking.
-          // Wrapped in try/catch: in subagent contexts the extension runtime
-          // may be invalidated (stale) after session teardown.
+          // Update status display. Wrapped in try/catch: in subagent contexts
+          // the extension runtime may be invalidated (stale) after session teardown.
           try {
-            actions.syncPiThinkingLevel(decision.thinking);
             if (state.lastExtensionContext) {
               actions.updateStatus(state.lastExtensionContext);
             }

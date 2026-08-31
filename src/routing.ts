@@ -1,10 +1,17 @@
 import type { Context } from '@earendil-works/pi-ai';
+import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type {
   RouterTier,
   RouterProfile,
   RoutingDecision,
 } from './types';
 import { parseCanonicalModelRef, formatModelRef } from './config';
+
+export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
+  if (thinking === 'high' || thinking === 'xhigh') return 'high';
+  if (thinking === 'medium') return 'medium';
+  return 'low';
+};
 
 export const resolveAvailableTier = (
   profile: RouterProfile,

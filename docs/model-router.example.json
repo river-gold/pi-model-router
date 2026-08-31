@@ -25,6 +25,11 @@
       "high": { "models": ["openai/gpt-5.4-pro"] },
       "medium": { "models": ["google/gemini-flash-latest"] },
       "low": { "models": ["openai/gpt-5.4-nano#off"] }
+    },
+    "effort": {
+      "high": { "models": ["openai/gpt-5.4-pro#high"] },
+      "medium": { "models": ["openai/gpt-5.4-pro#medium"] },
+      "low": { "models": ["openai/gpt-5.4-pro#low"] }
     }
   }
 }
