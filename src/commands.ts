@@ -69,7 +69,7 @@ export const registerCommands = (
     if (state.lastDecision) {
       lines.push(
         `Last routed tier: ${state.lastDecision.tier}`,
-        `Last model: ${state.lastDecision.targetProvider}/${state.lastDecision.targetModelId} (${state.lastDecision.thinking})`,
+        `Last model: ${state.lastDecision.targetProvider}/${state.lastDecision.targetModelId} (${state.lastDecision.thinking ?? 'auto'})`,
         `Reason: ${state.lastDecision.reasoning}`,
       );
     }

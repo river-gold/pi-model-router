@@ -42,7 +42,7 @@ export const buildRoutingDecision = (
   }
   const primaryRef = routed.models![0];
   const { provider, modelId, thinking } = parseCanonicalModelRef(primaryRef);
-  const effectiveThinking = thinking ?? routed.thinking ?? 'medium';
+  const effectiveThinking = thinking ?? routed.thinking;
 
   return {
     profile: profileName,

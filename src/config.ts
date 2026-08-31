@@ -172,7 +172,7 @@ export const normalizeClassifierConfig = (
   if (typeof raw === 'string' && raw.trim()) {
     try {
       const { provider, modelId, thinking } = parseCanonicalModelRef(raw.trim());
-      return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
+      return { model: formatModelRef(provider, modelId), thinking };
     } catch (error) {
       warnings.push(
         `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
@@ -188,7 +188,7 @@ export const normalizeClassifierConfig = (
       }
       try {
         const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
-        return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
+        return { model: formatModelRef(provider, modelId), thinking };
       } catch (error) {
         warnings.push(
           `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
@@ -229,24 +229,39 @@ export const normalizeClassifierModels = (
   return undefined;
 };
 
+export type ClassifierSource = 'profile' | 'global' | 'low tier';
+
+export type ClassifierEntry = ClassifierConfig & { source: ClassifierSource };
+
 export const resolveEffectiveClassifier = (
   profile: RouterProfile,
   globalClassifiers: ClassifierConfig[] | undefined,
-): { classifiers: ClassifierConfig[] | undefined; source: 'profile' | 'global' | 'low' | 'none' } => {
-  if (profile.classifierModels && profile.classifierModels.length > 0) return { classifiers: profile.classifierModels, source: 'profile' };
-  if (globalClassifiers && globalClassifiers.length > 0) return { classifiers: globalClassifiers, source: 'global' };
+): { classifiers: ClassifierEntry[] | undefined; source: string } => {
+  const chain: ClassifierEntry[] = [];
+  const sources: string[] = [];
+
+  if (profile.classifierModels && profile.classifierModels.length > 0) {
+    chain.push(...profile.classifierModels.map((c) => ({ ...c, source: 'profile' as const })));
+    sources.push('profile');
+  }
+  if (globalClassifiers && globalClassifiers.length > 0) {
+    chain.push(...globalClassifiers.map((c) => ({ ...c, source: 'global' as const })));
+    sources.push('global');
+  }
   // Fallback: use the low tier models as the classifier chain (follows low tier config).
   const lowModels = profile.low?.models;
   if (lowModels && lowModels.length > 0) {
-    return {
-      classifiers: lowModels.map((m) => {
-        const { provider, modelId, thinking } = parseCanonicalModelRef(m);
-        return { model: formatModelRef(provider, modelId), thinking: thinking ?? 'medium' };
-      }),
-      source: 'low',
-    };
+    chain.push(...lowModels.map((m) => {
+      const { provider, modelId, thinking } = parseCanonicalModelRef(m);
+      return { model: formatModelRef(provider, modelId), thinking, source: 'low tier' as const };
+    }));
+    sources.push('low tier');
   }
-  return { classifiers: undefined, source: 'none' };
+
+  return {
+    classifiers: chain.length > 0 ? chain : undefined,
+    source: sources.length > 0 ? sources.join(' → ') : 'none',
+  };
 };
 
 export const mergeConfig = (
@@ -367,7 +382,7 @@ export const normalizeTierConfig = (
 
   const primaryParsed = parseCanonicalModelRef(models[0]);
   const parsedModel = formatModelRef(primaryParsed.provider, primaryParsed.modelId);
-  const thinking: ThinkingLevel = primaryParsed.thinking ?? 'medium';
+  const thinking = primaryParsed.thinking;
 
   const tierContextWindow =
     typeof value.contextWindow === 'number' && value.contextWindow > 0

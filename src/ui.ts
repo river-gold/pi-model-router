@@ -2,7 +2,7 @@ import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { RoutingDecision } from './types';
 
 export const formatDecision = (decision: RoutingDecision): string => {
-  return `${decision.profile}: ${decision.tier} -> ${decision.targetProvider}/${decision.targetModelId} [${decision.thinking}] (${decision.reasoning})`;
+  return `${decision.profile}: ${decision.tier} -> ${decision.targetProvider}/${decision.targetModelId} [${decision.thinking ?? 'auto'}] (${decision.reasoning})`;
 };
 
 export const formatModelRef = (ref: string | undefined): string => {
@@ -23,7 +23,7 @@ export const updateStatus = (
 
     let statusText: string;
     if (lastDecision && matchesProfile) {
-      statusText = `router:${activeRouterProfile} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.thinking})`;
+      statusText = `router:${activeRouterProfile} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.thinking ?? 'auto'})`;
     } else {
       statusText = `router:${activeRouterProfile} -> waiting`;
     }

@@ -22,26 +22,17 @@ Reasoning: [one short sentence]`;
 // caller (provider) to propagate AbortSignal for cancellation/timeout.
 export type ClassifierAttempt = { model: string; thinking?: ThinkingLevel; error?: string };
 
-export const runClassifierWithFallbacks = async (
-  classifierModels: { model: string; thinking?: ThinkingLevel }[],
-  modelRegistry: ExtensionContext['modelRegistry'],
-  context: Context,
-  historySize: number,
-  signal?: AbortSignal,
-): Promise<{ tier: RouterTier; reasoning: string } | undefined> => {
-  const result = await runClassifierWithFallbacksDetailed(classifierModels, modelRegistry, context, historySize, signal);
-  return result.result;
-};
-
 export const runClassifierWithFallbacksDetailed = async (
-  classifierModels: { model: string; thinking?: ThinkingLevel }[],
+  classifierModels: { model: string; thinking?: ThinkingLevel; source?: string }[],
   modelRegistry: ExtensionContext['modelRegistry'],
   context: Context,
   historySize: number,
   signal?: AbortSignal,
+  onAttempt?: (entry: { model: string; thinking?: ThinkingLevel; source?: string }) => void,
 ): Promise<{ result?: { tier: RouterTier; reasoning: string }; attempts: ClassifierAttempt[] }> => {
   const attempts: ClassifierAttempt[] = [];
   for (const entry of classifierModels) {
+    onAttempt?.(entry);
     const result = await runClassifier(entry.model, modelRegistry, context, historySize, entry.thinking, signal);
     if (result) return { result, attempts: [...attempts, { model: entry.model, thinking: entry.thinking }] };
     attempts.push({ model: entry.model, thinking: entry.thinking, error: 'no tier parsed or model/auth/stream failed' });

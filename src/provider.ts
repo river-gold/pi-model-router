@@ -200,7 +200,7 @@ export const registerRouterProvider = (
           );
 
           const lastMessageForLoop = context.messages[context.messages.length - 1];
-          const isGoogleThinkingLoop = snapshotLastDecision?.targetProvider === 'google' && snapshotLastDecision?.thinking !== 'off';
+          const isGoogleThinkingLoop = snapshotLastDecision?.targetProvider === 'google' && snapshotLastDecision?.thinking !== undefined && snapshotLastDecision?.thinking !== 'off';
           const isToolLoop = lastMessageForLoop?.role === 'toolResult' && snapshotLastDecision?.profile === model.id && snapshotLastDecision !== undefined && !isGoogleThinkingLoop;
           const shouldSkipClassifier = isToolLoop || isGoogleThinkingLoop;
           if (isToolLoop && snapshotLastDecision) {
@@ -237,24 +237,6 @@ export const registerRouterProvider = (
             }
             if (options?.signal?.aborted) throw new Error('aborted');
 
-            // Show classifying status instead of the default "Working...".
-            const classifierLabel = effectiveClassifiers
-              .map((c) => `${c.model}${c.thinking ? `#${c.thinking}` : ''}`)
-              .join(', ');
-            const srcLabel =
-              classifierSource === 'profile'
-                ? 'profile classifier'
-                : classifierSource === 'global'
-                  ? 'global classifier'
-                  : 'low tier fallback';
-            try {
-              state.lastExtensionContext?.ui.setWorkingMessage(
-                `Classifying via ${srcLabel} (${classifierLabel})...`,
-              );
-            } catch {
-              // Stale extension context — skip non-critical UI updates.
-            }
-
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
             const { result: classifierResult, attempts } = await runClassifierWithFallbacksDetailed(
               effectiveClassifiers,
@@ -262,6 +244,16 @@ export const registerRouterProvider = (
               context,
               effectiveHistorySize,
               options?.signal,
+              (entry) => {
+                // Show only the model currently being requested.
+                try {
+                  state.lastExtensionContext?.ui.setWorkingMessage(
+                    `Classifying via ${entry.source ?? classifierSource} (${entry.model}${entry.thinking ? `#${entry.thinking}` : ''})...`,
+                  );
+                } catch {
+                  // Stale extension context — skip non-critical UI updates.
+                }
+              },
             );
 
             try {
@@ -280,8 +272,7 @@ export const registerRouterProvider = (
               );
             } else {
               const attempted = attempts.map((a) => `${a.model}${a.thinking ? `#${a.thinking}` : ''} (${a.error})`).join(', ');
-              const src = classifierSource === 'low' ? 'low tier fallback' : classifierSource;
-              throw new Error(`Classifier failed to determine a tier. Source: ${src}. Attempted: ${attempted || 'none'}. Models may be unregistered, missing API keys, or returned invalid format (expected "Tier: high|medium|low").`);
+              throw new Error(`Classifier failed to determine a tier. Source: ${classifierSource}. Attempted: ${attempted || 'none'}. Models may be unregistered, missing API keys, or returned invalid format (expected "Tier: high|medium|low").`);
             }
           }
 
@@ -291,8 +282,10 @@ export const registerRouterProvider = (
             lastMessage?.role === 'toolResult' &&
             previousDecision?.profile === model.id &&
             previousDecision.targetProvider === 'google' &&
+            previousDecision.thinking !== undefined &&
             previousDecision.thinking !== 'off' &&
             decision.targetProvider === 'google' &&
+            decision.thinking !== undefined &&
             decision.thinking !== 'off' &&
             previousDecision.targetLabel !== decision.targetLabel;
 

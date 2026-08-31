@@ -40,7 +40,7 @@ export interface RoutingDecision {
   targetModelId: string;
   targetLabel: string;
   reasoning: string;
-  thinking: ThinkingLevel;
+  thinking?: ThinkingLevel;
   timestamp: number;
   isClassifier?: boolean;
   isFallback?: boolean;
