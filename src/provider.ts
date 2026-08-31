@@ -56,31 +56,14 @@ export const registerLocalHandler = (
   getLocalHandlers().set(prefix, handler);
 };
 
-const REGISTRY_WAIT_TIMEOUT_MS = 5000;
-const REGISTRY_WAIT_INITIAL_DELAY_MS = 50;
-const REGISTRY_WAIT_MAX_DELAY_MS = 500;
-
-/**
- * Wait for the model registry to become available with exponential backoff.
- * This handles the race condition where subagents (e.g. from pi-dynamic-workflows)
- * invoke the router provider before session_start has fired in their context.
- */
 export const waitForRegistry = async (
   state: {
     readonly currentModelRegistry:
       | ExtensionContext['modelRegistry']
       | undefined;
   },
-  timeoutMs: number = REGISTRY_WAIT_TIMEOUT_MS,
 ): Promise<ExtensionContext['modelRegistry'] | undefined> => {
-  if (state.currentModelRegistry) return state.currentModelRegistry;
-
-  const start = Date.now();
-  for (let delay = REGISTRY_WAIT_INITIAL_DELAY_MS; Date.now() - start < timeoutMs; delay = Math.min(delay * 2, REGISTRY_WAIT_MAX_DELAY_MS)) {
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    if (state.currentModelRegistry) return state.currentModelRegistry;
-  }
-  return undefined;
+  return state.currentModelRegistry;
 };
 
 export const createErrorMessage = (
@@ -120,8 +103,7 @@ export const registerRouterProvider = (
     routerEnabled: boolean;
     lastDecision: RoutingDecision | undefined;
     accumulatedCost: number;
-    /** Override for the registry wait timeout (for testing). */
-    readonly registryTimeoutMs?: number;
+
   },
   actions: {
     persistState: () => void;
@@ -208,10 +190,10 @@ export const registerRouterProvider = (
           // Wait for the router to be fully initialized (session_start sets currentModelRegistry).
           // This handles the race where subagents (e.g. from pi-dynamic-workflows) invoke
           // the router provider before session_start has fired in their context.
-          const registry = await waitForRegistry(state, state.registryTimeoutMs);
+          const registry = await waitForRegistry(state);
           if (!registry) {
             throw new Error(
-              'Router provider initialization timed out. session_start may not have fired.',
+              'Router provider not initialized. session_start may not have fired.',
             );
           }
           const profile = state.currentConfig.profiles[model.id];
@@ -220,26 +202,14 @@ export const registerRouterProvider = (
           }
 
           // Per-request isolation: snapshot shared state and work with locals.
-          // All reads of lastDecision use the snapshot to avoid races with
-          // concurrent requests. Shared writes are committed via mutex.
           const snapshotLastDecision = state.lastDecision;
-          const effectiveSignal: AbortSignal | undefined = (() => {
-            const s = options?.signal;
-            const timeoutFn = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout;
-            const anyFn = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
-            if (s) {
-              const t = timeoutFn?.(30000);
-              if (t && anyFn) return anyFn([s, t]);
-              return s;
-            }
-            return timeoutFn?.(30000);
-          })();
 
           await withCommitMutex(async () => {
             state.selectedProfile = model.id;
             state.routerEnabled = true;
           });
 
+          if (options?.signal?.aborted) throw new Error('aborted');
           let decision: RoutingDecision = decideRouting(
             context,
             model.id,
@@ -267,9 +237,7 @@ export const registerRouterProvider = (
           );
 
           if (!shouldSkipClassifier && effectiveClassifier) {
-            if (effectiveSignal?.aborted) {
-              throw new Error('aborted');
-            }
+            if (options?.signal?.aborted) throw new Error('aborted');
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
             const classifierResult = await runClassifier(
               effectiveClassifier.model,
@@ -277,9 +245,7 @@ export const registerRouterProvider = (
               context,
               effectiveHistorySize,
               effectiveClassifier.thinking,
-              effectiveSignal,
             );
-            if (effectiveSignal?.aborted) throw new Error('aborted');
             if (classifierResult) {
               decision = buildRoutingDecision(
                 model.id,
@@ -439,9 +405,7 @@ export const registerRouterProvider = (
               targetModel,
             );
 
-            if (effectiveSignal?.aborted) {
-              throw new Error('aborted');
-            }
+            if (options?.signal?.aborted) throw new Error('aborted');
             let contentReceivedForTry = false;
             let pendingCostDelta = 0;
             try {
@@ -492,13 +456,8 @@ export const registerRouterProvider = (
               }
 
               // Strip pi's reasoning from options — the router controls thinking
-              // Keep effectiveSignal as the signal for delegated calls
-              const { reasoning: _piReasoning, signal: _piSignal, ...delegationOptionsBase } =
-                (options ?? {}) as SimpleStreamOptions & { signal?: AbortSignal };
-              const delegationOptions = {
-                ...delegationOptionsBase,
-                ...(effectiveSignal ? { signal: effectiveSignal } : {}),
-              };
+              const { reasoning: _piReasoning, ...delegationOptions } =
+                (options ?? {}) as SimpleStreamOptions;
 
               // Hook for local providers (e.g., pi-agent-bridge://) to handle without HTTP
               let delegatedStream: AssistantMessageEventStream | undefined;
@@ -544,9 +503,7 @@ export const registerRouterProvider = (
               let bufferedErrorMessage: string | undefined;
               if (!delegatedStream) throw new Error('No delegated stream available');
               for await (const event of delegatedStream) {
-                if (effectiveSignal?.aborted) {
-                  throw new Error('aborted');
-                }
+                if (options?.signal?.aborted) throw new Error('aborted');
                 bufferedEvents.push(event);
                 if ((event as { type: string }).type === 'done') {
                   gotDone = true;
@@ -582,7 +539,6 @@ export const registerRouterProvider = (
                   decision.targetModelId = fid;
                   decision.targetLabel = modelRef;
                   await withCommitMutex(async () => {
-                    // Keep state.lastDecision in sync with fallback target
                     if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
                       state.lastDecision = { ...decision };
                     }
@@ -593,17 +549,15 @@ export const registerRouterProvider = (
               }
               if (gotError) {
                 if (contentReceivedForTry) {
-                  // Content already buffered from this attempt; do not try fallback to avoid duplicate partial output.
                   for (const ev of bufferedEvents) stream.push(ev as never);
                   throw new Error(`NON_RETRYABLE: ${bufferedErrorMessage || 'Model failed after sending content.'}`);
                 }
                 throw new Error(bufferedErrorMessage || 'Model failed before sending content.');
               }
-              // Stream ended without terminal event -> treat as failure so fallback can be tried (if no content) or error surfaces.
               throw new Error('Model stream ended without terminal event.');
             } catch (err) {
-              if (err instanceof Error && (err.message.startsWith('NON_RETRYABLE:') || err.message === 'aborted')) {
-                lastError = err instanceof Error && err.message.startsWith('NON_RETRYABLE:') ? new Error(err.message.slice('NON_RETRYABLE: '.length)) : err;
+              if (err instanceof Error && err.message.startsWith('NON_RETRYABLE:')) {
+                lastError = new Error(err.message.slice('NON_RETRYABLE: '.length));
                 break;
               }
               // If content was sent before the thrown error, do not retry fallback to avoid duplicate output.
@@ -631,7 +585,6 @@ export const registerRouterProvider = (
         } catch (error) {
           const isAborted = error instanceof Error && error.message === 'aborted';
           if (isAborted) {
-            // User cancelled - graceful termination, no fallback, no error
             stream.push({
               type: 'done',
               reason: 'stop',

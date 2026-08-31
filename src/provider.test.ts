@@ -404,7 +404,6 @@ describe('provider.ts', () => {
 
     it('should push error event when currentModelRegistry never becomes available', async () => {
       mockState.currentModelRegistry = undefined;
-      mockState.registryTimeoutMs = 100; // Use short timeout for test
       registerRouterProvider(mockPi, mockState, mockActions);
       const stream = new MockEventStream();
       vi.mocked(createAssistantMessageEventStream).mockReturnValue(
@@ -424,16 +423,15 @@ describe('provider.ts', () => {
         () => {
           const errorEvent = stream.events.find((e) => e.type === 'error');
           expect(errorEvent).toBeDefined();
-          expect(errorEvent?.error?.errorMessage).toContain('timed out');
+          expect(errorEvent?.error?.errorMessage).toContain('not initialized');
         },
         { timeout: 500 },
       );
       expect(mockActions.persistState).toHaveBeenCalled();
     });
 
-    it('should wait and succeed when currentModelRegistry becomes available after a delay', async () => {
+    it('should fail immediately when registry becomes available after delay (no wait)', async () => {
       mockState.currentModelRegistry = undefined;
-      mockState.registryTimeoutMs = 500; // Allow enough time but not too long
       const mockRegistry = {
         find: (provider: string, modelId: string) => {
           if (provider === 'openai' || provider === 'google') {
@@ -469,17 +467,17 @@ describe('provider.ts', () => {
 
       registeredProviderOptions!.streamSimple(model, context);
 
-      // Simulate session_start setting the registry after 10ms
+      // Even if registry becomes available after 10ms, provider already failed without waiting
       setTimeout(() => {
         mockState.currentModelRegistry = mockRegistry;
       }, 10);
 
       await vi.waitFor(
         () => {
-          expect(mockState.routerEnabled).toBe(true);
-          expect(mockState.selectedProfile).toBe('balanced');
+          const errorEvent = stream.events.find((e) => e.type === 'error');
+          expect(errorEvent).toBeDefined();
         },
-        { timeout: 1000 },
+        { timeout: 500 },
       );
     });
 
@@ -677,29 +675,30 @@ describe('provider.ts', () => {
     it('should return registry immediately if already available', async () => {
       const mockRegistry = { find: vi.fn() } as unknown as ExtensionContext['modelRegistry'];
       const state = { currentModelRegistry: mockRegistry };
-      const result = await waitForRegistry(state, 1000);
+      const result = await waitForRegistry(state);
       expect(result).toBe(mockRegistry);
     });
 
-    it('should wait and return registry when it becomes available', async () => {
+    it('should return undefined immediately if not available (no wait)', async () => {
+      const state: { currentModelRegistry: ExtensionContext['modelRegistry'] | undefined } = {
+        currentModelRegistry: undefined,
+      };
+      const result = await waitForRegistry(state);
+      expect(result).toBeUndefined();
+    });
+
+    it('should return undefined immediately even if registry becomes available later', async () => {
       const mockRegistry = { find: vi.fn() } as unknown as ExtensionContext['modelRegistry'];
       const state: { currentModelRegistry: ExtensionContext['modelRegistry'] | undefined } = {
         currentModelRegistry: undefined,
       };
-
-      // Set registry after 100ms
       setTimeout(() => {
         state.currentModelRegistry = mockRegistry;
-      }, 100);
-
-      const result = await waitForRegistry(state, 2000);
-      expect(result).toBe(mockRegistry);
-    });
-
-    it('should return undefined after timeout if registry never becomes available', async () => {
-      const state = { currentModelRegistry: undefined };
-      const result = await waitForRegistry(state, 200);
+      }, 10);
+      const result = await waitForRegistry(state);
       expect(result).toBeUndefined();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(state.currentModelRegistry).toBe(mockRegistry);
     });
   });
 });
