@@ -78,17 +78,7 @@ export const getHistoryPairsText = (context: Context, pairCount: number): string
   return pairs.join('\n---\n');
 };
 
- // Utility helper; production classifier builds its own prompt via getHistoryPairsText/getLastUserText
-// (src/classifier.ts composes history + latest message). Kept for tests/other callers.
-export const getPromptWithHistory = (context: Context, historySize: number): string => {
-  const promptText = getLastUserText(context);
-  if (!historySize || historySize <= 0) return promptText;
-  const historyText = getHistoryPairsText(context, historySize);
-  if (!historyText) return promptText;
-  return `${historyText}\n---\n${promptText}`;
-};
-
-// Rough token estimate. chars/3 underestimates CJK (한글 1 char ≈ 1–1.5 tokens);
+ // Rough token estimate. chars/3 underestimates CJK (한글 1 char ≈ 1–1.5 tokens);
 // a safer heuristic would be chars/2.5, but keep /3 for backward compat.
 // systemPrompt/tools/image tokens are not fully included in truncateContext —
 // callers must account for that budget externally.

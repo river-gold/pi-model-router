@@ -1,11 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runClassifier, CLASSIFIER_SYSTEM_PROMPT } from './classifier';
-import { streamSimple } from '@earendil-works/pi-ai/compat';
 import type { Context } from '@earendil-works/pi-ai';
 
-vi.mock('@earendil-works/pi-ai/compat', () => ({
-  streamSimple: vi.fn(),
-}));
+const streamSimple = vi.fn();
 
 describe('classifier.ts', () => {
   const mockRegistry = {
@@ -16,7 +13,7 @@ describe('classifier.ts', () => {
       return undefined;
     },
     getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: 'k', headers: {} }),
-    getProviderAuth: async () => undefined,
+    getProvider: () => ({ streamSimple }),
   } as unknown as import('@earendil-works/pi-coding-agent').ExtensionContext['modelRegistry'];
 
   const baseContext: Context = {

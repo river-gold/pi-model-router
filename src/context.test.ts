@@ -3,7 +3,6 @@ import {
   extractTextFromContent,
   getLastUserText,
   getHistoryPairsText,
-  getPromptWithHistory,
   hasImageAttachment,
   estimateTokens,
   truncateContext,
@@ -72,23 +71,6 @@ describe('context.ts', () => {
         ],
       };
       expect(getHistoryPairsText(ctx, 1)).toBe('u1\ntool out');
-    });
-  });
-
-  describe('getPromptWithHistory', () => {
-    it('should return only prompt when historySize 0', () => {
-      const ctx: Context = { messages: [{ role: 'user', content: 'hello', timestamp: 1 }] };
-      expect(getPromptWithHistory(ctx, 0)).toBe('hello');
-    });
-    it('should combine history pairs and current prompt', () => {
-      const ctx: Context = {
-        messages: [
-          { role: 'user', content: 'u1', timestamp: 1 },
-          { role: 'assistant', content: 'a1', timestamp: 2 } as unknown as Message,
-          { role: 'user', content: 'current', timestamp: 3 },
-        ],
-      };
-      expect(getPromptWithHistory(ctx, 1)).toBe('u1\na1\n---\ncurrent');
     });
   });
 

@@ -1,11 +1,10 @@
-import { streamSimple } from '@earendil-works/pi-ai/compat';
 import type { Context } from '@earendil-works/pi-ai';
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { RouterTier } from './types';
 import { parseCanonicalModelRef, isRouterTier } from './config';
-import { resolveDelegatedModel, type RegistryWithProviderAuth } from './constants';
-import { extractTextFromContent, getLastUserText, getHistoryPairsText } from './context';
+import { getLastUserText, getHistoryPairsText } from './context';
+import { modelWithAuthBaseUrl, streamDelegated } from './stream';
 
 export const CLASSIFIER_SYSTEM_PROMPT = `You are a model router classifier. Your job is to categorize the user's latest request into one of three tiers: "high", "medium", or "low".
 
@@ -60,10 +59,9 @@ export const runClassifier = async (
     if (!auth.ok || !auth.apiKey) return undefined;
     const apiKey = auth.apiKey;
     const headers = auth.headers;
-
-    const requestModel = await resolveDelegatedModel(
-      modelRegistry as unknown as RegistryWithProviderAuth,
+    const requestModel = modelWithAuthBaseUrl(
       model,
+      auth as { baseUrl?: string },
     );
 
     const promptText = getLastUserText(context);
@@ -89,12 +87,12 @@ export const runClassifier = async (
         ? thinking
         : undefined;
 
-    const stream = streamSimple(requestModel, classifierContext, {
+    const stream = streamDelegated(modelRegistry, requestModel, classifierContext, {
       apiKey,
       headers,
       ...(reasoningOption ? { reasoning: reasoningOption } : {}),
       ...(signal ? { signal } : {}),
-    } as unknown as Parameters<typeof streamSimple>[2]);
+    });
     let fullText = '';
     for await (const event of stream) {
       if (

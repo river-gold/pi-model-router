@@ -6,9 +6,7 @@ import {
   type Context,
   type Model,
   type SimpleStreamOptions,
-  type Message,
 } from '@earendil-works/pi-ai';
-import { streamSimple } from '@earendil-works/pi-ai/compat';
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -28,8 +26,6 @@ import {
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_TOKENS,
-  resolveDelegatedModel,
-  type RegistryWithProviderAuth,
 } from './constants';
 import {
   buildRoutingDecision,
@@ -38,24 +34,9 @@ import {
 import { runClassifierWithFallbacks } from './classifier';
 import {
   hasImageAttachment,
-  getLastUserText,
-  estimateTokens,
   truncateContext,
 } from './context';
-// Hook for local providers like pi-agent-bridge to register without hardcoding.
-// pi-agent-bridge can do: (globalThis as any).__piModelRouterLocalHandlers?.set("pi-agent-bridge://", handler)
-const getLocalHandlers = (): Map<string, (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream> => {
-  const g = globalThis as unknown as { __piModelRouterLocalHandlers?: Map<string, (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream> };
-  if (!g.__piModelRouterLocalHandlers) g.__piModelRouterLocalHandlers = new Map();
-  return g.__piModelRouterLocalHandlers;
-};
-
-export const registerLocalHandler = (
-  prefix: string,
-  handler: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream,
-) => {
-  getLocalHandlers().set(prefix, handler);
-};
+import { modelWithAuthBaseUrl, streamDelegated } from './stream';
 
 export const waitForRegistry = async (
   state: {
@@ -386,16 +367,9 @@ export const registerRouterProvider = (
             }
             const apiKey = auth.apiKey;
             const headers = auth.headers;
-
-            // getApiKeyAndHeaders() only resolves { apiKey, headers } — it does
-            // not surface a credential-specific baseUrl. Some OAuth providers
-            // (e.g. GitHub Copilot business/enterprise tenants) resolve a
-            // per-token proxy endpoint that differs from the model's static
-            // baseUrl. Without applying it here, delegated requests are sent
-            // to the wrong host and fail with 421 Misdirected Request.
-            const requestModel = await resolveDelegatedModel(
-              registry as unknown as RegistryWithProviderAuth,
+            const requestModel = modelWithAuthBaseUrl(
               targetModel,
+              auth as { baseUrl?: string },
             );
 
             if (options?.signal?.aborted) throw new Error('aborted');
@@ -452,42 +426,19 @@ export const registerRouterProvider = (
               const { reasoning: _piReasoning, ...delegationOptions } =
                 (options ?? {}) as SimpleStreamOptions;
 
-              // Hook for local providers (e.g., pi-agent-bridge://) to handle without HTTP
-              let delegatedStream: AssistantMessageEventStream | undefined;
-              const localHandlers = getLocalHandlers();
-              let handledLocally = false;
-              for (const [prefix, handler] of localHandlers) {
-                if (requestModel.baseUrl.startsWith(prefix)) {
-                  delegatedStream = handler(
-                    requestModel,
-                    effectiveContext,
-                    {
-                      ...delegationOptions,
-                      apiKey,
-                      headers,
-                      ...(delegatedReasoning
-                        ? { reasoning: delegatedReasoning }
-                        : {}),
-                    },
-                  );
-                  handledLocally = true;
-                  break;
-                }
-              }
-              if (!handledLocally) {
-                delegatedStream = streamSimple(
-                  requestModel,
-                  effectiveContext,
-                  {
-                    ...delegationOptions,
-                    apiKey,
-                    headers,
-                    ...(delegatedReasoning
-                      ? { reasoning: delegatedReasoning }
-                      : {}),
-                  },
-                );
-              }
+              const delegatedStream = streamDelegated(
+                registry,
+                requestModel,
+                effectiveContext,
+                {
+                  ...delegationOptions,
+                  apiKey,
+                  headers,
+                  ...(delegatedReasoning
+                    ? { reasoning: delegatedReasoning }
+                    : {}),
+                },
+              );
 
               // Buffer events until success to avoid pushing primary start/content before fallback succeeds (would duplicate partial assistant messages in core).
               const bufferedEvents: unknown[] = [];

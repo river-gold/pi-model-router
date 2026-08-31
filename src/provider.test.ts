@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerRouterProvider, createErrorMessage, waitForRegistry } from './provider';
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai';
-import { streamSimple } from '@earendil-works/pi-ai/compat';
 import type { Api, Context, Model, AssistantMessageEventStream, SimpleStreamOptions } from '@earendil-works/pi-ai';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
@@ -28,9 +27,7 @@ vi.mock('@earendil-works/pi-ai', () => ({
   createAssistantMessageEventStream: vi.fn(),
 }));
 
-vi.mock('@earendil-works/pi-ai/compat', () => ({
-  streamSimple: vi.fn(),
-}));
+const streamSimple = vi.fn();
 
 type ProviderState = Parameters<typeof registerRouterProvider>[1];
 type ProviderActions = Parameters<typeof registerRouterProvider>[2];
@@ -101,6 +98,7 @@ describe('provider.ts', () => {
         apiKey: 'test-key',
         headers: {},
       }),
+      getProvider: () => ({ streamSimple }),
     } as unknown as ExtensionContext['modelRegistry'];
 
     mockState = {
