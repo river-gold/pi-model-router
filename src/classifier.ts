@@ -188,7 +188,7 @@ export const runClassifier = async (
 				};
 			}
 		}
-	} catch (error) {
+	} catch {
 		if (signal?.aborted) return undefined;
 	}
 	return undefined;

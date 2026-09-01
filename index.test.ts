@@ -23,7 +23,7 @@ vi.mock("./src/config", () => {
 			warnings: [],
 		}),
 		profileNames: () => ["balanced"],
-		resolveProfileName: (config: unknown, name: unknown) =>
+		resolveProfileName: (_config: unknown, name: unknown) =>
 			name === "balanced" ? "balanced" : undefined,
 		parseCanonicalModelRef: (_ref: string) => ({
 			provider: "openai",
@@ -70,7 +70,7 @@ describe("index.ts (orchestrator)", () => {
 		ui: {
 			setStatus: vi.fn(),
 			setHiddenThinkingLabel: vi.fn(),
-			theme: { fg: (c: string, text: string) => text },
+			theme: { fg: (_c: string, text: string) => text },
 			notify: vi.fn(),
 		},
 	});

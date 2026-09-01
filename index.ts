@@ -2,22 +2,21 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import {
-	type RouterConfig,
-	type RouterPersistedState,
-	type RoutingDecision,
-	type CustomSessionEntry,
-} from "./src/types";
+import { registerCommands } from "./src/commands";
 import {
 	loadRouterConfig,
 	profileNames,
 	resolveProfileName,
 } from "./src/config";
 import { MAX_DEBUG_HISTORY } from "./src/constants";
-import { isRouterPersistedState, buildPersistedState } from "./src/state";
-import { updateStatus } from "./src/ui";
-import { registerCommands } from "./src/commands";
 import { registerRouterProvider } from "./src/provider";
+import { buildPersistedState, isRouterPersistedState } from "./src/state";
+import type {
+	CustomSessionEntry,
+	RouterConfig,
+	RoutingDecision,
+} from "./src/types";
+import { updateStatus } from "./src/ui";
 
 const routerExtension = (pi: ExtensionAPI) => {
 	let currentConfig: RouterConfig = { profiles: {} };
@@ -26,7 +25,7 @@ const routerExtension = (pi: ExtensionAPI) => {
 	let lastDecision: RoutingDecision | undefined;
 	let debugEnabled = false;
 	let routerEnabled = false;
-	let selectedProfile: string | undefined = undefined;
+	let selectedProfile: string | undefined;
 	let lastRegisteredModels = "";
 	let debugHistory: RoutingDecision[] = [];
 	let lastNonRouterModel: string | undefined;

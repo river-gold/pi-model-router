@@ -1,16 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { registerRouterProvider } from "./provider";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type {
 	Api,
+	AssistantMessageEventStream,
 	Context,
 	Model,
-	AssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { registerRouterProvider } from "./provider";
 import type { RouterConfig } from "./types";
 
 vi.mock("@earendil-works/pi-ai", () => ({
@@ -20,8 +20,8 @@ vi.mock("@earendil-works/pi-ai", () => ({
 const streamSimple = vi.fn();
 
 class MockEventStream {
-	events: any[] = [];
-	push(e: any) {
+	events: unknown[] = [];
+	push(e: unknown) {
 		this.events.push(e);
 	}
 	end() {}
@@ -29,14 +29,23 @@ class MockEventStream {
 
 describe("provider failure memory (session-scoped, chain-local)", () => {
 	let mockPi: ExtensionAPI;
-	let mockState: any;
-	let mockActions: any;
-	let registered: any;
+	let mockState: Record<string, unknown> & {
+		failedByChain: Map<string, Set<string>>;
+	};
+	let mockActions: Record<string, unknown>;
+	let registered: Record<string, unknown> & {
+		streamSimple: (model: Model<Api>, ctx: Context) => void;
+	};
 
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockPi = {
-			registerProvider: (_: string, opts: any) => {
+			registerProvider: (
+				_: string,
+				opts: Record<string, unknown> & {
+					streamSimple: (model: Model<Api>, ctx: Context) => void;
+				},
+			) => {
 				registered = opts;
 			},
 			getThinkingLevel: vi.fn().mockReturnValue("medium"),
@@ -84,7 +93,11 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 	});
 
 	it("skips failed model on next turn within same tier chain", async () => {
-		registerRouterProvider(mockPi, mockState, mockActions);
+		registerRouterProvider(
+			mockPi,
+			mockState as unknown as Parameters<typeof registerRouterProvider>[1],
+			mockActions as unknown as Parameters<typeof registerRouterProvider>[2],
+		);
 		const s1 = new MockEventStream();
 		vi.mocked(createAssistantMessageEventStream).mockReturnValue(
 			s1 as unknown as AssistantMessageEventStream,
@@ -95,13 +108,14 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 			call++;
 			if (m.id === "gpt-4o-mini") {
 				return (async function* () {
+					if (Math.random() < 0) yield undefined;
 					throw new Error("429 rate limit exceeded");
-				})() as any;
+				})() as unknown;
 			}
 			return (async function* () {
 				yield { type: "text_delta", delta: "ok" };
 				yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-			})() as any;
+			})() as unknown;
 		});
 		const model = {
 			id: "balanced",
@@ -131,18 +145,26 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 			return (async function* () {
 				yield { type: "text_delta", delta: "ok2" };
 				yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-			})() as any;
+			})() as unknown;
 		});
 		registered.streamSimple(model, ctx);
 		await new Promise((r) => setTimeout(r, 120));
 		expect(call).toBe(1);
 		expect(
-			s2.events.some((e: any) => e.type === "text_delta" && e.delta === "ok2"),
+			s2.events.some(
+				(e: unknown) =>
+					(e as { type: string; delta: string }).type === "text_delta" &&
+					(e as { type: string; delta: string }).delta === "ok2",
+			),
 		).toBe(true);
 	});
 
 	it("does not skip across different tier (chain-local)", async () => {
-		registerRouterProvider(mockPi, mockState, mockActions);
+		registerRouterProvider(
+			mockPi,
+			mockState as unknown as Parameters<typeof registerRouterProvider>[1],
+			mockActions as unknown as Parameters<typeof registerRouterProvider>[2],
+		);
 		mockState.failedByChain.set(
 			"route:balanced:medium",
 			new Set(["openai/gpt-4o-mini"]),
@@ -152,13 +174,13 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 			s as unknown as AssistantMessageEventStream,
 		);
 		vi.mocked(mockPi.getThinkingLevel).mockReturnValue("high");
-		let tried: string[] = [];
+		const tried: string[] = [];
 		vi.mocked(streamSimple).mockImplementation((m: Model<Api>) => {
 			tried.push(m.id);
 			return (async function* () {
 				yield { type: "text_delta", delta: "ok" };
 				yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-			})() as any;
+			})() as unknown;
 		});
 		const model = {
 			id: "balanced",
@@ -174,7 +196,11 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 	});
 
 	it("does not record when content was received before error", async () => {
-		registerRouterProvider(mockPi, mockState, mockActions);
+		registerRouterProvider(
+			mockPi,
+			mockState as unknown as Parameters<typeof registerRouterProvider>[1],
+			mockActions as unknown as Parameters<typeof registerRouterProvider>[2],
+		);
 		const s = new MockEventStream();
 		vi.mocked(createAssistantMessageEventStream).mockReturnValue(
 			s as unknown as AssistantMessageEventStream,
@@ -186,7 +212,7 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 					type: "error",
 					error: { errorMessage: "429 rate limit exceeded" },
 				};
-			})() as any;
+			})() as unknown;
 		});
 		const model = {
 			id: "balanced",
@@ -202,11 +228,17 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 			mockState.failedByChain.get("route:balanced:medium"),
 		).toBeUndefined();
 		// should have pushed error with NON_RETRYABLE handling (no fallback)
-		expect(s.events.some((e: any) => e.type === "error")).toBe(true);
+		expect(
+			s.events.some((e: unknown) => (e as { type: string }).type === "error"),
+		).toBe(true);
 	});
 
 	it("returns error when all models in tier are skipped (exhaustion)", async () => {
-		registerRouterProvider(mockPi, mockState, mockActions);
+		registerRouterProvider(
+			mockPi,
+			mockState as unknown as Parameters<typeof registerRouterProvider>[1],
+			mockActions as unknown as Parameters<typeof registerRouterProvider>[2],
+		);
 		mockState.failedByChain.set(
 			"route:balanced:medium",
 			new Set(["openai/gpt-4o-mini", "openai/gpt-4o"]),
@@ -225,7 +257,9 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
 		} as unknown as Context;
 		registered.streamSimple(model, ctx);
 		await new Promise((r) => setTimeout(r, 120));
-		const err = s.events.find((e: any) => e.type === "error");
+		const err = s.events.find(
+			(e: unknown) => (e as { type: string }).type === "error",
+		) as unknown as { error: { errorMessage: string } };
 		expect(err).toBeDefined();
 		expect(err.error.errorMessage).toContain(
 			"All models in medium tier are marked failed",

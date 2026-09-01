@@ -1,21 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { describe, expect, it, vi } from "vitest";
 import {
-	parseConfigFile,
-	mergeConfig,
-	parseCanonicalModelRef,
-	normalizeTierConfig,
-	normalizeConfig,
-	loadRouterConfig,
-	profileNames,
-	resolveProfileName,
-	resolveContextWindow,
-	resolveMaxTokens,
-	resolveDelegatedReasoning,
-	resolveEffectiveClassifier,
 	isObjectRecord,
 	isRouterTier,
+	mergeConfig,
+	normalizeConfig,
+	normalizeTierConfig,
+	parseCanonicalModelRef,
+	parseConfigFile,
+	resolveDelegatedReasoning,
+	resolveEffectiveClassifier,
 } from "./config";
-import type { Api, Model } from "@earendil-works/pi-ai";
 import type { RouterConfig, RouterProfile } from "./types";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({

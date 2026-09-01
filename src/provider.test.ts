@@ -1,23 +1,23 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-	registerRouterProvider,
-	createErrorMessage,
-	waitForRegistry,
-} from "./provider";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type {
 	Api,
+	AssistantMessageEventStream,
 	Context,
 	Model,
-	AssistantMessageEventStream,
 	SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { RouterConfig, RoutingDecision, RouterTier } from "./types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	createErrorMessage,
+	registerRouterProvider,
+	waitForRegistry,
+} from "./provider";
+import type { RouterConfig } from "./types";
 
 interface MockEvent {
 	type: string;
@@ -177,7 +177,7 @@ describe("provider.ts", () => {
 			registerRouterProvider(mockPi, mockState, mockActions);
 			expect(registeredProviderName).toBe("router");
 			expect(registeredProviderOptions).toBeDefined();
-			expect(registeredProviderOptions!.models[0].id).toBe("balanced");
+			expect(registeredProviderOptions?.models[0].id).toBe("balanced");
 		});
 
 		it("should delegate streams and accumulate cost on success", async () => {
@@ -204,7 +204,7 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			const providerStream = registeredProviderOptions!.streamSimple(
+			const _providerStream = registeredProviderOptions?.streamSimple(
 				model,
 				context,
 			);
@@ -242,11 +242,11 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
-			expect(mockState.lastDecision!.tier).toBe("high");
-			expect(mockState.lastDecision!.reasoning).toContain(
+			expect(mockState.lastDecision?.tier).toBe("high");
+			expect(mockState.lastDecision?.reasoning).toContain(
 				"mapped to high tier",
 			);
 		});
@@ -280,11 +280,11 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
-			expect(mockState.lastDecision!.tier).toBe("low");
-			expect(mockState.lastDecision!.reasoning).toContain("resolved to low");
+			expect(mockState.lastDecision?.tier).toBe("low");
+			expect(mockState.lastDecision?.reasoning).toContain("resolved to low");
 		});
 
 		it("should error when off and no classifier is available", async () => {
@@ -305,7 +305,7 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			const errorEvent = stream.events.find((e) => e.type === "error");
@@ -328,6 +328,7 @@ describe("provider.ts", () => {
 				if (model.id === "gpt-4o-mini") {
 					// Force fail for primary
 					return (async function* () {
+						if (Math.random() < 0) yield undefined;
 						throw new Error("primary failed");
 					})() as unknown as ReturnType<typeof streamSimple>;
 				}
@@ -352,13 +353,13 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			expect(callCount).toBe(2);
 			expect(mockState.accumulatedCost).toBe(0.0005);
-			expect(mockState.lastDecision!.isFallback).toBe(true);
+			expect(mockState.lastDecision?.isFallback).toBe(true);
 		});
 
 		it("should preserve previous Google model on Google thinking tool continuation", async () => {
@@ -396,10 +397,11 @@ describe("provider.ts", () => {
 			};
 
 			// Set up registry search
-			mockState.currentModelRegistry!.find = (
-				provider: string,
-				modelId: string,
-			) => {
+			(
+				mockState.currentModelRegistry as NonNullable<
+					typeof mockState.currentModelRegistry
+				>
+			).find = (provider: string, modelId: string) => {
 				return {
 					provider,
 					id: modelId,
@@ -427,13 +429,13 @@ describe("provider.ts", () => {
 				],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			// The decision should be updated to preserve the previous model
-			expect(mockState.lastDecision!.targetModelId).toBe("gemini-2.5-pro");
-			expect(mockState.lastDecision!.reasoning).toContain(
+			expect(mockState.lastDecision?.targetModelId).toBe("gemini-2.5-pro");
+			expect(mockState.lastDecision?.reasoning).toContain(
 				"Preserved google/gemini-2.5-pro for a Google tool-result continuation",
 			);
 		});
@@ -447,7 +449,7 @@ describe("provider.ts", () => {
 
 			let truncatedContextPassed: Context | null = null;
 			vi.mocked(streamSimple).mockImplementation(
-				(model: Model<Api>, ctx: Context) => {
+				(_model: Model<Api>, ctx: Context) => {
 					truncatedContextPassed = ctx;
 					return (async function* () {
 						yield { type: "text_delta", delta: "done" };
@@ -475,19 +477,19 @@ describe("provider.ts", () => {
 				],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			expect(truncatedContextPassed).toBeDefined();
 			// Old messages should have been truncated to fit 5000 tokens limit (15000 chars approx)
 			// The first message 'a'.repeat(8000) should have been shifted out.
-			expect(truncatedContextPassed!.messages.length).toBeLessThan(
-				context.messages.length,
-			);
 			expect(
-				truncatedContextPassed!.messages[
-					truncatedContextPassed!.messages.length - 1
+				(truncatedContextPassed as unknown as Context)?.messages.length,
+			).toBeLessThan(context.messages.length);
+			expect(
+				(truncatedContextPassed as unknown as Context)?.messages[
+					(truncatedContextPassed as unknown as Context)?.messages.length - 1
 				].content,
 			).toBe("c".repeat(2000));
 		});
@@ -509,7 +511,7 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await vi.waitFor(
 				() => {
@@ -565,7 +567,7 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			// Even if registry becomes available after 10ms, provider already failed without waiting
 			setTimeout(() => {
@@ -597,7 +599,7 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -611,9 +613,11 @@ describe("provider.ts", () => {
 
 		it("should fall back when auth fails for primary model", async () => {
 			let authCallCount = 0;
-			mockState.currentModelRegistry!.getApiKeyAndHeaders = async (
-				model: Model<Api>,
-			) => {
+			(
+				mockState.currentModelRegistry as NonNullable<
+					typeof mockState.currentModelRegistry
+				>
+			).getApiKeyAndHeaders = async (model: Model<Api>) => {
 				authCallCount++;
 				if (model.id === "gpt-4o-mini") {
 					return { ok: false, error: "auth-error" };
@@ -648,7 +652,7 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -657,10 +661,11 @@ describe("provider.ts", () => {
 		});
 
 		it("should skip model not found in registry and try fallback", async () => {
-			mockState.currentModelRegistry!.find = (
-				provider: string,
-				modelId: string,
-			) => {
+			(
+				mockState.currentModelRegistry as NonNullable<
+					typeof mockState.currentModelRegistry
+				>
+			).find = (provider: string, modelId: string) => {
 				if (modelId === "gpt-4o-mini") return undefined; // primary not found
 				return {
 					provider,
@@ -696,17 +701,18 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			expect(mockState.accumulatedCost).toBe(0.002);
-			expect(mockState.lastDecision!.isFallback).toBe(true);
+			expect(mockState.lastDecision?.isFallback).toBe(true);
 		});
 
 		it("should push error when all models in chain fail", async () => {
 			vi.mocked(streamSimple).mockImplementation(() => {
 				return (async function* () {
+					if (Math.random() < 0) yield undefined;
 					throw new Error("model unavailable");
 				})() as unknown as ReturnType<typeof streamSimple>;
 			});
@@ -728,7 +734,7 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
 
-			registeredProviderOptions!.streamSimple(model, context);
+			registeredProviderOptions?.streamSimple(model, context);
 
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -749,7 +755,7 @@ describe("provider.ts", () => {
 			vi.mocked(createAssistantMessageEventStream)
 				.mockReturnValueOnce(stream1 as unknown as AssistantMessageEventStream)
 				.mockReturnValueOnce(stream2 as unknown as AssistantMessageEventStream);
-			vi.mocked(streamSimple).mockImplementation((model: Model<Api>) => {
+			vi.mocked(streamSimple).mockImplementation((_model: Model<Api>) => {
 				callIdx++;
 				const idx = callIdx;
 				return (async function* () {
@@ -774,14 +780,14 @@ describe("provider.ts", () => {
 				messages: [{ role: "user", content: "hello-2" }],
 			} as unknown as Context;
 			// Start both streams concurrently without awaiting sequentially
-			registeredProviderOptions!.streamSimple(model, ctx1);
-			registeredProviderOptions!.streamSimple(model, ctx2);
+			registeredProviderOptions?.streamSimple(model, ctx1);
+			registeredProviderOptions?.streamSimple(model, ctx2);
 			await new Promise((r) => setTimeout(r, 200));
 			// Both should have produced done events, and accumulatedCost should be sum
 			expect(mockState.accumulatedCost).toBe(0.002);
 			// lastDecision should be one of the two (last write wins) but not corrupted
 			expect(mockState.lastDecision).toBeDefined();
-			expect(["balanced"]).toContain(mockState.lastDecision!.profile);
+			expect(["balanced"]).toContain(mockState.lastDecision?.profile);
 		});
 
 		it("should abort and not try fallback when signal is aborted", async () => {
@@ -809,7 +815,7 @@ describe("provider.ts", () => {
 			const context = {
 				messages: [{ role: "user", content: "hello" }],
 			} as unknown as Context;
-			registeredProviderOptions!.streamSimple(model, context, {
+			registeredProviderOptions?.streamSimple(model, context, {
 				signal: controller.signal,
 			} as unknown as SimpleStreamOptions);
 			await new Promise((r) => setTimeout(r, 150));

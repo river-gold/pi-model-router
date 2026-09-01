@@ -1,11 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import type { Context } from "@earendil-works/pi-ai";
+import { describe, expect, it } from "vitest";
 import {
-	resolveAvailableTier,
 	buildRoutingDecision,
 	decideRouting,
+	resolveAvailableTier,
 	thinkingToTier,
 } from "./routing";
-import type { Context, Message } from "@earendil-works/pi-ai";
 import type { RouterProfile } from "./types";
 
 describe("routing.ts", () => {
@@ -21,7 +21,7 @@ describe("routing.ts", () => {
 		});
 	});
 	describe("resolveAvailableTier", () => {
-		const profile: RouterProfile = {
+		const _profile: RouterProfile = {
 			medium: { models: ["openai/gpt-4o"] },
 		};
 
