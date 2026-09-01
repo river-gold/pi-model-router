@@ -1,44 +1,89 @@
 {
-  "debug": false,
-  "historySize": 0,
-  "classifierModels": ["google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
-  "profiles": {
-    "auto": {
-      "high": { "models": ["openai/gpt-5.4-pro#high", "anthropic/claude-3-5-sonnet-20241022#high", "openai/gpt-4o#off"] },
-      "medium": { "models": ["google/gemini-flash-latest#medium"] },
-      "low": { "models": ["openai/gpt-5.4-nano#low"] }
-    },
-    "cheap": {
-      "classifierModels": ["google/gemini-flash-lite-latest#low"],
-      "high": { "models": ["google/gemini-flash-latest#low"] },
-      "medium": { "models": ["openai/gpt-5.4-nano#off"] },
-      "low": { "models": ["google/gemini-flash-lite-latest#off"] }
-    },
-    "deep": {
-      "classifierModels": ["openai/gpt-5.4-pro#low"],
-      "high": { "models": ["openai/o1-preview#xhigh"] },
-      "medium": { "models": ["openai/gpt-5.4-pro#medium"] },
-      "low": { "models": ["google/gemini-flash-latest#low"] }
-    },
-    "minimal": {
-      "classifierModels": ["google/gemini-flash-latest"],
-      "high": { "models": ["openai/gpt-5.4-pro"] },
-      "medium": { "models": ["google/gemini-flash-latest"] },
-      "low": { "models": ["openai/gpt-5.4-nano#off"] }
-    },
-    "effort": {
-      "high": { "models": ["openai/gpt-5.4-pro#high"] },
-      "medium": { "models": ["openai/gpt-5.4-pro#medium"] },
-      "low": { "models": ["openai/gpt-5.4-pro#low"] }
-    },
-    "grok": {
-      "classifierModels": ["xai/grok-composer-2.5"],
-      "max": { "models": ["xai/grok-4.6#max", "commandcode/xai/grok-4.6#max", "opencode-go/grok-4.6#max"] },
-      "xhigh": { "models": ["xai/grok-4.6#xhigh", "commandcode/xai/grok-4.6#xhigh", "opencode-go/grok-4.6#xhigh"] },
-      "high": { "models": ["xai/grok-4.6#high", "commandcode/xai/grok-4.6#high", "opencode-go/grok-4.6#high"] },
-      "medium": { "models": ["xai/grok-4.6#medium", "commandcode/xai/grok-4.6#medium", "opencode-go/grok-4.6#medium"] },
-      "low": { "models": ["xai/grok-4.6#low", "commandcode/xai/grok-4.6#low", "opencode-go/grok-4.6#low"] },
-      "minimal": { "models": ["xai/grok-4.6#minimal", "commandcode/xai/grok-4.6#minimal", "opencode-go/grok-4.6#minimal"] }
-    }
-  }
+	"debug": false,
+	"historySize": 0,
+	"classifierModels": [
+		"google/gemini-flash-latest#high",
+		"google/gemini-flash-lite-latest#low"
+	],
+	"profiles": {
+		"auto": {
+			"high": {
+				"models": [
+					"openai/gpt-5.4-pro#high",
+					"anthropic/claude-3-5-sonnet-20241022#high",
+					"openai/gpt-4o#off"
+				]
+			},
+			"medium": { "models": ["google/gemini-flash-latest#medium"] },
+			"low": { "models": ["openai/gpt-5.4-nano#low"] }
+		},
+		"cheap": {
+			"classifierModels": ["google/gemini-flash-lite-latest#low"],
+			"high": { "models": ["google/gemini-flash-latest#low"] },
+			"medium": { "models": ["openai/gpt-5.4-nano#off"] },
+			"low": { "models": ["google/gemini-flash-lite-latest#off"] }
+		},
+		"deep": {
+			"classifierModels": ["openai/gpt-5.4-pro#low"],
+			"high": { "models": ["openai/o1-preview#xhigh"] },
+			"medium": { "models": ["openai/gpt-5.4-pro#medium"] },
+			"low": { "models": ["google/gemini-flash-latest#low"] }
+		},
+		"minimal": {
+			"classifierModels": ["google/gemini-flash-latest"],
+			"high": { "models": ["openai/gpt-5.4-pro"] },
+			"medium": { "models": ["google/gemini-flash-latest"] },
+			"low": { "models": ["openai/gpt-5.4-nano#off"] }
+		},
+		"effort": {
+			"high": { "models": ["openai/gpt-5.4-pro#high"] },
+			"medium": { "models": ["openai/gpt-5.4-pro#medium"] },
+			"low": { "models": ["openai/gpt-5.4-pro#low"] }
+		},
+		"grok": {
+			"classifierModels": ["xai/grok-composer-2.5"],
+			"max": {
+				"models": [
+					"xai/grok-4.6#max",
+					"commandcode/xai/grok-4.6#max",
+					"opencode-go/grok-4.6#max"
+				]
+			},
+			"xhigh": {
+				"models": [
+					"xai/grok-4.6#xhigh",
+					"commandcode/xai/grok-4.6#xhigh",
+					"opencode-go/grok-4.6#xhigh"
+				]
+			},
+			"high": {
+				"models": [
+					"xai/grok-4.6#high",
+					"commandcode/xai/grok-4.6#high",
+					"opencode-go/grok-4.6#high"
+				]
+			},
+			"medium": {
+				"models": [
+					"xai/grok-4.6#medium",
+					"commandcode/xai/grok-4.6#medium",
+					"opencode-go/grok-4.6#medium"
+				]
+			},
+			"low": {
+				"models": [
+					"xai/grok-4.6#low",
+					"commandcode/xai/grok-4.6#low",
+					"opencode-go/grok-4.6#low"
+				]
+			},
+			"minimal": {
+				"models": [
+					"xai/grok-4.6#minimal",
+					"commandcode/xai/grok-4.6#minimal",
+					"opencode-go/grok-4.6#minimal"
+				]
+			}
+		}
+	}
 }
