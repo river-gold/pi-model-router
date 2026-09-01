@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { runClassifier, CLASSIFIER_SYSTEM_PROMPT } from "./classifier";
+import {
+	runClassifier,
+	CLASSIFIER_SYSTEM_PROMPT,
+	parseClassifierOutput,
+} from "./classifier";
 import type { Context } from "@earendil-works/pi-ai";
 
 const streamSimple = vi.fn();
@@ -131,6 +135,22 @@ describe("classifier.ts", () => {
 			unknown
 		>;
 		expect(opts.signal).toBe(controller.signal);
+	});
+
+	it("parseClassifierOutput extracts Tier anywhere in the text", () => {
+		const wrapped = parseClassifierOutput(
+			"아니요, 커버리지 강제 안 함.\n\nTier: low\nReasoning: informational Q&A",
+		);
+		expect(wrapped).toMatchObject({
+			tier: "low",
+			reasoning: "informational Q&A",
+		});
+		expect(parseClassifierOutput("invalid")).toBeUndefined();
+		expect(
+			parseClassifierOutput("**Tier: high**\nReasoning: debug"),
+		).toMatchObject({
+			tier: "high",
+		});
 	});
 
 	it("should handle historySize as number and thinking as string overload", async () => {
