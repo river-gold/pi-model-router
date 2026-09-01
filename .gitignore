@@ -1,2 +1,4 @@
-node_modules
 .idea
+node_modules
+.qlty
+.DS_Store
