@@ -1,6 +1,6 @@
 /* oxlint-disable */
 import { describe, it, expect, vi } from "vitest";
-import { modelWithAuthBaseUrl, streamDelegated } from "../src/stream";
+import { modelWithAuthBaseUrl, streamDelegated } from "../../src/stream";
 import type { Api, Model } from "@earendil-works/pi-ai";
 
 describe("stream.ts", () => {

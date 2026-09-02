@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseClassifierOutput, runClassifierWithFallbacksDetailed } from "../src/classifier";
+import { parseClassifierOutput, runClassifierWithFallbacksDetailed } from "../../src/classifier";
 import type { Context } from "@earendil-works/pi-ai";
 const streamSimple = vi.fn();
 const makeRegistry = (over: Record<string, unknown> = {}) =>

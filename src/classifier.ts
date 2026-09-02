@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/pi-ai";
+import type { Context, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterTier } from "./types";
@@ -237,9 +237,9 @@ const runClassifierOutcome = async (
     const stream = streamDelegated(modelRegistry, model, classifierContext, {
       apiKey: authResolution.apiKey,
       headers: authResolution.headers,
-      ...(reasoningOption ? { reasoning: reasoningOption } : {}),
+      ...(reasoningOption ? { reasoning: reasoningOption as unknown as SimpleStreamOptions["reasoning"] } : {}),
       ...(signal ? { signal } : {}),
-    });
+    } as SimpleStreamOptions);
 
     const fullText = await collectStreamText(stream);
 

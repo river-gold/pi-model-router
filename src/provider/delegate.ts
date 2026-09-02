@@ -1,6 +1,6 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterConfig, RouterProfile, RoutingDecision } from "../types";
+import type { RouterProfile, RoutingDecision } from "../types";
 import {
   parseCanonicalModelRef,
   formatModelRef,
@@ -38,19 +38,37 @@ export type DelegateResult = {
   lastError?: unknown;
 };
 
-// delegateToTierModels handles fallback loop, truncation, bufferedEvents etc.
-export const delegateToTierModels = async (params: DelegateParams): Promise<DelegateResult> => {
-  const { registry, profile, decision, routerModel, context, options, state, withCommitMutex, stream, recordDebugDecision } = params;
+export const getInitialModelsToTry = (
+  profile: RouterProfile,
+  decision: RoutingDecision,
+): string[] => {
+  const tierModels = profile[decision.tier]?.models;
+  if (tierModels && tierModels.length > 0) return [...new Set(tierModels)];
+  return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
+};
 
-  let modelsToTry = [
-    ...new Set(
-      profile[decision.tier]?.models! ?? [
-        formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking),
-      ],
-    ),
-  ];
-  const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
-  const recordRouteFailure = (ref: string) => {
+export const filterByFailureMemory = (
+  modelsToTry: string[],
+  failedSet: Set<string> | undefined,
+): { filtered: string[]; skipped: string[]; allFiltered: boolean } => {
+  if (!failedSet || failedSet.size === 0) return { filtered: modelsToTry, skipped: [], allFiltered: false };
+  const skipped: string[] = [];
+  const filtered = modelsToTry.filter((ref) => {
+    const norm = normalizeFailedRef(ref);
+    if (failedSet.has(norm)) {
+      skipped.push(ref);
+      return false;
+    }
+    return true;
+  });
+  return { filtered, skipped, allFiltered: filtered.length === 0 && modelsToTry.length > 0 };
+};
+
+export const createRecordFailure = (
+  state: DelegateParams["state"],
+  routeChainKey: string,
+) => {
+  return (ref: string): void => {
     const norm = normalizeFailedRef(ref);
     let s = state.failedByChain.get(routeChainKey);
     if (!s) {
@@ -59,23 +77,118 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
     }
     s.add(norm);
   };
-  const routeFailedSet = state.failedByChain.get(routeChainKey);
-  const skippedDueToMemory: string[] = [];
-  if (routeFailedSet && routeFailedSet.size > 0) {
-    const beforeLen = modelsToTry.length;
-    modelsToTry = modelsToTry.filter((ref) => {
-      const norm = normalizeFailedRef(ref);
-      if (routeFailedSet.has(norm)) {
-        skippedDueToMemory.push(ref);
-        return false;
-      }
-      return true;
-    });
-    if (modelsToTry.length === 0 && beforeLen > 0) {
-      throw new Error(
-        `All models in ${decision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`,
-      );
+};
+
+export const resolveTargetLimit = (
+  profile: RouterProfile,
+  decision: RoutingDecision,
+  modelRef: string,
+  registry: ExtensionContext["modelRegistry"],
+  targetProvider: string,
+  targetModelId: string,
+): number => {
+  for (const t of ROUTER_TIERS) {
+    const tc = profile[t];
+    if (!tc) continue;
+    if (tc.models!.includes(modelRef)) return resolveContextWindow(t, profile, registry);
+  }
+  const found = registry.find(targetProvider, targetModelId);
+  return found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
+};
+
+export const buildEffectiveContext = (
+  context: Context,
+  targetLimit: number,
+  routerModel: Model<Api>,
+): Context => {
+  if (targetLimit < routerModel.contextWindow!) return truncateContext(context, targetLimit);
+  return context;
+};
+
+export const isContentEvent = (type: string): boolean =>
+  type === "text_delta" ||
+  type === "thinking_delta" ||
+  type === "toolcall_delta" ||
+  type === "toolcall_end";
+
+export const collectBufferedResult = (
+  bufferedEvents: unknown[],
+): {
+  gotDone: boolean;
+  gotError: boolean;
+  bufferedErrorMessage?: string;
+  pendingCostDelta: number;
+  contentReceived: boolean;
+} => {
+  let gotDone = false;
+  let gotError = false;
+  let bufferedErrorMessage: string | undefined;
+  let pendingCostDelta = 0;
+  let contentReceived = false;
+  for (const event of bufferedEvents) {
+    const type = (event as { type: string }).type;
+    if (type === "done") {
+      gotDone = true;
+      const cost =
+        (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost?.total ?? 0;
+      pendingCostDelta = cost;
     }
+    if (type === "error") {
+      gotError = true;
+      const errObj = (event as { error?: unknown }).error;
+      if (
+        errObj &&
+        typeof errObj === "object" &&
+        "errorMessage" in errObj &&
+        typeof (errObj as { errorMessage?: unknown }).errorMessage === "string"
+      ) {
+        bufferedErrorMessage = (errObj as { errorMessage: string }).errorMessage;
+      }
+    }
+    if (isContentEvent(type)) contentReceived = true;
+  }
+  return { gotDone, gotError, bufferedErrorMessage, pendingCostDelta, contentReceived };
+};
+
+export const resolveAuthError = (
+  auth: { ok: boolean; apiKey?: string; error?: string },
+  targetProvider: string,
+  targetModelId: string,
+): Error => {
+  if (!auth.ok) return new Error(`Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`);
+  return new Error(`No API key for routed model: ${targetProvider}/${targetModelId}`);
+};
+
+export const shouldSkipRouterModel = (provider: string): boolean => provider === "router";
+
+export const buildFallbackDecision = (
+  decision: RoutingDecision,
+  modelRef: string,
+): void => {
+  const { provider: fp, modelId: fid, thinking: ft } = parseCanonicalModelRef(modelRef);
+  decision.isFallback = true;
+  decision.targetProvider = fp;
+  decision.targetModelId = fid;
+  decision.targetLabel = formatModelRef(fp, fid);
+  decision.thinking = ft ?? decision.thinking;
+};
+
+export const delegateToTierModels = async (params: DelegateParams): Promise<DelegateResult> => {
+  const { registry, profile, decision, routerModel, context, options, state, withCommitMutex, stream, recordDebugDecision } =
+    params;
+
+  const initialModels = getInitialModelsToTry(profile, decision);
+  const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
+  const recordRouteFailure = createRecordFailure(state, routeChainKey);
+  const routeFailedSet = state.failedByChain.get(routeChainKey);
+  const { filtered: modelsToTry, skipped: skippedDueToMemory, allFiltered } = filterByFailureMemory(
+    initialModels,
+    routeFailedSet,
+  );
+  if (allFiltered) {
+    throw new Error(
+      `All models in ${decision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`,
+    );
   }
 
   let lastError: unknown;
@@ -84,159 +197,108 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
 
   for (let i = 0; i < modelsToTry.length; i++) {
     const modelRef = modelsToTry[i];
-    const { provider: targetProvider, modelId: targetModelId, thinking: refThinking } = parseCanonicalModelRef(modelRef);
+    const { provider: targetProvider, modelId: targetModelId, thinking: refThinking } =
+      parseCanonicalModelRef(modelRef);
     const tryThinking = refThinking ?? decision.thinking;
-    if (targetProvider === "router") continue;
+    if (shouldSkipRouterModel(targetProvider)) continue;
+
     const targetModel = registry.find(targetProvider, targetModelId);
     if (!targetModel) {
       lastError = new Error(`Routed model not found: ${targetProvider}/${targetModelId}`);
       if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
       continue;
     }
+
     const auth = await registry.getApiKeyAndHeaders(targetModel);
     if (!auth.ok || !auth.apiKey) {
-      lastError = new Error(
-        auth.ok
-          ? `No API key for routed model: ${targetProvider}/${targetModelId}`
-          : `Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`,
-      );
+      lastError = resolveAuthError(auth as { ok: boolean; apiKey?: string; error?: string }, targetProvider, targetModelId);
       if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
       continue;
     }
-    const apiKey = auth.apiKey;
-    const headers = auth.headers;
-    const requestModel = modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string });
+
     if (options?.signal?.aborted) throw new Error("aborted");
-    let contentReceivedForTry = false;
-    let pendingCostDelta = 0;
+
+    const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, targetProvider, targetModelId);
+    const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
+    const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
+      | SimpleStreamOptions["reasoning"]
+      | undefined;
+
     try {
-      let effectiveContext = context;
-      let targetLimit: number;
-      {
-        let tierForModel: import("../types").RouterTier | undefined;
-        for (const t of ROUTER_TIERS) {
-          const tc = profile[t];
-          if (!tc) continue;
-          if (tc.models!.includes(modelRef)) {
-            tierForModel = t;
-            break;
-          }
-        }
-        if (tierForModel) {
-          targetLimit = resolveContextWindow(tierForModel, profile, registry);
+      if (state.lastExtensionContext) {
+        if (delegatedReasoning) {
+          state.lastExtensionContext.ui.setHiddenThinkingLabel?.(
+            `Thinking (${targetProvider}/${targetModelId})...`,
+          );
         } else {
-          const found = registry.find(targetProvider, targetModelId);
-          targetLimit = found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
+          state.lastExtensionContext.ui.setHiddenThinkingLabel?.();
         }
       }
-      if (targetLimit < routerModel.contextWindow!) {
-        effectiveContext = truncateContext(context, targetLimit);
-      }
-      const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
-        | SimpleStreamOptions["reasoning"]
-        | undefined;
-      try {
-        if (state.lastExtensionContext) {
-          if (delegatedReasoning) {
-            state.lastExtensionContext.ui.setHiddenThinkingLabel?.(
-              `Thinking (${targetProvider}/${targetModelId})...`,
-            );
-          } else {
-            state.lastExtensionContext.ui.setHiddenThinkingLabel?.();
-          }
-        }
-      } catch {
-        // stale
-      }
-      const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
-      const delegatedStream = streamDelegated(registry, requestModel, effectiveContext, {
-        ...delegationOptions,
-        apiKey,
-        headers,
-        ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
-      });
-      const bufferedEvents: unknown[] = [];
-      let gotDone = false;
-      let gotError = false;
-      let bufferedErrorMessage: string | undefined;
-      if (!delegatedStream) throw new Error("No delegated stream available");
-      for await (const event of delegatedStream) {
-        if (options?.signal?.aborted) throw new Error("aborted");
-        bufferedEvents.push(event);
-        if ((event as { type: string }).type === "done") {
-          gotDone = true;
-          const cost =
-            (
-              event as {
-                message?: { usage?: { cost?: { total?: number } } };
-              }
-            ).message?.usage?.cost?.total ?? 0;
-          pendingCostDelta = cost;
-        }
-        if ((event as { type: string }).type === "error") {
-          gotError = true;
-          const errObj = (event as { error?: unknown }).error;
-          if (
-            errObj &&
-            typeof errObj === "object" &&
-            "errorMessage" in errObj &&
-            typeof (errObj as { errorMessage?: unknown }).errorMessage === "string"
-          ) {
-            bufferedErrorMessage = (errObj as { errorMessage: string }).errorMessage;
-          }
-        }
-        const isContent =
-          (event as { type: string }).type === "text_delta" ||
-          (event as { type: string }).type === "thinking_delta" ||
-          (event as { type: string }).type === "toolcall_delta" ||
-          (event as { type: string }).type === "toolcall_end";
-        if (isContent) contentReceivedForTry = true;
-      }
-      if (gotDone) {
-        for (const ev of bufferedEvents) stream.push(ev as never);
-        success = true;
-        costDelta = pendingCostDelta;
-        if (pendingCostDelta) {
-          await withCommitMutex(async () => {
-            state.accumulatedCost += pendingCostDelta;
-          });
-        }
-        if (i > 0) {
-          const { provider: fp, modelId: fid, thinking: ft } = parseCanonicalModelRef(modelRef);
-          decision.isFallback = true;
-          decision.targetProvider = fp;
-          decision.targetModelId = fid;
-          decision.targetLabel = formatModelRef(fp, fid);
-          decision.thinking = ft ?? decision.thinking;
-          await withCommitMutex(async () => {
-            if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
-              state.lastDecision = { ...decision };
-            }
-          });
-          recordDebugDecision(decision);
-        }
-        break;
-      }
-      if (gotError) {
-        if (contentReceivedForTry) {
-          for (const ev of bufferedEvents) stream.push(ev as never);
-          throw new Error(`NON_RETRYABLE: ${bufferedErrorMessage || "Model failed after sending content."}`);
-        }
-        throw new Error(bufferedErrorMessage || "Model failed before sending content.");
-      }
-      throw new Error("Model stream ended without terminal event.");
-    } catch (err) {
-      if (err instanceof Error && err.message.startsWith("NON_RETRYABLE:")) {
-        lastError = new Error(err.message.slice("NON_RETRYABLE: ".length));
-        break;
-      }
-      if (contentReceivedForTry) {
-        lastError = err;
-        break;
-      }
-      lastError = err;
-      if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    } catch {
+      // stale
     }
+
+    const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
+    const delegatedStream = streamDelegated(registry, modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }), effectiveContext, {
+      ...delegationOptions,
+      apiKey: auth.apiKey,
+      headers: auth.headers,
+      ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
+    });
+
+    if (!delegatedStream) {
+      lastError = new Error("No delegated stream available");
+      if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
+      continue;
+    }
+
+    const bufferedEvents: unknown[] = [];
+    let contentReceivedForTry = false;
+
+    for await (const event of delegatedStream) {
+      if (options?.signal?.aborted) throw new Error("aborted");
+      bufferedEvents.push(event);
+      if (isContentEvent((event as { type: string }).type)) contentReceivedForTry = true;
+    }
+
+    const collected = collectBufferedResult(bufferedEvents);
+    contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
+
+    if (collected.gotDone) {
+      for (const ev of bufferedEvents) stream.push(ev as never);
+      success = true;
+      costDelta = collected.pendingCostDelta;
+      if (collected.pendingCostDelta) {
+        await withCommitMutex(async () => {
+          state.accumulatedCost += collected.pendingCostDelta;
+        });
+      }
+      if (i > 0) {
+        buildFallbackDecision(decision, modelRef);
+        await withCommitMutex(async () => {
+          if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
+            state.lastDecision = { ...decision };
+          }
+        });
+        recordDebugDecision(decision);
+      }
+      break;
+    }
+
+    if (collected.gotError) {
+      if (contentReceivedForTry) {
+        for (const ev of bufferedEvents) stream.push(ev as never);
+        lastError = new Error(`NON_RETRYABLE: ${collected.bufferedErrorMessage || "Model failed after sending content."}`);
+        break;
+      }
+      lastError = new Error(collected.bufferedErrorMessage || "Model failed before sending content.");
+      if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
+      continue;
+    }
+
+    lastError = new Error("Model stream ended without terminal event.");
+    if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
   }
+
   return { success, costDelta, fallbackDecision: decision, lastError };
 };

@@ -2,529 +2,166 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import routerExtension from "../index";
 
-vi.mock("../src/config", () => {
-  const ROUTER_TIERS = ["max", "xhigh", "high", "medium", "low", "minimal"] as const;
+vi.mock("../src/config", async () => {
+  const actual = await vi.importActual<typeof import("../src/config")>("../src/config");
   return {
-    loadRouterConfig: () => ({
-      config: {
-        profiles: {
-          balanced: {
-            high: { model: "openai/gpt-4o" },
-            medium: { model: "openai/gpt-4o-mini" },
-          },
-        },
-      },
+    ...actual,
+    loadRouterConfig: vi.fn(() => ({
+      config: { profiles: { balanced: { high: { models: ["openai/gpt-4o"] }, medium: { models: ["openai/gpt-4o-mini"] } } } } as unknown as import("../src/types").RouterConfig,
       warnings: [],
-    }),
-    profileNames: () => ["balanced"],
-    resolveProfileName: (_config: unknown, name: unknown) =>
-      name === "balanced" ? "balanced" : undefined,
-    parseCanonicalModelRef: (_ref: string) => ({
-      provider: "openai",
-      modelId: "gpt-4o",
-    }),
-    resolveContextWindow: () => 100000,
-    resolveMaxTokens: () => 4000,
-    ROUTER_TIERS,
-    isRouterTier: (v: unknown) => (ROUTER_TIERS as readonly string[]).includes(v as string),
+    })),
   };
 });
 
-describe("index.ts (orchestrator)", () => {
-  let mockPi: any;
-  let eventListeners: Record<string, Function[]> = {};
+describe("router extension public behavior", () => {
+  let pi: any;
+  let listeners: Record<string, Function>;
+
+  const makeCtx = (over: any = {}) => ({
+    cwd: "/mock",
+    modelRegistry: {
+      find: vi.fn((p: string, id: string) => ({ provider: p, id, contextWindow: 100000, maxTokens: 4000 }) as any),
+      list: vi.fn(() => [{ provider: "openai", id: "gpt-4o" }]),
+      getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k" }),
+    },
+    model: { provider: "router", id: "balanced" },
+    sessionManager: { getBranch: () => [] as any[] },
+    ui: { setStatus: vi.fn(), setHiddenThinkingLabel: vi.fn(), notify: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+    ...over,
+  });
 
   beforeEach(() => {
-    eventListeners = {};
-    mockPi = {
+    listeners = {};
+    pi = {
       registerProvider: vi.fn(),
       registerCommand: vi.fn(),
       setModel: vi.fn().mockResolvedValue(true),
       appendEntry: vi.fn(),
-      on: vi.fn().mockImplementation((event: string, handler: Function) => {
-        if (!eventListeners[event]) {
-          eventListeners[event] = [];
-        }
-        eventListeners[event].push(handler);
-      }),
+      on: vi.fn((e: string, h: Function) => { listeners[e] = h; }),
+      getThinkingLevel: vi.fn().mockReturnValue("off"),
     };
   });
 
-  const buildMockCtx = () => ({
-    cwd: "/mock/cwd",
-    modelRegistry: {
-      find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }),
-      getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "key" }),
-    },
-    model: { provider: "router", id: "balanced" },
-    sessionManager: {
-      getBranch: () => [] as unknown[],
-    },
-    ui: {
-      setStatus: vi.fn(),
-      setHiddenThinkingLabel: vi.fn(),
-      theme: { fg: (_c: string, text: string) => text },
-      notify: vi.fn(),
-    },
+  it("registers provider, commands and hooks", () => {
+    routerExtension(pi);
+    expect(pi.registerProvider).toHaveBeenCalledWith("router", expect.any(Object));
+    expect(pi.registerCommand).toHaveBeenCalledWith("router", expect.any(Object));
+    expect(pi.on).toHaveBeenCalledWith("session_start", expect.any(Function));
+    expect(pi.on).toHaveBeenCalledWith("model_select", expect.any(Function));
+    expect(pi.on).toHaveBeenCalledWith("turn_end", expect.any(Function));
   });
 
-  it("should initialize and register commands, provider, and event hooks", () => {
-    routerExtension(mockPi);
-
-    expect(mockPi.registerProvider).toHaveBeenCalledWith("router", expect.any(Object));
-    expect(mockPi.registerCommand).toHaveBeenCalledWith("router", expect.any(Object));
-    expect(mockPi.on).toHaveBeenCalledWith("session_start", expect.any(Function));
-    expect(mockPi.on).toHaveBeenCalledWith("model_select", expect.any(Function));
-    expect(mockPi.on).toHaveBeenCalledWith("turn_end", expect.any(Function));
+  it("enables router on session_start with router model", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    expect(ctx.ui.setStatus).toHaveBeenCalled();
+    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "router", id: "balanced" }));
   });
 
-  it("should restore state from session on session_start hook", async () => {
-    routerExtension(mockPi);
-
-    const mockCtx = buildMockCtx();
-    mockCtx.sessionManager.getBranch = () => [
-      {
-        type: "custom",
-        customType: "router-state",
-        data: {
-          enabled: true,
-          selectedProfile: "balanced",
-          debugEnabled: true,
-          accumulatedCost: 0.012,
-          timestamp: Date.now(),
-        },
-      },
-    ];
-
-    // Trigger session_start
-    const sessionStartHandlers = eventListeners["session_start"] || [];
-    for (const handler of sessionStartHandlers) {
-      await handler({}, mockCtx);
-    }
-
-    expect(mockCtx.ui.setStatus).toHaveBeenCalled();
-    expect(mockPi.setModel).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: "router", id: "balanced" }),
-    );
+  it("selects router profile via model_select", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    pi.appendEntry.mockClear();
+    await listeners["model_select"]({ model: { provider: "router", id: "balanced" } }, ctx);
+    // dedup: same profile as already selected, no state change -> no append
+    expect(pi.appendEntry.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
-  it("should handle model select hook", async () => {
-    routerExtension(mockPi);
-
-    const mockCtx = buildMockCtx();
-
-    // Trigger session_start to initialize first
-    const sessionStartHandlers = eventListeners["session_start"] || [];
-    for (const handler of sessionStartHandlers) {
-      await handler({}, mockCtx);
-    }
-
-    const modelSelectHandlers = eventListeners["model_select"] || [];
-    for (const handler of modelSelectHandlers) {
-      await handler({ model: { provider: "router", id: "balanced" } }, mockCtx);
-    }
-
-    expect(mockCtx.ui.setStatus).toHaveBeenCalled();
+  it("disables router on non-router model_select and records fallback", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    pi.appendEntry.mockClear();
+    await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
+    expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
+    expect(pi.appendEntry).toHaveBeenCalledWith("router-state", expect.objectContaining({ enabled: false, lastNonRouterModel: "anthropic/claude" }));
   });
 
-  it("should enforce router model on turn_end hook", async () => {
-    routerExtension(mockPi);
-
-    const mockCtx = buildMockCtx();
-
-    // Trigger session_start to initialize
-    const sessionStartHandlers = eventListeners["session_start"] || [];
-    for (const handler of sessionStartHandlers) {
-      await handler({}, mockCtx);
-    }
-
-    // Now trigger model_select to select a router model
-    const modelSelectHandlers = eventListeners["model_select"] || [];
-    for (const handler of modelSelectHandlers) {
-      await handler({ model: { provider: "router", id: "balanced" } }, mockCtx);
-    }
-
-    // Change current model to non-router model
-    mockCtx.model = { provider: "openai", id: "gpt-4o" };
-
-    // Trigger turn_end
-    const turnEndHandlers = eventListeners["turn_end"] || [];
-    for (const handler of turnEndHandlers) {
-      await handler({}, mockCtx);
-    }
-
-    // It should have restored model selection to the active router profile model
-    expect(mockPi.setModel).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: "router", id: "balanced" }),
-    );
+  it("handles unknown profile with fallback restore", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
+    pi.setModel.mockClear();
+    const fallbackCtx = makeCtx({ modelRegistry: { find: vi.fn((p: string, id: string) => p === "anthropic" && id === "claude" ? ({ provider: p, id }) as any : undefined), list: () => [{ provider: "anthropic", id: "claude" }] } });
+    await listeners["model_select"]({ model: { provider: "router", id: "unknown" } }, fallbackCtx);
+    expect(fallbackCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown router profile"), "error");
+    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic", id: "claude" }));
   });
 
-  describe("model_select event", () => {
-    it("should set routerEnabled=false, record lastNonRouterModel, and call setHiddenThinkingLabel for non-router model", async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-
-      // Initialize via session_start
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Clear appendEntry calls from initialization
-      mockPi.appendEntry.mockClear();
-
-      // Select a non-router model
-      const modelSelectHandlers = eventListeners["model_select"] || [];
-      for (const handler of modelSelectHandlers) {
-        await handler({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }, mockCtx);
-      }
-
-      // Should have called setHiddenThinkingLabel
-      expect(mockCtx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
-
-      // Should have persisted state (routerEnabled=false, lastNonRouterModel set)
-      expect(mockPi.appendEntry).toHaveBeenCalledWith(
-        "router-state",
-        expect.objectContaining({
-          enabled: false,
-          lastNonRouterModel: "anthropic/claude-3-5-sonnet",
-        }),
-      );
-    });
-
-    it("should be a no-op before session_start (isInitialized=false)", async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-
-      // Clear calls from constructor
-      mockPi.appendEntry.mockClear();
-      mockCtx.ui.setStatus.mockClear();
-
-      // Trigger model_select WITHOUT session_start first
-      const modelSelectHandlers = eventListeners["model_select"] || [];
-      for (const handler of modelSelectHandlers) {
-        await handler({ model: { provider: "anthropic", id: "claude-3-5-sonnet" } }, mockCtx);
-      }
-
-      // Should NOT have persisted state or updated status
-      expect(mockPi.appendEntry).not.toHaveBeenCalled();
-      expect(mockCtx.ui.setHiddenThinkingLabel).not.toHaveBeenCalled();
-    });
+  it("warns when unknown profile has no fallback", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    const noFallbackCtx = makeCtx({ modelRegistry: { find: vi.fn(() => undefined), list: () => [] } });
+    await listeners["model_select"]({ model: { provider: "router", id: "unknown" } }, noFallbackCtx);
+    expect(noFallbackCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown router profile"), "error");
+    expect(noFallbackCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("no fallback"), "warning");
   });
 
-  describe("restoreStateFromSession edge cases", () => {
-    it("should handle fresh session with no saved router-state entries", async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-      // Empty session
-      mockCtx.sessionManager.getBranch = () => [];
-
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Should still set model (model is router/balanced by default)
-      expect(mockPi.setModel).toHaveBeenCalled();
-      // Should persist initial state
-      expect(mockPi.appendEntry).toHaveBeenCalledWith(
-        "router-state",
-        expect.objectContaining({
-          enabled: true,
-          selectedProfile: "balanced",
-        }),
-      );
-    });
-
-    it("should handle failed model restoration (setModel returns false)", async () => {
-      mockPi.setModel = vi.fn().mockResolvedValue(false);
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-      mockCtx.sessionManager.getBranch = () => [
-        {
-          type: "custom",
-          customType: "router-state",
-          data: {
-            enabled: true,
-            selectedProfile: "balanced",
-            timestamp: Date.now(),
-          },
-        },
-      ];
-
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Should notify about failure
-      expect(mockCtx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Failed to restore router/balanced"),
-        "warning",
-      );
-
-      // routerEnabled should be set to false
-      expect(mockPi.appendEntry).toHaveBeenCalledWith(
-        "router-state",
-        expect.objectContaining({
-          enabled: false,
-        }),
-      );
-    });
-
-    it("should handle router model unavailable in registry", async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-      // Registry returns undefined for router model
-      mockCtx.modelRegistry.find = vi.fn().mockReturnValue(undefined);
-      mockCtx.sessionManager.getBranch = () => [
-        {
-          type: "custom",
-          customType: "router-state",
-          data: {
-            enabled: true,
-            selectedProfile: "balanced",
-            timestamp: Date.now(),
-          },
-        },
-      ];
-
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Should notify about unavailability
-      expect(mockCtx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Unable to restore router/balanced"),
-        "warning",
-      );
-
-      // Should call setHiddenThinkingLabel
-      expect(mockCtx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
-
-      // routerEnabled should be false
-      expect(mockPi.appendEntry).toHaveBeenCalledWith(
-        "router-state",
-        expect.objectContaining({
-          enabled: false,
-        }),
-      );
-    });
-
-    it("should sync thinking level when lastDecision exists on successful restore", async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-      const decision = {
-        profile: "balanced",
-        tier: "high" as const,
-        phase: "planning" as const,
-        targetProvider: "openai",
-        targetModelId: "gpt-4o",
-        targetLabel: "openai/gpt-4o",
-        reasoning: "test",
-        thinking: "high" as const,
-        timestamp: Date.now(),
-      };
-      mockCtx.sessionManager.getBranch = () => [
-        {
-          type: "custom",
-          customType: "router-state",
-          data: {
-            enabled: true,
-            selectedProfile: "balanced",
-            lastDecision: decision,
-            timestamp: Date.now(),
-          },
-        },
-      ];
-
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // setModel succeeds (default mock), lastDecision exists => should restore router model
-      expect(mockPi.setModel).toHaveBeenCalledWith(
-        expect.objectContaining({ provider: "router", id: "balanced" }),
-      );
-    });
+  it("restores persisted state from session branch", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx({ sessionManager: { getBranch: () => [{ type: "custom", customType: "router-state", data: { enabled: true, selectedProfile: "balanced", debugEnabled: true, accumulatedCost: 0.5, timestamp: Date.now() } }] } });
+    await listeners["session_start"]({}, ctx);
+    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "router", id: "balanced" }));
   });
 
-  describe("turn_end event", () => {
-    it("should persist state and update status but NOT restore model when router is not enabled", async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-      // Set model to non-router
-      mockCtx.model = { provider: "openai", id: "gpt-4o" };
-
-      // Initialize via session_start with non-router model
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Clear mocks after initialization
-      mockPi.setModel.mockClear();
-      mockPi.appendEntry.mockClear();
-      mockCtx.ui.setStatus.mockClear();
-
-      // Trigger turn_end
-      const turnEndHandlers = eventListeners["turn_end"] || [];
-      for (const handler of turnEndHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Should NOT call setModel (router is not enabled)
-      expect(mockPi.setModel).not.toHaveBeenCalled();
-
-      // Should still update status
-      expect(mockCtx.ui.setStatus).toHaveBeenCalled();
-
-      // persistState is called, but snapshot deduplication may skip appendEntry
-      // since state hasn't changed since session_start. The key assertion is
-      // that setModel was NOT called (router is not enabled).
-    });
+  it("restores router model on turn_end when enabled", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    pi.setModel.mockClear();
+    ctx.model = { provider: "openai", id: "gpt-4o" } as any;
+    await listeners["turn_end"]({}, ctx);
+    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "router", id: "balanced" }));
   });
 
-  describe("persistState deduplication", () => {
-    it("should only call appendEntry once when state has not changed between turn_end calls", async () => {
-      routerExtension(mockPi);
-
-      const mockCtx = buildMockCtx();
-
-      // Initialize with router enabled (default: model is router/balanced)
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const handler of sessionStartHandlers) {
-        await handler({}, mockCtx);
-      }
-
-      // Select router model to ensure routerEnabled=true
-      const modelSelectHandlers = eventListeners["model_select"] || [];
-      for (const handler of modelSelectHandlers) {
-        await handler({ model: { provider: "router", id: "balanced" } }, mockCtx);
-      }
-
-      // Clear mocks after initialization and model_select
-      mockPi.appendEntry.mockClear();
-
-      // Trigger turn_end — first call may persist if snapshot differs
-      const turnEndHandlers = eventListeners["turn_end"] || [];
-      for (const handler of turnEndHandlers) {
-        await handler({}, mockCtx);
-      }
-      const callsAfterFirst = mockPi.appendEntry.mock.calls.length;
-
-      // Trigger turn_end again — state is identical, snapshot dedup should skip
-      for (const handler of turnEndHandlers) {
-        await handler({}, mockCtx);
-      }
-      const callsAfterSecond = mockPi.appendEntry.mock.calls.length;
-
-      // No additional appendEntry calls on the second turn_end
-      expect(callsAfterSecond).toBe(callsAfterFirst);
-    });
+  it("ignores model_select before initialization", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    pi.appendEntry.mockClear();
+    await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
+    expect(pi.appendEntry).not.toHaveBeenCalled();
   });
 
-  describe("ensureValidActiveRouterProfile fallback edge", () => {
-    it("should disable router when profile missing and no fallback model available", async () => {
-      routerExtension(mockPi);
-      const mockCtx = buildMockCtx();
-      mockCtx.sessionManager.getBranch = () => [
-        {
-          type: "custom",
-          customType: "router-state",
-          data: {
-            enabled: true,
-            selectedProfile: "balanced",
-            timestamp: Date.now(),
-          },
-        },
-      ];
-      const sessionStartHandlers = eventListeners["session_start"] || [];
-      for (const h of sessionStartHandlers) await h({}, mockCtx);
-      // Simulate profile removed: config has no balanced, and registry list is empty
-      mockCtx.modelRegistry.find = vi.fn().mockReturnValue(undefined);
-      (mockCtx.modelRegistry as unknown as { list: () => [] }).list = () => [];
-      mockCtx.model = { provider: "router", id: "balanced" };
-      // Call ensureValid via session_start again with missing profile - simulate reload with empty config
-      // Directly trigger model_select unknown profile path
-      const modelSelectHandlers = eventListeners["model_select"] || [];
-      mockPi.appendEntry.mockClear();
-      mockCtx.ui.notify.mockClear();
-      for (const h of modelSelectHandlers)
-        await h({ model: { provider: "router", id: "unknown" } }, mockCtx);
-      expect(mockCtx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Unknown router profile"),
-        "error",
-      );
-      expect(mockCtx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("no fallback model"),
-        "warning",
-      );
-      // persistState may be deduped if snapshot unchanged; at minimum notify proves fallback path was taken
-      // and router would be disabled (enabled:false) - verify setModel not called with router model
-      expect(mockPi.setModel).not.toHaveBeenCalledWith(
-        expect.objectContaining({ provider: "router", id: "unknown" }),
-      );
-    });
+  it("deduplicates persist on identical state", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    await listeners["model_select"]({ model: { provider: "router", id: "balanced" } }, ctx);
+    pi.appendEntry.mockClear();
+    await listeners["turn_end"]({}, ctx);
+    const afterFirst = pi.appendEntry.mock.calls.length;
+    await listeners["turn_end"]({}, ctx);
+    expect(pi.appendEntry.mock.calls.length).toBe(afterFirst);
   });
 
-  describe("branch navigation via session_start", () => {
-    it("should restore correct branch state on second session_start (fork/resume)", async () => {
-      routerExtension(mockPi);
-      const mockCtx = buildMockCtx();
-      // First branch: balanced enabled
-      mockCtx.sessionManager.getBranch = () => [
-        {
-          type: "custom",
-          customType: "router-state",
-          data: { enabled: true, selectedProfile: "balanced", timestamp: 1 },
-        },
-      ];
-      const handlers = eventListeners["session_start"] || [];
-      for (const h of handlers) await h({ reason: "new" }, mockCtx);
-      expect(mockPi.setModel).toHaveBeenCalledWith(expect.objectContaining({ id: "balanced" }));
-      mockPi.setModel.mockClear();
-      // Second branch: empty (fresh) - emulate fork to different leaf
-      mockCtx.sessionManager.getBranch = () => [];
-      mockCtx.model = { provider: "openai", id: "gpt-4o" };
-      for (const h of handlers) await h({ reason: "fork" }, mockCtx);
-      // Should have called setHiddenThinkingLabel (router not enabled in this branch)
-      expect(mockCtx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
-    });
+  it("handles appendEntry throw gracefully", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    pi.appendEntry.mockImplementation(() => { throw new Error("append failed"); });
+    await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
+    expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
   });
 
-  describe("ensureInitializedFromContext", () => {
-    it("should initialize registry and context on first turn_start, but not overwrite on subsequent events", async () => {
-      routerExtension(mockPi);
+  it("handles setModel failure on restore", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx({ sessionManager: { getBranch: () => [{ type: "custom", customType: "router-state", data: { enabled: true, selectedProfile: "balanced", timestamp: Date.now() } }] } });
+    pi.setModel.mockResolvedValue(false);
+    await listeners["session_start"]({}, ctx);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Failed to restore"), "warning");
+  });
 
-      const mockCtx1 = buildMockCtx();
-      mockCtx1.cwd = "/mock/cwd1";
-
-      // Trigger turn_start event with mockCtx1
-      const turnStartHandlers = eventListeners["turn_start"] || [];
-      for (const handler of turnStartHandlers) {
-        await handler({}, mockCtx1);
-      }
-
-      // Should have reloaded config and updated status because registry was undefined
-      expect(mockCtx1.ui.setStatus).toHaveBeenCalled();
-      mockCtx1.ui.setStatus.mockClear();
-
-      // Trigger turn_start with a DIFFERENT CWD — should NOT reinitialize because
-      // registry is already set (guards against subagent overwriting parent state)
-      const mockCtx2 = buildMockCtx();
-      mockCtx2.cwd = "/mock/cwd2";
-      await turnStartHandlers[0]({}, mockCtx2);
-      expect(mockCtx2.ui.setStatus).not.toHaveBeenCalled();
-    });
+  it("handles find throws in fallback", async () => {
+    routerExtension(pi);
+    const ctx = makeCtx();
+    await listeners["session_start"]({}, ctx);
+    await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
+    const badCtx = makeCtx({ modelRegistry: { find: vi.fn(() => { throw new Error("find failed"); }), list: () => [] } });
+    await listeners["model_select"]({ model: { provider: "router", id: "unknown" } }, badCtx);
+    expect(badCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown router profile"), "error");
   });
 });

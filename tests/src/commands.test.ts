@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { registerCommands } from "../src/commands";
-import type { RouterConfig } from "../src/types";
+import { registerCommands } from "../../src/commands";
+import type { RouterConfig } from "../../src/types";
 
 const makePi = () => {
   let cmd: any = null;
