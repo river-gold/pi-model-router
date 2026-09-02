@@ -1,0 +1,1 @@
+export const SESSION_RESTORE_DELAY_MS = 50;
