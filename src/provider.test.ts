@@ -10,7 +10,7 @@ import type {
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createErrorMessage, registerRouterProvider, waitForRegistry } from "./provider";
+import { registerRouterProvider } from "./provider";
 import type { RouterConfig } from "./types";
 
 interface MockEvent {
@@ -96,12 +96,10 @@ describe("provider.ts", () => {
         balanced: {
           high: {
             models: ["openai/gpt-4o"],
-            model: "openai/gpt-4o",
             resolvedContextWindow: 10000,
           },
           medium: {
             models: ["openai/gpt-4o-mini", "google/gemini-1.5-flash"],
-            model: "openai/gpt-4o-mini",
             resolvedContextWindow: 5000,
           },
         },
@@ -149,20 +147,6 @@ describe("provider.ts", () => {
       recordDebugDecision: vi.fn(),
       updateStatus: vi.fn(),
     };
-  });
-
-  describe("createErrorMessage", () => {
-    it("should create a valid error AssistantMessage", () => {
-      const model = {
-        api: "openai" as Api,
-        provider: "openai",
-        id: "gpt-4o",
-      } as unknown as Model<Api>;
-      const msg = createErrorMessage(model, "Test error message");
-      expect(msg.role).toBe("assistant");
-      expect(msg.errorMessage).toBe("Test error message");
-      expect(msg.stopReason).toBe("error");
-    });
   });
 
   describe("registerRouterProvider", () => {
@@ -243,7 +227,6 @@ describe("provider.ts", () => {
       vi.mocked(mockPi.getThinkingLevel).mockReturnValue("minimal");
       mockState.currentConfig.profiles.balanced.low = {
         models: ["openai/gpt-4o-micro"],
-        model: "openai/gpt-4o-micro",
         resolvedContextWindow: 5000,
       };
 
@@ -346,81 +329,6 @@ describe("provider.ts", () => {
       expect(callCount).toBe(2);
       expect(mockState.accumulatedCost).toBe(0.0005);
       expect(mockState.lastDecision?.isFallback).toBe(true);
-    });
-
-    it("should preserve previous Google model on Google thinking tool continuation", async () => {
-      registerRouterProvider(mockPi, mockState, mockActions);
-      const stream = new MockEventStream();
-      vi.mocked(createAssistantMessageEventStream).mockReturnValue(
-        stream as unknown as AssistantMessageEventStream,
-      );
-      vi.mocked(streamSimple).mockReturnValue(
-        (async function* () {
-          yield { type: "text_delta", delta: "done" };
-        })() as unknown as ReturnType<typeof streamSimple>,
-      );
-
-      // Set up last decision as Google model with thinking
-      mockState.lastDecision = {
-        profile: "balanced",
-        tier: "high",
-        targetProvider: "google",
-        targetModelId: "gemini-2.5-pro",
-        targetLabel: "google/gemini-2.5-pro",
-        thinking: "high",
-        reasoning: "initial google model reasoning",
-        timestamp: Date.now(),
-      };
-
-      // Configure profile tiers to use google provider models
-      mockState.currentConfig.profiles.balanced.high = {
-        models: ["google/gemini-2.5-pro"],
-        thinking: "high" as ThinkingLevel,
-      };
-      mockState.currentConfig.profiles.balanced.medium = {
-        models: ["google/gemini-2.5-flash"],
-        thinking: "medium" as ThinkingLevel,
-      };
-
-      // Set up registry search
-      (mockState.currentModelRegistry as NonNullable<typeof mockState.currentModelRegistry>).find =
-        (provider: string, modelId: string) => {
-          return {
-            provider,
-            id: modelId,
-            reasoning: true,
-            input: ["text"] as const,
-          } as unknown as Model<Api>;
-        };
-
-      const model = {
-        id: "balanced",
-        api: "router-api" as Api,
-        provider: "router",
-      } as unknown as Model<Api>;
-      const context = {
-        messages: [
-          { role: "user", content: "initial", timestamp: Date.now() },
-          {
-            role: "toolResult",
-            toolCallId: "c1",
-            toolName: "t",
-            content: "tool output",
-            isError: false,
-            timestamp: Date.now(),
-          },
-        ],
-      } as unknown as Context;
-
-      registeredProviderOptions?.streamSimple(model, context);
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // The decision should be updated to preserve the previous model
-      expect(mockState.lastDecision?.targetModelId).toBe("gemini-2.5-pro");
-      expect(mockState.lastDecision?.reasoning).toContain(
-        "Preserved google/gemini-2.5-pro for a Google tool-result continuation",
-      );
     });
 
     it("should auto-truncate context if target limit is smaller than reported context window", async () => {
@@ -797,45 +705,6 @@ describe("provider.ts", () => {
       expect(mockState.accumulatedCost).toBe(0);
       const done = stream.events.find((e) => e.type === "done");
       expect(done).toBeDefined();
-    });
-  });
-
-  describe("waitForRegistry", () => {
-    it("should return registry immediately if already available", async () => {
-      const mockRegistry = {
-        find: vi.fn(),
-      } as unknown as ExtensionContext["modelRegistry"];
-      const state = { currentModelRegistry: mockRegistry };
-      const result = await waitForRegistry(state);
-      expect(result).toBe(mockRegistry);
-    });
-
-    it("should return undefined immediately if not available (no wait)", async () => {
-      const state: {
-        currentModelRegistry: ExtensionContext["modelRegistry"] | undefined;
-      } = {
-        currentModelRegistry: undefined,
-      };
-      const result = await waitForRegistry(state);
-      expect(result).toBeUndefined();
-    });
-
-    it("should return undefined immediately even if registry becomes available later", async () => {
-      const mockRegistry = {
-        find: vi.fn(),
-      } as unknown as ExtensionContext["modelRegistry"];
-      const state: {
-        currentModelRegistry: ExtensionContext["modelRegistry"] | undefined;
-      } = {
-        currentModelRegistry: undefined,
-      };
-      setTimeout(() => {
-        state.currentModelRegistry = mockRegistry;
-      }, 10);
-      const result = await waitForRegistry(state);
-      expect(result).toBeUndefined();
-      await new Promise((r) => setTimeout(r, 20));
-      expect(state.currentModelRegistry).toBe(mockRegistry);
     });
   });
 });

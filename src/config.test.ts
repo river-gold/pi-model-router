@@ -65,7 +65,6 @@ describe("config.ts", () => {
           balanced: {
             medium: {
               models: ["openai/gpt-4o-mini"],
-              model: "openai/gpt-4o-mini",
             },
           },
         },
@@ -74,12 +73,11 @@ describe("config.ts", () => {
         debug: true,
         profiles: {
           balanced: {
-            high: { models: ["openai/gpt-4o"], model: "openai/gpt-4o" },
+            high: { models: ["openai/gpt-4o"] },
           },
           cheap: {
             low: {
               models: ["openai/gpt-4o-mini"],
-              model: "openai/gpt-4o-mini",
             },
           },
         },
@@ -158,7 +156,7 @@ describe("config.ts", () => {
         historySize: 4,
         profiles: {
           balanced: {
-            high: { models: ["openai/gpt-4o"], model: "openai/gpt-4o" },
+            high: { models: ["openai/gpt-4o"] },
           },
         },
       } as unknown as RouterConfig);
@@ -170,10 +168,10 @@ describe("config.ts", () => {
       const { config } = normalizeConfig({
         profiles: {
           balanced: {
-            high: { models: ["openai/gpt-4o"], model: "openai/gpt-4o" },
+            high: { models: ["openai/gpt-4o"] },
           },
         },
-        classifierModels: [{ model: "openai/gpt-4o" }],
+        classifierModels: ["openai/gpt-4o"],
       } as unknown as RouterConfig);
       expect(config.classifierModels?.[0].thinking).toBeUndefined();
     });
@@ -181,7 +179,7 @@ describe("config.ts", () => {
       const { config } = normalizeConfig({
         profiles: {
           balanced: {
-            high: { models: ["openai/gpt-4o"], model: "openai/gpt-4o" },
+            high: { models: ["openai/gpt-4o"] },
           },
         },
         classifierModels: ["openai/gpt-4o#low", "google/gemini-flash#off"] as unknown as any,
@@ -193,7 +191,7 @@ describe("config.ts", () => {
       const { config } = normalizeConfig({
         profiles: {
           balanced: {
-            high: { models: ["openai/gpt-4o"], model: "openai/gpt-4o" },
+            high: { models: ["openai/gpt-4o"] },
           },
         },
         classifierModels: [

@@ -97,7 +97,6 @@ export const runClassifierWithFallbacksDetailed = async (
     attempts.push({
       model: entry.model,
       thinking: entry.thinking,
-      /* v8 ignore next */
       error: outcome.error ?? "no tier parsed or model/auth/stream failed",
     });
     // Auth/stream/not-found skip the model for the rest of the session.
@@ -113,41 +112,15 @@ type ClassifierOutcome = {
   error?: string;
 };
 
-export const runClassifier = async (
-  classifierModelRef: string,
-  modelRegistry: ExtensionContext["modelRegistry"],
-  context: Context,
-  historySizeOrThinking?: number | ThinkingLevel,
-  thinkingMaybe?: ThinkingLevel,
-  signal?: AbortSignal,
-): Promise<{ tier: RouterTier; reasoning: string } | undefined> => {
-  const outcome = await runClassifierOutcome(
-    classifierModelRef,
-    modelRegistry,
-    context,
-    historySizeOrThinking,
-    thinkingMaybe,
-    signal,
-  );
-  return outcome.result;
-};
-
 const runClassifierOutcome = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext["modelRegistry"],
   context: Context,
-  historySizeOrThinking?: number | ThinkingLevel,
-  thinkingMaybe?: ThinkingLevel,
+  historySize?: number,
+  thinking?: ThinkingLevel,
   signal?: AbortSignal,
 ): Promise<ClassifierOutcome> => {
-  let historySize = 0;
-  let thinking: ThinkingLevel | undefined;
-  if (typeof historySizeOrThinking === "number") {
-    historySize = historySizeOrThinking;
-    thinking = thinkingMaybe;
-  } else if (typeof historySizeOrThinking === "string") {
-    thinking = historySizeOrThinking;
-  }
+  const effectiveHistorySize = historySize ?? 0;
   try {
     const { provider, modelId } = parseCanonicalModelRef(classifierModelRef);
     const model = modelRegistry.find(provider, modelId);
@@ -166,7 +139,6 @@ const runClassifierOutcome = async (
 
     const auth = await modelRegistry.getApiKeyAndHeaders(model);
     if (!auth.ok || !("apiKey" in auth) || !auth.apiKey) {
-      /* v8 ignore next */
       const error = `auth failed: ok=${auth.ok} hasKey=${"apiKey" in auth ? !!auth.apiKey : false}`;
       logClassifierSync({
         timestamp: new Date().toISOString(),
@@ -184,8 +156,8 @@ const runClassifierOutcome = async (
 
     const promptText = getLastUserText(context);
     let body: string;
-    if (historySize > 0) {
-      const historyText = getHistoryPairsText(context, historySize);
+    if (effectiveHistorySize > 0) {
+      const historyText = getHistoryPairsText(context, effectiveHistorySize);
       body = historyText
         ? `Recent history (user+final result pairs):\n${historyText}\n\nLatest user message:\n${promptText}`.trim()
         : `Latest user message:\n${promptText}`.trim();
@@ -212,7 +184,6 @@ const runClassifierOutcome = async (
     });
     let fullText = "";
     for await (const event of stream) {
-      /* v8 ignore next */
       if (event.type === "text_delta" && "delta" in event && typeof event.delta === "string") {
         fullText += event.delta;
       }
@@ -257,7 +228,6 @@ const runClassifierOutcome = async (
       });
       return { skipSession: false, error: "aborted" };
     }
-    /* v8 ignore next */
     const error = e instanceof Error ? e.message : String(e);
     logClassifierSync({
       timestamp: new Date().toISOString(),

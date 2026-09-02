@@ -1,6 +1,10 @@
 /* oxlint-disable */
 import { describe, it, expect, vi } from "vitest";
-import { runClassifier, CLASSIFIER_SYSTEM_PROMPT, parseClassifierOutput } from "./classifier";
+import {
+  CLASSIFIER_SYSTEM_PROMPT,
+  parseClassifierOutput,
+  runClassifierWithFallbacksDetailed,
+} from "./classifier";
 import type { Context } from "@earendil-works/pi-ai";
 
 const streamSimple = vi.fn();
@@ -30,13 +34,13 @@ describe("classifier.ts", () => {
       yield { type: "text_delta", delta: "high" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    const r = await runClassifier(
-      "openai/gpt-4o",
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt-4o" }],
       mockRegistry,
       baseContext,
-      "off" as unknown as import("@earendil-works/pi-agent-core").ThinkingLevel,
+      0,
     );
-    expect(r).toEqual({ tier: "high", reasoning: "Classifier decision." });
+    expect(res.result).toEqual({ tier: "high", reasoning: "Classifier decision." });
   });
 
   it("should return undefined on invalid format", async () => {
@@ -44,13 +48,23 @@ describe("classifier.ts", () => {
       yield { type: "text_delta", delta: "invalid" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    const r = await runClassifier("openai/gpt-4o", mockRegistry, baseContext);
-    expect(r).toBeUndefined();
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt-4o" }],
+      mockRegistry,
+      baseContext,
+      0,
+    );
+    expect(res.result).toBeUndefined();
   });
 
   it("should return undefined if model not found", async () => {
-    const r = await runClassifier("unknown/model", mockRegistry, baseContext);
-    expect(r).toBeUndefined();
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "unknown/model" }],
+      mockRegistry,
+      baseContext,
+      0,
+    );
+    expect(res.result).toBeUndefined();
   });
 
   it("should pass history when historySize >0", async () => {
@@ -69,13 +83,7 @@ describe("classifier.ts", () => {
         { role: "user", content: "cur", timestamp: 3 },
       ],
     };
-    await runClassifier(
-      "openai/gpt-4o",
-      mockRegistry,
-      ctx,
-      1,
-      "off" as unknown as import("@earendil-works/pi-agent-core").ThinkingLevel,
-    );
+    await runClassifierWithFallbacksDetailed([{ model: "openai/gpt-4o" }], mockRegistry, ctx, 1);
     const called = vi.mocked(streamSimple).mock.calls.at(-1)?.[1] as Context;
     expect(called.messages[0].content as string).toContain("u1");
     expect(called.messages[0].content as string).toContain("a1");
@@ -89,17 +97,14 @@ describe("classifier.ts", () => {
       yield { type: "text_delta", delta: "high" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    const r = await runClassifier(
-      "openai/gpt-4o",
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt-4o" }],
       mockRegistry,
       baseContext,
       0,
-      "off" as unknown as import("@earendil-works/pi-agent-core").ThinkingLevel,
       controller.signal,
     );
-    // Even if stream would return high, aborted signal causes early undefined
-    // Our implementation checks signal.aborted in catch and returns undefined
-    expect(r === undefined || r.tier === "high").toBe(true);
+    expect(res.result === undefined || res.result.tier === "high").toBe(true);
   });
 
   it("should pass signal to streamSimple", async () => {
@@ -108,12 +113,11 @@ describe("classifier.ts", () => {
       yield { type: "text_delta", delta: "medium" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    await runClassifier(
-      "openai/gpt-4o",
+    await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt-4o" }],
       mockRegistry,
       baseContext,
       0,
-      "off" as unknown as import("@earendil-works/pi-agent-core").ThinkingLevel,
       controller.signal,
     );
     const opts = vi.mocked(streamSimple).mock.calls.at(-1)?.[2] as Record<string, unknown>;
@@ -133,7 +137,7 @@ describe("classifier.ts", () => {
     expect(parseClassifierOutput("Tier: low\nReasoning: x")).toBeUndefined();
   });
 
-  it("should handle historySize as number and thinking as string overload", async () => {
+  it("should handle historySize and thinking", async () => {
     const s1 = (async function* () {
       yield { type: "text_delta", delta: "medium" };
     })();
@@ -143,20 +147,19 @@ describe("classifier.ts", () => {
     vi.mocked(streamSimple)
       .mockReturnValueOnce(s1 as unknown as ReturnType<typeof streamSimple>)
       .mockReturnValueOnce(s2 as unknown as ReturnType<typeof streamSimple>);
-    const r1 = await runClassifier(
-      "openai/gpt-4o",
+    const r1 = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt-4o", thinking: "high" as any }],
       mockRegistry,
       baseContext,
-      "high" as unknown as import("@earendil-works/pi-agent-core").ThinkingLevel,
+      0,
     );
-    expect(r1?.tier).toBe("medium");
-    const r2 = await runClassifier(
-      "openai/gpt-4o",
+    expect(r1.result?.tier).toBe("medium");
+    const r2 = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt-4o", thinking: "high" as any }],
       mockRegistry,
       baseContext,
       2,
-      "high" as unknown as import("@earendil-works/pi-agent-core").ThinkingLevel,
     );
-    expect(r2?.tier).toBe("medium");
+    expect(r2.result?.tier).toBe("medium");
   });
 });

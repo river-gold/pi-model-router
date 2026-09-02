@@ -37,13 +37,7 @@ import {
   isRecordablePreStreamError,
 } from "./failureMemory";
 
-export const waitForRegistry = async (state: {
-  readonly currentModelRegistry: ExtensionContext["modelRegistry"] | undefined;
-}): Promise<ExtensionContext["modelRegistry"] | undefined> => {
-  return state.currentModelRegistry;
-};
-
-export const createErrorMessage = (model: Model<Api>, message: string): AssistantMessage => {
+const createErrorMessage = (model: Model<Api>, message: string): AssistantMessage => {
   return {
     role: "assistant",
     content: [],
@@ -115,9 +109,7 @@ export const registerRouterProvider = (
       if (!profile[tier]) continue;
       const cw = resolveContextWindow(tier, profile, state.currentModelRegistry);
       const mot = resolveMaxTokens(tier, profile, state.currentModelRegistry);
-      /* v8 ignore next */
       if (cw > maxContextWindow) maxContextWindow = cw;
-      /* v8 ignore next */
       if (mot > maxMaxTokens) maxMaxTokens = mot;
     }
 
@@ -162,10 +154,7 @@ export const registerRouterProvider = (
 
       (async () => {
         try {
-          // Wait for the router to be fully initialized (session_start sets currentModelRegistry).
-          // This handles the race where subagents (e.g. from pi-dynamic-workflows) invoke
-          // the router provider before session_start has fired in their context.
-          const registry = await waitForRegistry(state);
+          const registry = state.currentModelRegistry;
           if (!registry) {
             throw new Error("Router provider not initialized. session_start may not have fired.");
           }
@@ -191,16 +180,11 @@ export const registerRouterProvider = (
           );
 
           const lastMessageForLoop = context.messages[context.messages.length - 1];
-          const isGoogleThinkingLoop =
-            snapshotLastDecision?.targetProvider === "google" &&
-            snapshotLastDecision?.thinking !== undefined &&
-            snapshotLastDecision?.thinking !== "off";
           const isToolLoop =
             lastMessageForLoop?.role === "toolResult" &&
             snapshotLastDecision?.profile === model.id &&
-            snapshotLastDecision !== undefined &&
-            !isGoogleThinkingLoop;
-          const shouldSkipClassifier = isToolLoop || isGoogleThinkingLoop;
+            snapshotLastDecision !== undefined;
+          const shouldSkipClassifier = isToolLoop;
           if (isToolLoop && snapshotLastDecision) {
             decision = buildRoutingDecision(
               model.id,
@@ -246,10 +230,8 @@ export const registerRouterProvider = (
                 "No classifier available for auto (off) mode. Configure classifierModels or add a low tier.",
               );
             }
-            /* v8 ignore next */
             if (options?.signal?.aborted) throw new Error("aborted");
 
-            /* v8 ignore next */
             const effectiveHistorySize = state.currentConfig.historySize ?? 0;
             const classifierFailedSet =
               state.failedByChain.get(CLASSIFIER_CHAIN_KEY) ?? new Set<string>();
@@ -263,7 +245,6 @@ export const registerRouterProvider = (
                 // Show only the model currently being requested.
                 try {
                   state.lastExtensionContext?.ui.setWorkingMessage(
-                    /* v8 ignore next */
                     `Classifying via ${entry.source ?? classifierSource} (${entry.model}${entry.thinking ? `#${entry.thinking}` : ""})...`,
                   );
                 } catch {
@@ -273,12 +254,9 @@ export const registerRouterProvider = (
               classifierFailedSet,
             );
             // Persist classifier failures back to the shared map (runClassifierWithFallbacksDetailed mutates the set)
-            /* v8 ignore next */
             if (classifierFailedSet.size > 0) {
-              /* v8 ignore next */
               state.failedByChain.set(CLASSIFIER_CHAIN_KEY, classifierFailedSet);
             }
-            /* v8 ignore stop */
 
             try {
               state.lastExtensionContext?.ui.setWorkingMessage(undefined);
@@ -286,55 +264,22 @@ export const registerRouterProvider = (
               // Stale extension context — skip non-critical UI updates.
             }
 
-            /* v8 ignore next */
             if (classifierResult) {
               const preferred = classifierResult.tier;
               const tier = resolveAvailableTier(profile, preferred);
               let reasoning = `Classifier: ${classifierResult.reasoning}`;
-              /* v8 ignore next */
               if (tier !== preferred) {
-                /* v8 ignore next */
                 reasoning = `Resolved from ${preferred} to ${tier} tier (${preferred} tier is not configured). Original: ${reasoning}`;
               }
-              /* v8 ignore stop */
               decision = buildRoutingDecision(model.id, profile, tier, reasoning, true);
             } else {
-              /* v8 ignore start */
               const attempted = attempts
                 .map((a) => `${a.model}${a.thinking ? `#${a.thinking}` : ""} (${a.error})`)
                 .join(", ");
               throw new Error(
                 `Classifier failed to determine a tier. Source: ${classifierSource}. Attempted: ${attempted || "none"}. Models may be unregistered, missing API keys, or returned invalid format (expected "Tier: minimal|low|medium|high|xhigh|max").`,
               );
-              /* v8 ignore stop */
             }
-          }
-
-          const lastMessage = context.messages[context.messages.length - 1];
-          const previousDecision = snapshotLastDecision;
-          const isGoogleThinkingToolContinuation =
-            lastMessage?.role === "toolResult" &&
-            previousDecision?.profile === model.id &&
-            previousDecision.targetProvider === "google" &&
-            previousDecision.thinking !== undefined &&
-            previousDecision.thinking !== "off" &&
-            decision.targetProvider === "google" &&
-            decision.thinking !== undefined &&
-            decision.thinking !== "off" &&
-            previousDecision.targetLabel !== decision.targetLabel;
-
-          if (isGoogleThinkingToolContinuation && previousDecision) {
-            decision = {
-              ...decision,
-              tier: previousDecision.tier,
-              targetProvider: previousDecision.targetProvider,
-              targetModelId: previousDecision.targetModelId,
-              targetLabel: previousDecision.targetLabel,
-              thinking: previousDecision.thinking,
-              reasoning:
-                `Preserved ${previousDecision.targetLabel} for a Google tool-result continuation ` +
-                `to avoid thought-signature replay errors. (Original: ${decision.reasoning})`,
-            };
           }
 
           await withCommitMutex(async () => {
@@ -345,7 +290,6 @@ export const registerRouterProvider = (
           // Update status display. Wrapped in try/catch: in subagent contexts
           // the extension runtime may be invalidated (stale) after session teardown.
           try {
-            /* v8 ignore next */
             if (state.lastExtensionContext) {
               actions.updateStatus(state.lastExtensionContext);
             }
@@ -355,7 +299,6 @@ export const registerRouterProvider = (
 
           let modelsToTry = [
             ...new Set(
-              /* v8 ignore next */
               profile[decision.tier]?.models! ?? [
                 formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking),
               ],
@@ -407,7 +350,6 @@ export const registerRouterProvider = (
             const targetModel = registry.find(targetProvider, targetModelId);
             if (!targetModel) {
               lastError = new Error(`Routed model not found: ${targetProvider}/${targetModelId}`);
-              /* v8 ignore next */
               if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
               continue;
             }
@@ -415,12 +357,10 @@ export const registerRouterProvider = (
             const auth = await registry.getApiKeyAndHeaders(targetModel);
             if (!auth.ok || !auth.apiKey) {
               lastError = new Error(
-                /* v8 ignore next */
                 auth.ok
                   ? `No API key for routed model: ${targetProvider}/${targetModelId}`
                   : `Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`,
               );
-              /* v8 ignore next */
               if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
               continue;
             }
@@ -428,7 +368,6 @@ export const registerRouterProvider = (
             const headers = auth.headers;
             const requestModel = modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string });
 
-            /* v8 ignore next */
             if (options?.signal?.aborted) throw new Error("aborted");
             let contentReceivedForTry = false;
             let pendingCostDelta = 0;
@@ -449,18 +388,14 @@ export const registerRouterProvider = (
                     break;
                   }
                 }
-                /* v8 ignore next */
                 if (tierForModel) {
                   targetLimit = resolveContextWindow(tierForModel, profile, registry);
                 } else {
-                  /* v8 ignore start */
                   const found = registry.find(targetProvider, targetModelId);
                   targetLimit =
                     found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
-                  /* v8 ignore stop */
                 }
               }
-              /* v8 ignore next */
               if (targetLimit < model.contextWindow!) {
                 effectiveContext = truncateContext(context, targetLimit);
               }
@@ -470,7 +405,6 @@ export const registerRouterProvider = (
                 | undefined;
 
               try {
-                /* v8 ignore next */
                 if (state.lastExtensionContext) {
                   if (delegatedReasoning) {
                     state.lastExtensionContext.ui.setHiddenThinkingLabel?.(
@@ -500,32 +434,23 @@ export const registerRouterProvider = (
               let gotDone = false;
               let gotError = false;
               let bufferedErrorMessage: string | undefined;
-              /* v8 ignore next */
               if (!delegatedStream) throw new Error("No delegated stream available");
               for await (const event of delegatedStream) {
-                /* v8 ignore next */
                 if (options?.signal?.aborted) throw new Error("aborted");
                 bufferedEvents.push(event);
                 if ((event as { type: string }).type === "done") {
                   gotDone = true;
                   const cost =
-                    /* v8 ignore next */
                     (
                       event as {
                         message?: { usage?: { cost?: { total?: number } } };
                       }
-                    )
-                      /* istanbul ignore next */
-                      /* c8 ignore next */
-                      /* v8 ignore next */
-                      .message?.usage?.cost?.total ?? 0;
-                  /* v8 ignore stop */
+                    ).message?.usage?.cost?.total ?? 0;
                   pendingCostDelta = cost;
                 }
                 if ((event as { type: string }).type === "error") {
                   gotError = true;
                   const errObj = (event as { error?: unknown }).error;
-                  /* v8 ignore next */
                   if (
                     errObj &&
                     typeof errObj === "object" &&
@@ -562,9 +487,7 @@ export const registerRouterProvider = (
                   decision.targetLabel = formatModelRef(fp, fid);
                   decision.thinking = ft ?? decision.thinking;
                   await withCommitMutex(async () => {
-                    /* v8 ignore next */
                     if (
-                      /* v8 ignore next */
                       state.lastDecision === decision ||
                       state.lastDecision?.profile === decision.profile
                     ) {
@@ -576,19 +499,14 @@ export const registerRouterProvider = (
                 break;
               }
               if (gotError) {
-                /* v8 ignore next */
                 if (contentReceivedForTry) {
                   for (const ev of bufferedEvents) stream.push(ev as never);
                   throw new Error(
-                    /* v8 ignore next */
                     `NON_RETRYABLE: ${bufferedErrorMessage || "Model failed after sending content."}`,
                   );
                 }
-                /* v8 ignore next */
                 throw new Error(bufferedErrorMessage || "Model failed before sending content.");
               }
-              /* v8 ignore stop */
-              /* v8 ignore next */
               throw new Error("Model stream ended without terminal event.");
             } catch (err) {
               if (err instanceof Error && err.message.startsWith("NON_RETRYABLE:")) {
@@ -605,11 +523,9 @@ export const registerRouterProvider = (
           }
 
           if (!success) {
-            /* v8 ignore next */
             throw lastError instanceof Error
               ? lastError
               : new Error(
-                  /* v8 ignore next */
                   typeof lastError === "string"
                     ? lastError
                     : "Failed to delegate to any model in the chain.",
@@ -632,11 +548,8 @@ export const registerRouterProvider = (
           // the extension runtime is invalidated and any pi/ctx call throws a
           // stale-context error. Push a graceful done event so the stream's
           // result() promise resolves (required by AssistantMessageEventStream).
-          /* v8 ignore next */
           const isStaleCtx = error instanceof Error && error.message.includes("stale");
-          /* v8 ignore next */
           if (isStaleCtx) {
-            /* v8 ignore next */
             stream.push({
               type: "done",
               reason: "stop",
@@ -648,20 +561,17 @@ export const registerRouterProvider = (
               reason: "error",
               error: createErrorMessage(
                 model,
-                /* v8 ignore next */
                 error instanceof Error ? error.message : String(error),
               ),
             });
           }
           stream.end();
         } finally {
-          /* v8 ignore start */
           try {
             actions.persistState();
           } catch {
             // Ignore: extension context may be stale after session teardown.
           }
-          /* v8 ignore stop */
         }
       })();
 

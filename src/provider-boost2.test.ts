@@ -185,59 +185,6 @@ describe("provider boost2", () => {
     expect(state.lastDecision?.reasoning).toContain("Preserved");
   });
 
-  it("google thinking loop skips classifier", async () => {
-    const config: RouterConfig = {
-      profiles: {
-        balanced: {
-          high: { models: ["google/gemini"] },
-          medium: { models: ["openai/mini"] },
-        } as any,
-      },
-    };
-    const prevDecision = {
-      profile: "balanced",
-      tier: "high",
-      targetProvider: "google",
-      targetModelId: "gemini",
-      targetLabel: "google/gemini",
-      thinking: "high",
-      reasoning: "prev",
-      timestamp: Date.now(),
-    } as any;
-    const reg = buildRegistry({
-      find: (p: string) => ({ provider: p, id: "x", reasoning: true }) as any,
-    });
-    state = {
-      lastRegisteredModels: "",
-      currentConfig: config,
-      currentModelRegistry: reg,
-      lastExtensionContext: {
-        ui: { setHiddenThinkingLabel: vi.fn(), setWorkingMessage: vi.fn() },
-      } as any,
-      selectedProfile: undefined,
-      routerEnabled: false,
-      lastDecision: prevDecision,
-      accumulatedCost: 0,
-      failedByChain: new Map(),
-    };
-    actions = { persistState: vi.fn(), recordDebugDecision: vi.fn(), updateStatus: vi.fn() };
-    pi.getThinkingLevel.mockReturnValue("medium");
-    registerRouterProvider(pi, state, actions);
-    const stream = new MockStream();
-    (createAssistantMessageEventStream as any).mockReturnValue(stream as any);
-    streamSimple.mockReturnValue(
-      (async function* () {
-        yield { type: "text_delta", delta: "a" };
-        yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-      })() as any,
-    );
-    const model = { id: "balanced", provider: "router", contextWindow: 100000 } as any;
-    opts.streamSimple(model, { messages: [{ role: "user", content: "hi" }] } as any);
-    await new Promise((r) => setTimeout(r, 80));
-    // isGoogleThinkingLoop true should skip classifier and use thinkingToTier mapping
-    expect(state.lastDecision).toBeDefined();
-  });
-
   it("classifier success resolves with global classifier", async () => {
     const config: RouterConfig = {
       profiles: {

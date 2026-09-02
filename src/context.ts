@@ -18,7 +18,6 @@ export const extractTextFromContent = (content: string | Message["content"]): st
 export const getLastUserText = (context: Context): string => {
   for (let i = context.messages.length - 1; i >= 0; i--) {
     const message = context.messages[i];
-    /* v8 ignore next */
     if (message.role === "user") {
       return extractTextFromContent(message.content).trim();
     }
@@ -34,12 +33,8 @@ export const getHistoryPairsText = (context: Context, pairCount: number): string
   for (let i = 0; i < messages.length; i++) {
     if (messages[i].role === "user") userIndices.push(i);
   }
-  /* v8 ignore start */
   const lastUserIdx = userIndices.length > 0 ? userIndices[userIndices.length - 1] : -1;
-  /* v8 ignore stop */
-  /* v8 ignore start */
   const historyUserIndices = lastUserIdx >= 0 ? userIndices.slice(0, -1).slice(-pairCount) : [];
-  /* v8 ignore stop */
   // O(1) next-user lookup via position map instead of O(N) find per iteration
   const userPosByIndex = new Map<number, number>();
   for (let p = 0; p < userIndices.length; p++) {
@@ -48,19 +43,14 @@ export const getHistoryPairsText = (context: Context, pairCount: number): string
   for (const uIdx of historyUserIndices) {
     const userText = extractTextFromContent(messages[uIdx].content).trim();
     if (!userText) continue;
-    /* v8 ignore next */
     const pos = userPosByIndex.get(uIdx) ?? -1;
-    /* v8 ignore start */
     const nextUserIdx =
       pos >= 0 && pos + 1 < userIndices.length ? userIndices[pos + 1] : messages.length;
-    /* v8 ignore stop */
     let finalText = "";
     for (let j = nextUserIdx - 1; j > uIdx; j--) {
       const msg = messages[j];
-      /* v8 ignore next */
       if (msg.role === "assistant" || msg.role === "toolResult") {
         const txt = extractTextFromContent(msg.content).trim();
-        /* v8 ignore next */
         if (txt) {
           finalText = txt;
           break;
@@ -98,9 +88,7 @@ export const truncateContext = (context: Context, limit: number): Context => {
   if (totalTokens <= limit) return context;
 
   const latestMessage = messages.pop();
-  /* v8 ignore next */
   if (!latestMessage) return context;
-  /* v8 ignore next */
   const latestTokens = messageTokens.pop() ?? 0;
 
   let activeMessagesTokensSum = messageTokens.reduce((sum, t) => sum + t, 0);
@@ -122,11 +110,9 @@ export const truncateContext = (context: Context, limit: number): Context => {
         aligned = a;
         break;
       }
-      /* v8 ignore start */
       if (a === messages.length - 1) {
         aligned = messages.length;
       }
-      /* v8 ignore stop */
     }
     startIndex = aligned;
   }
@@ -136,18 +122,14 @@ export const truncateContext = (context: Context, limit: number): Context => {
   // Uses a for-loop (no while) to satisfy AGENTS.md style rule.
   let orphanCount = 0;
   for (let k = 0; k < finalMessages.length; k++) {
-    /* v8 ignore next */
     if (finalMessages[k].role === "toolResult" && k === orphanCount) {
-      /* v8 ignore next */
       orphanCount++;
     } else {
       break;
     }
   }
-  /* v8 ignore start */
   if (orphanCount > 0) {
     finalMessages = finalMessages.slice(orphanCount);
   }
-  /* v8 ignore stop */
   return { ...context, messages: finalMessages };
 };

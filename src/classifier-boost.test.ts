@@ -1,6 +1,6 @@
 /* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { runClassifierWithFallbacksDetailed, runClassifier } from "./classifier";
+import { runClassifierWithFallbacksDetailed } from "./classifier";
 import type { Context } from "@earendil-works/pi-ai";
 
 const streamSimple = vi.fn();
@@ -97,38 +97,49 @@ describe("classifier boost", () => {
     expect(failed.size).toBe(0);
     expect(res.result).toBeUndefined();
   });
-  it("runClassifier handles auth failure", async () => {
+  it("handles auth failure via fallback detailed", async () => {
     const reg = makeRegistry({ getApiKeyAndHeaders: async () => ({ ok: false, error: "no" }) });
-    const r = await runClassifier("openai/gpt", reg, ctx);
-    expect(r).toBeUndefined();
+    const res = await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, ctx, 0);
+    expect(res.result).toBeUndefined();
   });
-  it("runClassifier handles stream throw and aborted signal", async () => {
+  it("handles stream throw and aborted signal via fallback", async () => {
     const reg = makeRegistry();
     streamSimple.mockImplementation(() => {
       throw new Error("stream fail");
     });
-    const r = await runClassifier("openai/gpt", reg, ctx);
-    expect(r).toBeUndefined();
+    const res = await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, ctx, 0);
+    expect(res.result).toBeUndefined();
     const controller = new AbortController();
     controller.abort();
     streamSimple.mockImplementation(() => {
       throw new Error("aborted");
     });
-    const r2 = await runClassifier("openai/gpt", reg, ctx, 0, undefined, controller.signal);
-    expect(r2).toBeUndefined();
+    const res2 = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt" }],
+      reg,
+      ctx,
+      0,
+      controller.signal,
+    );
+    expect(res2.result).toBeUndefined();
   });
-  it("runClassifier with reasoning option", async () => {
+  it("handles reasoning option via fallback", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
       yield { type: "text_delta", delta: "low" };
     })();
     streamSimple.mockReturnValue(s as any);
-    const r = await runClassifier("openai/gpt", reg, ctx, 0, "high" as any);
-    expect(r?.tier).toBe("low");
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt", thinking: "high" as any }],
+      reg,
+      ctx,
+      0,
+    );
+    expect(res.result?.tier).toBe("low");
     const opts = streamSimple.mock.calls.at(-1)?.[2] as any;
     expect(opts.reasoning).toBe("high");
   });
-  it("runClassifier with historySize >0 and history text", async () => {
+  it("handles historySize >0 and history text via fallback", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
       yield { type: "text_delta", delta: "medium" };
@@ -141,19 +152,29 @@ describe("classifier boost", () => {
         { role: "user", content: "cur", timestamp: 3 },
       ],
     };
-    const r = await runClassifier("openai/gpt", reg, histCtx, 1);
-    expect(r?.tier).toBe("medium");
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt" }],
+      reg,
+      histCtx,
+      1,
+    );
+    expect(res.result?.tier).toBe("medium");
     const calledCtx = streamSimple.mock.calls.at(-1)?.[1] as Context;
     expect(calledCtx.messages[0].content as string).toContain("u1");
   });
-  it("runClassifier with historySize but no historyText", async () => {
+  it("handles historySize but no historyText via fallback", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
       yield { type: "text_delta", delta: "low" };
     })();
     streamSimple.mockReturnValue(s as any);
     const singleCtx: Context = { messages: [{ role: "user", content: "cur", timestamp: 1 }] };
-    const r = await runClassifier("openai/gpt", reg, singleCtx, 1);
-    expect(r?.tier).toBe("low");
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt" }],
+      reg,
+      singleCtx,
+      1,
+    );
+    expect(res.result?.tier).toBe("low");
   });
 });

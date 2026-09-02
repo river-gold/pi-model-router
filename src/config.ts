@@ -66,7 +66,7 @@ export const stripJsonc = (text: string): string => {
       continue;
     }
 
-    if (char === '"' || char === "'") {
+    if (char === '"') {
       inString = true;
       stringChar = char;
       result += char;
@@ -105,7 +105,7 @@ export const stripJsonc = (text: string): string => {
       }
       continue;
     }
-    if (char === '"' || char === "'") {
+    if (char === '"') {
       inString = true;
       stringChar = char;
       stripped += char;
@@ -113,9 +113,7 @@ export const stripJsonc = (text: string): string => {
     }
     if (char === ",") {
       let j = i + 1;
-      /* v8 ignore next */
       for (; j < result.length && /\s/.test(result[j] ?? ""); j++) {}
-      /* v8 ignore next */
       const nextNonSpace = result[j] ?? "";
       if (nextNonSpace === "}" || nextNonSpace === "]") {
         continue;
@@ -146,10 +144,7 @@ export const parseConfigFile = (path: string): ParsedConfigFile => {
     return {
       config: {},
       warnings: [
-        /* v8 ignore next */
-        /* v8 ignore start */
         `Failed to parse router config at ${path}: ${error instanceof Error ? error.message : String(error)}`,
-        /* v8 ignore stop */
       ],
     };
   }
@@ -176,33 +171,10 @@ export const normalizeClassifierConfig = (
       return { model: formatModelRef(provider, modelId), thinking };
     } catch (error) {
       warnings.push(
-        /* v8 ignore next */
         `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return undefined;
     }
-  }
-  if (isObjectRecord(raw)) {
-    const modelRef = typeof raw.model === "string" ? raw.model.trim() : "";
-    if (modelRef) {
-      if (raw.thinking !== undefined) {
-        warnings.push(
-          `${contextLabel}: separate "thinking" field is removed, use "model#thinking" format. Ignored.`,
-        );
-      }
-      try {
-        const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
-        return { model: formatModelRef(provider, modelId), thinking };
-      } catch (error) {
-        warnings.push(
-          /* v8 ignore next */
-          `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return undefined;
-      }
-    }
-    warnings.push(`${contextLabel} object is missing the "model" field. Ignored.`);
-    return undefined;
   }
   return undefined;
 };
@@ -224,11 +196,6 @@ export const normalizeClassifierModels = (
       if (c) out.push(c);
     }
     return out.length > 0 ? out : undefined;
-  }
-  if (isObjectRecord(raw)) {
-    // support legacy { model, thinking } object as single entry
-    const single = normalizeClassifierConfig(raw, warnings, contextLabel);
-    return single ? [single] : undefined;
   }
   warnings.push(`Invalid ${contextLabel}: expected string or array of strings.`);
   return undefined;
@@ -301,18 +268,13 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
     };
   }
 
-  // historyLimit is a legacy alias for historySize (kept for backwards compatibility)
-  const mergedHistorySize =
-    (override as unknown as Record<string, unknown>).historySize !== undefined
-      ? ((override as unknown as Record<string, unknown>).historySize as number)
-      : (override as unknown as Record<string, unknown>).historyLimit !== undefined
-        ? ((override as unknown as Record<string, unknown>).historyLimit as number)
-        : base.historySize;
-
   return {
     debug: override.debug ?? base.debug,
     classifierModels: override.classifierModels ?? base.classifierModels,
-    historySize: mergedHistorySize ?? base.historySize,
+    historySize:
+      (override as unknown as Record<string, unknown>).historySize !== undefined
+        ? ((override as unknown as Record<string, unknown>).historySize as number)
+        : base.historySize,
     profiles: mergedProfiles,
   };
 };
@@ -364,22 +326,6 @@ export const normalizeTierConfig = (
     return undefined;
   }
 
-  if (value.thinking !== undefined) {
-    warnings.push(
-      `Profile "${profileName}" ${tier} tier: separate "thinking" field is removed, use "model#thinking" format. Ignored.`,
-    );
-  }
-  if (value.fallbacks !== undefined) {
-    warnings.push(
-      `Profile "${profileName}" ${tier} tier: "fallbacks" is removed, use "models" array with priority order. Ignored.`,
-    );
-  }
-  if (typeof value.model === "string") {
-    warnings.push(
-      `Profile "${profileName}" ${tier} tier: "model" is removed, use "models" array. Ignored.`,
-    );
-  }
-
   const rawModels = (value as Record<string, unknown>).models;
   if (!Array.isArray(rawModels) || rawModels.length === 0) {
     warnings.push(
@@ -399,7 +345,6 @@ export const normalizeTierConfig = (
       models.push(m.trim());
     } catch (error) {
       warnings.push(
-        /* v8 ignore next */
         `Invalid model "${m}" in profile "${profileName}" ${tier} tier: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
@@ -410,7 +355,6 @@ export const normalizeTierConfig = (
   }
 
   const primaryParsed = parseCanonicalModelRef(models[0]);
-  const parsedModel = formatModelRef(primaryParsed.provider, primaryParsed.modelId);
   const thinking = primaryParsed.thinking;
 
   const tierContextWindow =
@@ -427,7 +371,6 @@ export const normalizeTierConfig = (
 
   return {
     models,
-    model: parsedModel,
     thinking,
     contextWindow: tierContextWindow,
     maxTokens: tierMaxTokens,
@@ -442,14 +385,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 
   // Warn on unknown top-level fields
   {
-    const allowedKeys = new Set([
-      "debug",
-      "classifierModels",
-      "classifierModel",
-      "historySize",
-      "historyLimit",
-      "profiles",
-    ]);
+    const allowedKeys = new Set(["debug", "classifierModels", "historySize", "profiles"]);
     for (const key of Object.keys(raw as unknown as Record<string, unknown>)) {
       if (!allowedKeys.has(key)) {
         warnings.push(`Unknown config field "${key}" ignored.`);
@@ -459,7 +395,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 
   const normalizedProfiles: Record<string, RouterProfile> = {};
 
-  /* v8 ignore next */
   for (const [name, profile] of Object.entries(raw.profiles ?? {})) {
     if (!isObjectRecord(profile)) {
       warnings.push(`Profile "${name}" is not an object. Skipped.`);
@@ -492,12 +427,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       continue;
     }
 
-    if ((profile as Record<string, unknown>).classifierModel !== undefined) {
-      warnings.push(`Profile "${name}" classifierModel is deprecated, use classifierModels.`);
-    }
-    const rawClassifier =
-      (profile as Record<string, unknown>).classifierModels ??
-      (profile as Record<string, unknown>).classifierModel;
+    const rawClassifier = (profile as Record<string, unknown>).classifierModels;
     const classifierModels = normalizeClassifierModels(
       rawClassifier,
       warnings,
@@ -515,12 +445,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     };
   }
 
-  if ((raw as unknown as Record<string, unknown>).classifierModel !== undefined) {
-    warnings.push("classifierModel is deprecated, use classifierModels.");
-  }
-  const rawGlobalClassifier =
-    (raw as unknown as Record<string, unknown>).classifierModels ??
-    (raw as unknown as Record<string, unknown>).classifierModel;
+  const rawGlobalClassifier = (raw as unknown as Record<string, unknown>).classifierModels;
   const classifierModels = normalizeClassifierModels(
     rawGlobalClassifier as unknown,
     warnings,
@@ -528,9 +453,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   );
 
   let historySize: number | undefined = undefined;
-  const rawHistorySize =
-    (raw as unknown as Record<string, unknown>).historySize ??
-    (raw as unknown as Record<string, unknown>).historyLimit;
+  const rawHistorySize = (raw as unknown as Record<string, unknown>).historySize;
   if (rawHistorySize !== undefined) {
     if (
       typeof rawHistorySize === "number" &&
@@ -614,8 +537,7 @@ export const resolveContextWindow = (
 
   if (modelRegistry) {
     try {
-      /* v8 ignore next */
-      const ref = tierConfig.models!?.[0] ?? tierConfig.model ?? "";
+      const ref = tierConfig.models!?.[0] ?? "";
       const { provider, modelId } = parseCanonicalModelRef(ref);
       const registryModel = modelRegistry.find(provider, modelId);
       if (registryModel?.contextWindow) return registryModel.contextWindow;
@@ -642,8 +564,7 @@ export const resolveMaxTokens = (
 
   if (modelRegistry) {
     try {
-      /* v8 ignore next */
-      const ref = tierConfig.models!?.[0] ?? tierConfig.model ?? "";
+      const ref = tierConfig.models!?.[0] ?? "";
       const { provider, modelId } = parseCanonicalModelRef(ref);
       const registryModel = modelRegistry.find(provider, modelId);
       if (registryModel?.maxTokens) return registryModel.maxTokens;

@@ -48,12 +48,10 @@ describe("provider failure memory (session-scoped, chain-local)", () => {
         balanced: {
           medium: {
             models: ["openai/gpt-4o-mini", "openai/gpt-4o"],
-            model: "openai/gpt-4o-mini",
             resolvedContextWindow: 5000,
           },
           high: {
             models: ["openai/gpt-4o-mini", "openai/gpt-4o"],
-            model: "openai/gpt-4o-mini",
             resolvedContextWindow: 5000,
           },
         },

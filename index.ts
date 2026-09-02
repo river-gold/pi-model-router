@@ -55,7 +55,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     return false;
   };
 
-  /* v8 ignore start */
   const tryRestoreFallback = async (ctx: ExtensionContext): Promise<boolean> => {
     if (lastNonRouterModel && (await tryFallbackByRef(ctx, lastNonRouterModel))) return true;
     try {
@@ -77,7 +76,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     }
     return false;
   };
-  /* v8 ignore stop */
 
   const recordDebugDecision = (decision: RoutingDecision) => {
     debugHistory = [...debugHistory, decision].slice(-MAX_DEBUG_HISTORY);
@@ -97,7 +95,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       ...state,
       timestamp: 0,
       lastDecision: state.lastDecision ? { ...state.lastDecision, timestamp: 0 } : undefined,
-      /* v8 ignore next */
       debugHistory: state.debugHistory?.map((decision) => ({
         ...decision,
         timestamp: 0,
@@ -122,7 +119,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       const loaded = loadRouterConfig(currentCwd);
       currentConfig = loaded.config;
       lastConfigWarnings = loaded.warnings;
-      /* v8 ignore next */
       if (!options?.preserveDebug) {
         debugEnabled = currentConfig.debug ?? false;
       }
@@ -160,7 +156,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       registerRouterProvider(
         pi,
         {
-          /* v8 ignore start */
           get lastRegisteredModels() {
             return lastRegisteredModels;
           },
@@ -203,7 +198,6 @@ const routerExtension = (pi: ExtensionAPI) => {
           get failedByChain() {
             return failedByChain;
           },
-          /* v8 ignore stop */
         },
         {
           persistState,
@@ -243,7 +237,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       selectedProfile = resolveProfileName(currentConfig, savedState.selectedProfile);
       routerEnabled = savedState.enabled;
       debugEnabled = savedState.debugEnabled ?? debugEnabled;
-      /* v8 ignore next */
       debugHistory = savedState.debugHistory
         ? [...savedState.debugHistory].slice(-MAX_DEBUG_HISTORY)
         : [];
@@ -278,7 +271,6 @@ const routerExtension = (pi: ExtensionAPI) => {
   registerCommands(
     pi,
     {
-      /* v8 ignore start */
       get currentConfig() {
         return currentConfig;
       },
@@ -324,7 +316,6 @@ const routerExtension = (pi: ExtensionAPI) => {
       get failedByChain() {
         return failedByChain;
       },
-      /* v8 ignore stop */
     },
     actions,
   );
@@ -392,7 +383,6 @@ const routerExtension = (pi: ExtensionAPI) => {
     ensureInitializedFromContext(ctx);
     if (routerEnabled && selectedProfile && ctx.model?.provider !== "router") {
       const routerModel = ctx.modelRegistry.find("router", selectedProfile);
-      /* v8 ignore next */
       if (routerModel) {
         await setModelInternally(routerModel);
       }
