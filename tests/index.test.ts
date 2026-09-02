@@ -1,6 +1,14 @@
 /* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import routerExtension from "../src/index";
+import rootExtension from "../index";
+
+describe("index re-export", () => {
+  it("re-exports routerExtension from src/index", () => {
+    expect(rootExtension).toBe(routerExtension);
+  });
+});
+
 
 vi.mock("../src/config", async () => {
   const actual = await vi.importActual<typeof import("../src/config")>("../src/config");
