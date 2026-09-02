@@ -173,15 +173,134 @@ export const buildFallbackDecision = (
   decision.thinking = ft ?? decision.thinking;
 };
 
-export const delegateToTierModels = async (params: DelegateParams): Promise<DelegateResult> => {
+type AttemptResult = {
+  status: "success" | "retry" | "nonRetryable" | "skip";
+  costDelta?: number;
+  error?: Error;
+  isFallback?: boolean;
+};
+
+export const attemptSingleModel = async (
+  modelRef: string,
+  index: number,
+  params: DelegateParams,
+  recordRouteFailure: (ref: string) => void,
+): Promise<AttemptResult> => {
   const { registry, profile, decision, routerModel, context, options, state, withCommitMutex, stream, recordDebugDecision } =
     params;
+  const { provider: targetProvider, modelId: targetModelId, thinking: refThinking } =
+    parseCanonicalModelRef(modelRef);
+  const tryThinking = refThinking ?? decision.thinking;
 
+  if (shouldSkipRouterModel(targetProvider)) return { status: "skip" };
+
+  const targetModel = registry.find(targetProvider, targetModelId);
+  if (!targetModel) {
+    const err = new Error(`Routed model not found: ${targetProvider}/${targetModelId}`);
+    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    return { status: "retry", error: err };
+  }
+
+  const auth = await registry.getApiKeyAndHeaders(targetModel);
+  if (!auth.ok || !auth.apiKey) {
+    const err = resolveAuthError(auth as { ok: boolean; apiKey?: string; error?: string }, targetProvider, targetModelId);
+    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    return { status: "retry", error: err };
+  }
+
+  if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
+
+  const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, targetProvider, targetModelId);
+  const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
+  const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
+    | SimpleStreamOptions["reasoning"]
+    | undefined;
+
+  try {
+    if (state.lastExtensionContext) {
+      if (delegatedReasoning) {
+        state.lastExtensionContext.ui.setHiddenThinkingLabel?.(
+          `Thinking (${targetProvider}/${targetModelId})...`,
+        );
+      } else {
+        state.lastExtensionContext.ui.setHiddenThinkingLabel?.();
+      }
+    }
+  } catch {
+    // stale - extension context invalidated after session teardown, ignore
+  }
+
+  const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
+  const delegatedStream = streamDelegated(registry, modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }), effectiveContext, {
+    ...delegationOptions,
+    apiKey: auth.apiKey,
+    headers: auth.headers,
+    ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
+  });
+
+  if (!delegatedStream) {
+    const err = new Error("No delegated stream available");
+    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    return { status: "retry", error: err };
+  }
+
+  const bufferedEvents: unknown[] = [];
+  let contentReceivedForTry = false;
+
+  for await (const event of delegatedStream) {
+    if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
+    bufferedEvents.push(event);
+    if (isContentEvent((event as { type: string }).type)) contentReceivedForTry = true;
+  }
+
+  const collected = collectBufferedResult(bufferedEvents);
+  contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
+
+  if (collected.gotDone) {
+    for (const ev of bufferedEvents) stream.push(ev as never);
+    const costDelta = collected.pendingCostDelta;
+    if (costDelta) {
+      await withCommitMutex(async () => {
+        state.accumulatedCost += costDelta;
+      });
+    }
+    if (index > 0) {
+      buildFallbackDecision(decision, modelRef);
+      await withCommitMutex(async () => {
+        if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
+          state.lastDecision = { ...decision };
+        }
+      });
+      recordDebugDecision(decision);
+    }
+    return { status: "success", costDelta, isFallback: index > 0 };
+  }
+
+  if (collected.gotError) {
+    if (contentReceivedForTry) {
+      for (const ev of bufferedEvents) stream.push(ev as never);
+      return {
+        status: "nonRetryable",
+        error: new Error(`NON_RETRYABLE: ${collected.bufferedErrorMessage || "Model failed after sending content."}`),
+      };
+    }
+    const err = new Error(collected.bufferedErrorMessage || "Model failed before sending content.");
+    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    return { status: "retry", error: err };
+  }
+
+  const err = new Error("Model stream ended without terminal event.");
+  if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+  return { status: "retry", error: err };
+};
+
+export const delegateToTierModels = async (params: DelegateParams): Promise<DelegateResult> => {
+  const { profile, decision, state } = params;
   const initialModels = getInitialModelsToTry(profile, decision);
   const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
   const recordRouteFailure = createRecordFailure(state, routeChainKey);
   const routeFailedSet = state.failedByChain.get(routeChainKey);
-  const { filtered: modelsToTry, skipped: skippedDueToMemory, allFiltered } = filterByFailureMemory(
+  const { filtered: modelsToTry, allFiltered, skipped: skippedDueToMemory } = filterByFailureMemory(
     initialModels,
     routeFailedSet,
   );
@@ -196,108 +315,23 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
   let costDelta = 0;
 
   for (let i = 0; i < modelsToTry.length; i++) {
-    const modelRef = modelsToTry[i];
-    const { provider: targetProvider, modelId: targetModelId, thinking: refThinking } =
-      parseCanonicalModelRef(modelRef);
-    const tryThinking = refThinking ?? decision.thinking;
-    if (shouldSkipRouterModel(targetProvider)) continue;
-
-    const targetModel = registry.find(targetProvider, targetModelId);
-    if (!targetModel) {
-      lastError = new Error(`Routed model not found: ${targetProvider}/${targetModelId}`);
-      if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
-      continue;
-    }
-
-    const auth = await registry.getApiKeyAndHeaders(targetModel);
-    if (!auth.ok || !auth.apiKey) {
-      lastError = resolveAuthError(auth as { ok: boolean; apiKey?: string; error?: string }, targetProvider, targetModelId);
-      if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
-      continue;
-    }
-
-    if (options?.signal?.aborted) throw new Error("aborted");
-
-    const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, targetProvider, targetModelId);
-    const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
-    const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
-      | SimpleStreamOptions["reasoning"]
-      | undefined;
-
-    try {
-      if (state.lastExtensionContext) {
-        if (delegatedReasoning) {
-          state.lastExtensionContext.ui.setHiddenThinkingLabel?.(
-            `Thinking (${targetProvider}/${targetModelId})...`,
-          );
-        } else {
-          state.lastExtensionContext.ui.setHiddenThinkingLabel?.();
-        }
-      }
-    } catch {
-      // stale
-    }
-
-    const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
-    const delegatedStream = streamDelegated(registry, modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }), effectiveContext, {
-      ...delegationOptions,
-      apiKey: auth.apiKey,
-      headers: auth.headers,
-      ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
-    });
-
-    if (!delegatedStream) {
-      lastError = new Error("No delegated stream available");
-      if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
-      continue;
-    }
-
-    const bufferedEvents: unknown[] = [];
-    let contentReceivedForTry = false;
-
-    for await (const event of delegatedStream) {
-      if (options?.signal?.aborted) throw new Error("aborted");
-      bufferedEvents.push(event);
-      if (isContentEvent((event as { type: string }).type)) contentReceivedForTry = true;
-    }
-
-    const collected = collectBufferedResult(bufferedEvents);
-    contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
-
-    if (collected.gotDone) {
-      for (const ev of bufferedEvents) stream.push(ev as never);
+    const result = await attemptSingleModel(modelsToTry[i], i, params, recordRouteFailure);
+    if (result.status === "skip") continue;
+    if (result.status === "success") {
       success = true;
-      costDelta = collected.pendingCostDelta;
-      if (collected.pendingCostDelta) {
-        await withCommitMutex(async () => {
-          state.accumulatedCost += collected.pendingCostDelta;
-        });
-      }
-      if (i > 0) {
-        buildFallbackDecision(decision, modelRef);
-        await withCommitMutex(async () => {
-          if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
-            state.lastDecision = { ...decision };
-          }
-        });
-        recordDebugDecision(decision);
-      }
+      costDelta = result.costDelta ?? 0;
       break;
     }
-
-    if (collected.gotError) {
-      if (contentReceivedForTry) {
-        for (const ev of bufferedEvents) stream.push(ev as never);
-        lastError = new Error(`NON_RETRYABLE: ${collected.bufferedErrorMessage || "Model failed after sending content."}`);
-        break;
-      }
-      lastError = new Error(collected.bufferedErrorMessage || "Model failed before sending content.");
-      if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
-      continue;
+    if (result.status === "nonRetryable") {
+      lastError =
+        result.error?.message.startsWith("NON_RETRYABLE:") ?
+          new Error(result.error.message.slice("NON_RETRYABLE: ".length))
+        : result.error;
+      break;
     }
-
-    lastError = new Error("Model stream ended without terminal event.");
-    if (isRecordablePreStreamError(lastError)) recordRouteFailure(modelRef);
+    // retry
+    lastError = result.error;
+    if (result.error && isRecordablePreStreamError(result.error)) recordRouteFailure(modelsToTry[i]);
   }
 
   return { success, costDelta, fallbackDecision: decision, lastError };

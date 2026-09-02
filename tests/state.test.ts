@@ -1,7 +1,7 @@
 /* oxlint-disable */
 import { describe, it, expect } from "vitest";
-import { isRouterPersistedState, buildPersistedState } from "../../src/state";
-import type { RoutingDecision } from "../../src/types";
+import { isRouterPersistedState, buildPersistedState } from "../src/state";
+import type { RoutingDecision } from "../src/types";
 
 describe("state.ts", () => {
   describe("isRouterPersistedState", () => {

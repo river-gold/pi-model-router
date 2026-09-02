@@ -1,14 +1,14 @@
 /* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
-import { registerRouterProvider } from "../../src/provider";
-import { validateProviderState } from "../../src/provider/validation";
-import { decideInitialDecision } from "../../src/provider/routing";
-import { resolveTargetLimit, buildEffectiveContext, collectBufferedResult, isContentEvent } from "../../src/provider/delegate";
-import { createCommitMutex } from "../../src/provider/state";
+import { registerRouterProvider } from "../src/provider";
+import { validateProviderState } from "../src/provider/validation";
+import { decideInitialDecision } from "../src/provider/routing";
+import { resolveTargetLimit, buildEffectiveContext, collectBufferedResult, isContentEvent } from "../src/provider/delegate";
+import { createCommitMutex } from "../src/provider/state";
 import type { Api, Model, Context } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterConfig } from "../../src/types";
+import type { RouterConfig } from "../src/types";
 
 vi.mock("@earendil-works/pi-ai", () => ({ createAssistantMessageEventStream: vi.fn() }));
 

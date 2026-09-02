@@ -1,7 +1,7 @@
 /* oxlint-disable */
 import { describe, it, expect, vi } from "vitest";
-import { formatDecision, formatModelRef, updateStatus } from "../../src/ui";
-import type { RoutingDecision } from "../../src/types";
+import { formatDecision, formatModelRef, updateStatus } from "../src/ui";
+import type { RoutingDecision } from "../src/types";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 describe("ui.ts", () => {

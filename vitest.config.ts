@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     coverage: {
       exclude: ["**/*.test.ts", "coverage/**", "node_modules/**"],
-      include: ["index.ts", "src/**/*.ts"],
+      include: ["src/**/*.ts"],
       provider: "v8",
       thresholds: {
         branches: 100,
