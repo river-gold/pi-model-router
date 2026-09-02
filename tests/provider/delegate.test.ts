@@ -40,9 +40,13 @@ const decision = (over: Partial<RoutingDecision> = {}): RoutingDecision => ({
 } as any);
 
 describe("delegate pure helpers", () => {
-  it("getInitialModelsToTry", () => {
+  it("getInitialModelsToTry dedup", () => {
     expect(getInitialModelsToTry(profile({ high: { models: ["a/b", "a/b"] } as any }), decision({ tier: "high" }))).toEqual(["a/b"]);
+  });
+  it("getInitialModelsToTry undefined tier", () => {
     expect(getInitialModelsToTry(profile({ high: undefined }), decision({ tier: "high", targetProvider: "openai", targetModelId: "gpt" }))).toEqual(["openai/gpt#high"]);
+  });
+  it("getInitialModelsToTry empty tier", () => {
     expect(getInitialModelsToTry(profile({ high: { models: [] } as any }), decision({ tier: "high", targetProvider: "openai", targetModelId: "gpt" }))).toEqual(["openai/gpt#high"]);
   });
   it("filterByFailureMemory", () => {
@@ -249,3 +253,16 @@ describe("delegateToTierModels", () => {
     expect(res.success).toBe(false);
   });
 });
+
+  it("attemptSingleModel fallback with undefined lastDecision", async () => {
+    const { streamDelegated } = await import("../../src/stream");
+    vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "done", message: { usage: { cost: { total: 0 } } } }; })() as any);
+    const dec: any = { profile: "balanced", tier: "high", targetProvider: "openai", targetModelId: "gpt-high", thinking: "high", timestamp: Date.now() };
+    const state: any = { failedByChain: new Map(), lastDecision: undefined, accumulatedCost: 0, lastExtensionContext: { ui: { setHiddenThinkingLabel: vi.fn() } } };
+    const reg: any = { find: () => ({ provider: "openai", id: "gpt-high", reasoning: false } as any), getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k", headers: {} } as any) };
+    const { attemptSingleModel } = await import("../../src/provider/delegate");
+    const prof = { high: { models: ["openai/gpt-high"] } } as any;
+    const res = await attemptSingleModel("openai/gpt-high", 1, { registry: reg, profile: prof, decision: dec, routerModel: { contextWindow: 10000 } as any, context: { messages: [] } as any, state, withCommitMutex: async (fn: any) => fn(), stream: { push: vi.fn() } as any, recordDebugDecision: vi.fn() } as any, vi.fn());
+    expect(res.status).toBe("success");
+    expect(state.lastDecision).toBeUndefined();
+  });

@@ -1,13 +1,7 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RoutingDecision } from "../types";
-import {
-  parseCanonicalModelRef,
-  formatModelRef,
-  ROUTER_TIERS,
-  resolveContextWindow,
-  resolveDelegatedReasoning,
-} from "../config";
+import { parseCanonicalModelRef, formatModelRef, ROUTER_TIERS, resolveContextWindow, resolveDelegatedReasoning } from "../config";
 import { truncateContext } from "../context";
 import { modelWithAuthBaseUrl, streamDelegated } from "../stream";
 import { chainKeyForRoute, normalizeFailedRef, isRecordablePreStreamError } from "../failureMemory";
@@ -31,17 +25,9 @@ export type DelegateParams = {
   recordDebugDecision: (d: RoutingDecision) => void;
 };
 
-export type DelegateResult = {
-  success: boolean;
-  costDelta: number;
-  fallbackDecision?: RoutingDecision;
-  lastError?: unknown;
-};
+export type DelegateResult = { success: boolean; costDelta: number; fallbackDecision?: RoutingDecision; lastError?: unknown };
 
-export const getInitialModelsToTry = (
-  profile: RouterProfile,
-  decision: RoutingDecision,
-): string[] => {
+export const getInitialModelsToTry = (profile: RouterProfile, decision: RoutingDecision): string[] => {
   const tierModels = profile[decision.tier]?.models;
   if (!tierModels?.length) return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
   return [...new Set(tierModels)];
@@ -63,10 +49,7 @@ export const filterByFailureMemory = (
   return { filtered, skipped, allFiltered: filtered.length === 0 && modelsToTry.length > 0 };
 };
 
-export const createRecordFailure = (
-  state: DelegateParams["state"],
-  routeChainKey: string,
-) => (ref: string): void => {
+export const createRecordFailure = (state: DelegateParams["state"], routeChainKey: string) => (ref: string): void => {
   const s = state.failedByChain.get(routeChainKey) ?? new Set<string>();
   if (!state.failedByChain.has(routeChainKey)) state.failedByChain.set(routeChainKey, s);
   s.add(normalizeFailedRef(ref));
@@ -88,24 +71,15 @@ export const resolveTargetLimit = (
   return found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
 };
 
-export const buildEffectiveContext = (
-  context: Context,
-  targetLimit: number,
-  routerModel: Model<Api>,
-): Context => (targetLimit < (routerModel.contextWindow ?? Infinity) ? truncateContext(context, targetLimit) : context);
+export const buildEffectiveContext = (context: Context, targetLimit: number, routerModel: Model<Api>): Context =>
+  targetLimit < (routerModel.contextWindow ?? Infinity) ? truncateContext(context, targetLimit) : context;
 
 export const isContentEvent = (type: string): boolean =>
   type === "text_delta" || type === "thinking_delta" || type === "toolcall_delta" || type === "toolcall_end";
 
 export const collectBufferedResult = (
   bufferedEvents: unknown[],
-): {
-  gotDone: boolean;
-  gotError: boolean;
-  bufferedErrorMessage?: string;
-  pendingCostDelta: number;
-  contentReceived: boolean;
-} => {
+): { gotDone: boolean; gotError: boolean; bufferedErrorMessage?: string; pendingCostDelta: number; contentReceived: boolean } => {
   let gotDone = false;
   let gotError = false;
   let bufferedErrorMessage: string | undefined;
@@ -115,8 +89,7 @@ export const collectBufferedResult = (
     const type = (event as { type: string }).type;
     if (type === "done") {
       gotDone = true;
-      pendingCostDelta =
-        (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost?.total ?? 0;
+      pendingCostDelta = (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost?.total ?? 0;
     } else if (type === "error") {
       gotError = true;
       const errObj = (event as { error?: unknown }).error as { errorMessage?: unknown } | undefined;
@@ -131,10 +104,7 @@ export const resolveAuthError = (
   auth: { ok: boolean; apiKey?: string; error?: string },
   targetProvider: string,
   targetModelId: string,
-): Error =>
-  !auth.ok
-    ? new Error(`Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`)
-    : new Error(`No API key for routed model: ${targetProvider}/${targetModelId}`);
+): Error => (!auth.ok ? new Error(`Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`) : new Error(`No API key for routed model: ${targetProvider}/${targetModelId}`));
 
 export const shouldSkipRouterModel = (provider: string): boolean => provider === "router";
 
@@ -149,11 +119,7 @@ export const buildFallbackDecision = (decision: RoutingDecision, modelRef: strin
   });
 };
 
-type AttemptResult = {
-  status: "success" | "retry" | "nonRetryable" | "skip";
-  costDelta?: number;
-  error?: Error;
-};
+type AttemptResult = { status: "success" | "retry" | "nonRetryable" | "skip"; costDelta?: number; error?: Error };
 
 export const attemptSingleModel = async (
   modelRef: string,
@@ -165,34 +131,27 @@ export const attemptSingleModel = async (
   const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
   const tryThinking = thinking ?? decision.thinking;
   if (shouldSkipRouterModel(provider)) return { status: "skip" };
-
   const targetModel = registry.find(provider, modelId);
   if (!targetModel) {
     const err = new Error(`Routed model not found: ${provider}/${modelId}`);
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
     return { status: "retry", error: err };
   }
-
   const auth = await registry.getApiKeyAndHeaders(targetModel);
   if (!auth.ok || !auth.apiKey) {
     const err = resolveAuthError(auth as { ok: boolean; apiKey?: string; error?: string }, provider, modelId);
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
     return { status: "retry", error: err };
   }
-
   if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
-
   const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, provider, modelId);
   const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
   const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as SimpleStreamOptions["reasoning"] | undefined;
-
-  // best-effort UI, ignore stale
   try {
     const label = `Thinking (${provider}/${modelId})...`;
     if (delegatedReasoning) state.lastExtensionContext?.ui.setHiddenThinkingLabel?.(label);
     else state.lastExtensionContext?.ui.setHiddenThinkingLabel?.();
   } catch {}
-
   const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
   const delegatedStream = streamDelegated(registry, modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }), effectiveContext, {
     ...delegationOptions,
@@ -200,13 +159,11 @@ export const attemptSingleModel = async (
     headers: auth.headers,
     ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
   });
-
   if (!delegatedStream) {
     const err = new Error("No delegated stream available");
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
     return { status: "retry", error: err };
   }
-
   const bufferedEvents: unknown[] = [];
   let contentReceivedForTry = false;
   for await (const event of delegatedStream) {
@@ -214,29 +171,20 @@ export const attemptSingleModel = async (
     bufferedEvents.push(event);
     if (isContentEvent((event as { type: string }).type)) contentReceivedForTry = true;
   }
-
   const collected = collectBufferedResult(bufferedEvents);
   contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
-
   if (collected.gotDone) {
     for (const ev of bufferedEvents) stream.push(ev as never);
-    if (collected.pendingCostDelta) {
-      await withCommitMutex(async () => {
-        state.accumulatedCost += collected.pendingCostDelta;
-      });
-    }
+    if (collected.pendingCostDelta) await withCommitMutex(async () => { state.accumulatedCost += collected.pendingCostDelta; });
     if (index > 0) {
       buildFallbackDecision(decision, modelRef);
       await withCommitMutex(async () => {
-        if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) {
-          state.lastDecision = { ...decision };
-        }
+        if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) state.lastDecision = { ...decision };
       });
       recordDebugDecision(decision);
     }
     return { status: "success", costDelta: collected.pendingCostDelta };
   }
-
   if (collected.gotError) {
     if (contentReceivedForTry) {
       for (const ev of bufferedEvents) stream.push(ev as never);
@@ -246,7 +194,6 @@ export const attemptSingleModel = async (
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
     return { status: "retry", error: err };
   }
-
   const err = new Error("Model stream ended without terminal event.");
   if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
   return { status: "retry", error: err };
@@ -257,20 +204,11 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
   const initialModels = getInitialModelsToTry(profile, decision);
   const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
   const recordRouteFailure = createRecordFailure(state, routeChainKey);
-  const { filtered: modelsToTry, allFiltered, skipped: skippedDueToMemory } = filterByFailureMemory(
-    initialModels,
-    state.failedByChain.get(routeChainKey),
-  );
-  if (allFiltered) {
-    throw new Error(
-      `All models in ${decision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`,
-    );
-  }
-
+  const { filtered: modelsToTry, allFiltered, skipped: skippedDueToMemory } = filterByFailureMemory(initialModels, state.failedByChain.get(routeChainKey));
+  if (allFiltered) throw new Error(`All models in ${decision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`);
   let lastError: unknown;
   let success = false;
   let costDelta = 0;
-
   for (let i = 0; i < modelsToTry.length; i++) {
     const result = await attemptSingleModel(modelsToTry[i], i, params, recordRouteFailure);
     if (result.status === "skip") continue;
@@ -286,6 +224,5 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
     }
     lastError = result.error;
   }
-
   return { success, costDelta, fallbackDecision: decision, lastError };
 };
