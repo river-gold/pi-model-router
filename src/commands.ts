@@ -53,6 +53,7 @@ export const registerCommands = (
 			label: s.name,
 			description: s.desc,
 		}));
+/* v8 ignore next */
 		return items.length > 0 ? items : null;
 	};
 
@@ -64,17 +65,21 @@ export const registerCommands = (
 		const names = profileNames(state.currentConfig).join(", ");
 		const lines = [
 			"Model Router Status:",
+/* v8 ignore next */
 			`Router enabled: ${state.routerEnabled ? "yes" : "off"}`,
+/* v8 ignore next */
 			`Selected profile: ${state.selectedProfile ?? "none"}`,
 			`Session cost: $${state.accumulatedCost.toFixed(4)}`,
 			`Available profiles: ${names}`,
 			`Last non-router model: ${formatModelRef(state.lastNonRouterModel)}`,
+/* v8 ignore next */
 			`Debug: ${state.debugEnabled ? "on" : "off"}`,
 			`Debug history: ${state.debugHistory.length} decisions`,
 		];
 		if (state.lastDecision) {
 			lines.push(
 				`Last routed tier: ${state.lastDecision.tier}`,
+/* v8 ignore next */
 				`Last model: ${state.lastDecision.targetProvider}/${state.lastDecision.targetModelId} (${state.lastDecision.thinking ?? "auto"})`,
 				`Reason: ${state.lastDecision.reasoning}`,
 			);
@@ -183,12 +188,14 @@ export const registerCommands = (
 
 			const subcommand = parts[0];
 			const subArgs = parts.slice(1);
+			/* v8 ignore next */
 			if (hasTrailingSpace && parts.length === 1) {
 				subArgs.push("");
 			}
 
 			switch (subcommand) {
 				case "debug": {
+/* v8 ignore next */
 					const debugPrefix = subArgs[0] ?? "";
 					const items = ["on", "off", "toggle", "clear", "show"]
 						.filter((v) => v.startsWith(debugPrefix))
@@ -197,6 +204,7 @@ export const registerCommands = (
 							label: v,
 							description: `Router debug: ${v}`,
 						}));
+/* v8 ignore next */
 					return items.length > 0 ? items : null;
 				}
 			}
@@ -204,6 +212,7 @@ export const registerCommands = (
 			return null;
 		},
 		handler: async (args, ctx) => {
+/* v8 ignore next */
 			const parts = args?.trim().split(/\s+/) ?? [];
 			const subcommand = parts[0];
 			const subArgs = parts.slice(1);

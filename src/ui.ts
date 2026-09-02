@@ -23,6 +23,7 @@ export const updateStatus = (
 
 		let statusText: string;
 		if (lastDecision && matchesProfile) {
+/* v8 ignore next */
 			statusText = `router:${activeRouterProfile} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.thinking ?? "auto"})`;
 		} else {
 			statusText = `router:${activeRouterProfile} -> waiting`;

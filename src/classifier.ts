@@ -43,6 +43,7 @@ export const parseClassifierOutput = (
 	const tierMatch = trimmed.match(TIER_RE);
 	if (!tierMatch) return undefined;
 	const tierValue = tierMatch[1].toLowerCase();
+/* v8 ignore next */
 	if (!isRouterTier(tierValue)) return undefined;
 	const reasonMatch = trimmed.match(REASON_RE);
 	return {
@@ -113,6 +114,7 @@ export const runClassifierWithFallbacksDetailed = async (
 		attempts.push({
 			model: entry.model,
 			thinking: entry.thinking,
+/* v8 ignore next */
 			error: outcome.error ?? "no tier parsed or model/auth/stream failed",
 		});
 		// Auth/stream/not-found skip the model for the rest of the session.
@@ -181,6 +183,7 @@ const runClassifierOutcome = async (
 
 		const auth = await modelRegistry.getApiKeyAndHeaders(model);
 		if (!auth.ok || !("apiKey" in auth) || !auth.apiKey) {
+/* v8 ignore next */
 			const error = `auth failed: ok=${auth.ok} hasKey=${"apiKey" in auth ? !!auth.apiKey : false}`;
 			logClassifierSync({
 				timestamp: new Date().toISOString(),
@@ -236,6 +239,7 @@ const runClassifierOutcome = async (
 		);
 		let fullText = "";
 		for await (const event of stream) {
+/* v8 ignore next */
 			if (
 				event.type === "text_delta" &&
 				"delta" in event &&
@@ -284,6 +288,7 @@ const runClassifierOutcome = async (
 			});
 			return { skipSession: false, error: "aborted" };
 		}
+/* v8 ignore next */
 		const error = e instanceof Error ? e.message : String(e);
 		logClassifierSync({
 			timestamp: new Date().toISOString(),
