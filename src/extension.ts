@@ -248,7 +248,12 @@ const routerExtension = (pi: ExtensionAPI): void => {
       get lastConfigWarnings() { return state.lastConfigWarnings; },
       get failedByChain() { return state.failedByChain; },
     },
-    actions,
+    {
+      persistState: actions.persistState,
+      updateStatus: (ctx) => updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision),
+      reloadConfig: actions.reloadConfig,
+      ensureValidActiveRouterProfile: actions.ensureValidActiveRouterProfile,
+    },
   );
 
   pi.on("session_start", async (event, ctx) => {
