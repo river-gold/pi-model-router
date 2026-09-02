@@ -5,6 +5,8 @@ import { parseCanonicalModelRef, formatModelRef, ROUTER_TIERS, resolveContextWin
 import { truncateContext } from "../context";
 import { modelWithAuthBaseUrl, streamDelegated } from "../stream";
 import { chainKeyForRoute, normalizeFailedRef, isRecordablePreStreamError } from "../failureMemory";
+import { isEscalationCall, validateEscalationLevel } from "../escalation";
+import { resolveAvailableTier } from "../routing";
 import type { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 export type DelegateParams = {
@@ -25,7 +27,7 @@ export type DelegateParams = {
   recordDebugDecision: (d: RoutingDecision) => void;
 };
 
-export type DelegateResult = { success: boolean; costDelta: number; fallbackDecision?: RoutingDecision; lastError?: unknown };
+export type DelegateResult = { success: boolean; costDelta: number; fallbackDecision?: RoutingDecision; lastError?: unknown; escalationTier?: string; escalationReason?: string };
 
 export const getInitialModelsToTry = (profile: RouterProfile, decision: RoutingDecision): string[] => {
   const tierModels = profile[decision.tier]?.models;
@@ -170,11 +172,21 @@ export const attemptSingleModel = async (
   }
   const bufferedEvents: unknown[] = [];
   let contentReceivedForTry = false;
+  let escalationTier: string | undefined;
+  let escalationReason: string | undefined;
   for await (const event of delegatedStream) {
     if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
     bufferedEvents.push(event);
     if (isContentEvent((event as { type: string }).type)) contentReceivedForTry = true;
+    if ((event as { type: string }).type === "toolcall_end") {
+      const tc = (event as { toolCall?: { name?: string; arguments?: Record<string, unknown> } }).toolCall;
+      if (tc && isEscalationCall(tc.name ?? "")) {
+        const req = validateEscalationLevel(tc.arguments?.level);
+        if (req) { const t = resolveAvailableTier(profile, req); if (t !== decision.tier) { escalationTier = t; escalationReason = String(tc.arguments?.reason ?? ""); } }
+      }
+    }
   }
+  if (escalationTier) return { status: "retry", error: Object.assign(new Error(`ESCALATION:${escalationTier}`), { escalationTier, escalationReason }) };
   const collected = collectBufferedResult(bufferedEvents);
   contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
   if (collected.gotDone) {
@@ -228,5 +240,7 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
     }
     lastError = result.error;
   }
+  const esc = lastError as { escalationTier?: string; escalationReason?: string } | undefined;
+  if (esc?.escalationTier) return { success: false, costDelta, escalationTier: esc.escalationTier, escalationReason: esc.escalationReason, lastError };
   return { success, costDelta, fallbackDecision: decision, lastError };
 };

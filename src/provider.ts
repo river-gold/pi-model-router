@@ -20,6 +20,8 @@ import { applyClassifierIfNeeded } from "./provider/classifier";
 import { buildModelDefinitions, buildModelsKey } from "./provider/models";
 import { streamDelegated, modelWithAuthBaseUrl } from "./stream";
 import { chainKeyForRoute, isRecordablePreStreamError } from "./failureMemory";
+import { ESCALATION_TOOL } from "./escalation";
+import { buildRoutingDecision, resolveAvailableTier } from "./routing";
 
 export { streamDelegated, createAssistantMessageEventStream, modelWithAuthBaseUrl, chainKeyForRoute, isRecordablePreStreamError };
 export { normalizeDelegateError, pushStreamError } from "./provider/error";
@@ -66,8 +68,26 @@ export const registerRouterProvider = (
           await withCommitMutex(async () => { state.lastDecision = decision; });
           actions.recordDebugDecision(decision);
           safeUpdateStatus(state, actions);
-          const res = await delegateToTierModels({ registry: registry as ExtensionContext["modelRegistry"], profile: profile as RouterProfile, decision, routerModel: model, context, options, state, withCommitMutex, stream, recordDebugDecision: actions.recordDebugDecision });
-          if (!res.success) throw normalizeDelegateError(res.lastError);
+          const isMultiTier = ROUTER_TIERS.filter((t) => (profile as RouterProfile)[t]).length > 1;
+          const shouldInject = pi.getThinkingLevel() === "off" && isMultiTier;
+          let effectiveContext = context;
+          if (shouldInject) effectiveContext = { ...context, tools: [...(context.tools ?? []), ESCALATION_TOOL as never] };
+          let curDecision = decision;
+          let curContext = effectiveContext;
+          const res = await delegateToTierModels({ registry: registry as ExtensionContext["modelRegistry"], profile: profile as RouterProfile, decision: curDecision, routerModel: model, context: curContext, options, state, withCommitMutex, stream, recordDebugDecision: actions.recordDebugDecision });
+          const escTier = (res as unknown as { escalationTier?: string }).escalationTier;
+          if (escTier) {
+            const target = resolveAvailableTier(profile as RouterProfile, escTier as RouterTier);
+            if (target !== curDecision.tier) {
+              curDecision = buildRoutingDecision(model.id, profile as RouterProfile, target, `Self-escalation ${curDecision.tier} -> ${target}: ${(res as unknown as { escalationReason?: string }).escalationReason ?? ""}`, true);
+              await withCommitMutex(async () => { state.lastDecision = curDecision; });
+              actions.recordDebugDecision(curDecision);
+              state.lastExtensionContext?.ui.notify?.(`🚥 router:${model.id} escalated ${decision.tier} -> ${target}`, "info");
+              safeUpdateStatus(state, actions);
+              const res2 = await delegateToTierModels({ registry: registry as ExtensionContext["modelRegistry"], profile: profile as RouterProfile, decision: curDecision, routerModel: model, context, options, state, withCommitMutex, stream, recordDebugDecision: actions.recordDebugDecision });
+              if (!res2.success) throw normalizeDelegateError(res2.lastError);
+            } else if (!res.success) throw normalizeDelegateError(res.lastError);
+          } else if (!res.success) throw normalizeDelegateError(res.lastError);
           stream.end();
         } catch (error) {
           pushStreamError(stream, model, error);
