@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createPersistState, createSessionHelpers, createSetModelInternally } from "../../src/session/helpers";
 import { createRouterState } from "../../src/state/create";
 import type { RouterState } from "../../src/state/create";

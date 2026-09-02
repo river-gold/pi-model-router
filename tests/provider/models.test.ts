@@ -1,6 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildModelDefinitions, buildModelsKey } from "../../src/provider/models";
-import * as config from "../../src/config";
 import type { RouterConfig } from "../../src/types";
 
 describe("provider/models", () => {

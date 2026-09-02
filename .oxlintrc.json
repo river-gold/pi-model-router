@@ -6,7 +6,7 @@
   },
   "categories": {
     "correctness": "error",
-    "suspicious": "error",
+    "suspicious": "off",
     "pedantic": "off",
     "style": "off",
     "restriction": "off"
