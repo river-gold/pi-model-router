@@ -1,70 +1,70 @@
 {
-	"name": "@river-gold/pi-model-router",
-	"version": "0.4.4",
-	"type": "module",
-	"files": [
-		"index.ts",
-		"src",
-		"!src/*.test.ts",
-		"!index.test.ts",
-		"LICENSE",
-		"docs/model-router.example.json",
-		"README.md"
-	],
-	"description": "Smart per-turn model router for Pi that optimizes your AI usage by dynamically switching LLM tiers based on task complexity and phase awareness.",
-	"keywords": [
-		"pi-package",
-		"pi",
-		"model-router",
-		"llm",
-		"coding-agent",
-		"extension"
-	],
-	"license": "MIT",
-	"author": "river-gold",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/river-gold/pi-model-router.git"
-	},
-	"homepage": "https://github.com/river-gold/pi-model-router#readme",
-	"bugs": {
-		"url": "https://github.com/river-gold/pi-model-router/issues"
-	},
-	"exports": {
-		".": "./index.ts"
-	},
-	"pi": {
-		"extensions": [
-			"./index.ts"
-		]
-	},
-	"scripts": {
-		"tsc": "tsc --noEmit",
-		"build": "tsc",
-		"prepublishOnly": "npm run tsc",
-		"test": "vitest run"
-	},
-	"peerDependencies": {
-		"@earendil-works/pi-agent-core": ">=0.84.4",
-		"@earendil-works/pi-ai": ">=0.84.4",
-		"@earendil-works/pi-coding-agent": ">=0.84.4",
-		"@earendil-works/pi-tui": ">=0.84.4"
-	},
-	"devDependencies": {
-		"@earendil-works/pi-agent-core": "^0.84.4",
-		"@earendil-works/pi-ai": "^0.84.4",
-		"@earendil-works/pi-coding-agent": "^0.84.4",
-		"@earendil-works/pi-tui": "^0.84.4",
-		"@vitest/coverage-v8": "^4.1.11",
-		"oxlint": "^1.81.0",
-		"oxlint-tsgolint": "^7.0.2001",
-		"prettier": "^3.8.4",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.11"
-	},
-	"allowScripts": {
-		"@google/genai@1.52.0": true,
-		"protobufjs@7.6.4": true,
-		"fsevents@2.3.3": true
-	}
+  "name": "@river-gold/pi-model-router",
+  "version": "0.4.4",
+  "description": "Smart per-turn model router for Pi that optimizes your AI usage by dynamically switching LLM tiers based on task complexity and phase awareness.",
+  "keywords": [
+    "coding-agent",
+    "extension",
+    "llm",
+    "model-router",
+    "pi",
+    "pi-package"
+  ],
+  "homepage": "https://github.com/river-gold/pi-model-router#readme",
+  "bugs": {
+    "url": "https://github.com/river-gold/pi-model-router/issues"
+  },
+  "license": "MIT",
+  "author": "river-gold",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/river-gold/pi-model-router.git"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "!src/*.test.ts",
+    "!index.test.ts",
+    "LICENSE",
+    "docs/model-router.example.json",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "tsc": "tsc --noEmit",
+    "build": "tsc",
+    "prepublishOnly": "npm run tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "^0.84.4",
+    "@earendil-works/pi-ai": "^0.84.4",
+    "@earendil-works/pi-coding-agent": "^0.84.4",
+    "@earendil-works/pi-tui": "^0.84.4",
+    "@vitest/coverage-v8": "^4.1.11",
+    "oxlint": "^1.81.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "prettier": "^3.8.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": ">=0.84.4",
+    "@earendil-works/pi-ai": ">=0.84.4",
+    "@earendil-works/pi-coding-agent": ">=0.84.4",
+    "@earendil-works/pi-tui": ">=0.84.4"
+  },
+  "allowScripts": {
+    "@google/genai@1.52.0": true,
+    "protobufjs@7.6.4": true,
+    "fsevents@2.3.3": true
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
 }

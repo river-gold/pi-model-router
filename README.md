@@ -71,34 +71,34 @@ Copy the example config to one of:
 
 ### Tiers & Effort Mapping
 
-| Tier | Auto classifier | Manual effort (`thinkingLevel`) | Fallback when tier missing |
-|------|-----------------|----------------------------------|----------------------------|
-| `minimal` | `minimal` | `minimal` | nearest: `low` → `medium` → `high` → `xhigh` → `max` |
-| `low` | `low` | `low` | `medium` → `high` → `xhigh` → `max` → `minimal` |
-| `medium` | `medium` | `medium` | `high` → `xhigh` → `max` → `low` → `minimal` |
-| `high` | `high` | `high` | `xhigh` → `max` → `medium` → `low` → `minimal` |
-| `xhigh` | `xhigh` | `xhigh` | `max` → `high` → `medium` → `low` → `minimal` |
-| `max` | `max` | `max` | nearest: `xhigh` → `high` → `medium` → `low` → `minimal` |
-| _(auto)_ | — | `off` → classifier (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) | — |
+| Tier      | Auto classifier | Manual effort (`thinkingLevel`)                                    | Fallback when tier missing                               |
+| --------- | --------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
+| `minimal` | `minimal`       | `minimal`                                                          | nearest: `low` → `medium` → `high` → `xhigh` → `max`     |
+| `low`     | `low`           | `low`                                                              | `medium` → `high` → `xhigh` → `max` → `minimal`          |
+| `medium`  | `medium`        | `medium`                                                           | `high` → `xhigh` → `max` → `low` → `minimal`             |
+| `high`    | `high`          | `high`                                                             | `xhigh` → `max` → `medium` → `low` → `minimal`           |
+| `xhigh`   | `xhigh`         | `xhigh`                                                            | `max` → `high` → `medium` → `low` → `minimal`            |
+| `max`     | `max`           | `max`                                                              | nearest: `xhigh` → `high` → `medium` → `low` → `minimal` |
+| _(auto)_  | —               | `off` → classifier (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) | —                                                        |
 
 ### Configuration Fields
 
-| Field | Description |
-|-------|-------------|
-| `classifierModels` / `classifierModel` | (Optional) Model(s) used to categorize intent (`provider/model#thinking`). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. |
-| `profiles` | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required). |
-| `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning. |
-| `historySize` | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0). |
+| Field                                                                   | Description                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `classifierModels` / `classifierModel`                                  | (Optional) Model(s) used to categorize intent (`provider/model#thinking`). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. |
+| `profiles`                                                              | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required).                                                                                               |
+| `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning.                                                                                          |
+| `historySize`                                                           | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0).                                                                                                                                                                                  |
 
 ## Commands
 
-| Command                     | Description                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| `/router`                   | Show detailed status, current profile, spend, and settings.                     |
-| `/router status`            | Alias for `/router` (show current status).                                      |
-| `/router debug <on\|off>`   | Toggle turn-by-turn routing notifications (supports `toggle`, `clear`, `show`). |
-| `/router reload`            | Hot-reload the configuration JSON.                                              |
-| `/router help`              | Show usage help for all subcommands.                                            |
+| Command                   | Description                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `/router`                 | Show detailed status, current profile, spend, and settings.                     |
+| `/router status`          | Alias for `/router` (show current status).                                      |
+| `/router debug <on\|off>` | Toggle turn-by-turn routing notifications (supports `toggle`, `clear`, `show`). |
+| `/router reload`          | Hot-reload the configuration JSON.                                              |
+| `/router help`            | Show usage help for all subcommands.                                            |
 
 ## Documentation
 
