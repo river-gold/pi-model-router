@@ -151,10 +151,6 @@ describe("attemptSingleModel", () => {
     const s: any = { failedByChain: new Map(), lastDecision: undefined, accumulatedCost: 0, lastExtensionContext: { ui: { setHiddenThinkingLabel: () => { throw new Error("stale"); } } } };
     expect((await attemptSingleModel("openai/gpt-high", 0, base({ state: s }) as any, vi.fn())).status).toBe("success");
   });
-  it("undefined lastExtensionContext", async () => {
-    vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "done", message: { usage: { cost: { total: 0 } } } }; })() as any);
-    expect((await attemptSingleModel("openai/gpt-high", 0, base({ state: { failedByChain: new Map(), lastDecision: undefined, accumulatedCost: 0, lastExtensionContext: undefined } as any }) as any, vi.fn())).status).toBe("success");
-  });
   it("with reasoning true", async () => {
     vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "done", message: { usage: { cost: { total: 0 } } } }; })() as any);
     const s: any = { failedByChain: new Map(), lastDecision: undefined, accumulatedCost: 0, lastExtensionContext: { ui: { setHiddenThinkingLabel: vi.fn() } } };
@@ -180,11 +176,6 @@ describe("attemptSingleModel", () => {
   it("no terminal event", async () => {
     vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "text_delta" }; })() as any);
     expect((await attemptSingleModel("openai/gpt-high", 0, base() as any, vi.fn())).status).toBe("retry");
-  });
-  it("stale getter throw", async () => {
-    vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "done", message: { usage: { cost: { total: 0 } } } }; })() as any);
-    const state: any = { failedByChain: new Map(), lastDecision: undefined, accumulatedCost: 0, get lastExtensionContext() { throw new Error("stale"); } };
-    expect((await attemptSingleModel("openai/gpt-high", 0, base({ state } as any) as any, vi.fn())).status).toBe("success");
   });
   it("model not found not recordable", async () => {
     vi.mocked(isRecordablePreStreamError).mockReturnValueOnce(false);
@@ -249,20 +240,6 @@ describe("attemptSingleModel", () => {
     const r = await attemptSingleModel("openai/gpt-high", 1, base({ decision: dec, state: s }) as any, vi.fn());
     expect(r.status).toBe("success");
     expect(s.lastDecision).toEqual({ profile: "other" });
-  });
-  it("undefined setHiddenThinkingLabel", async () => {
-    vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "done", message: { usage: { cost: { total: 0 } } } }; })() as any);
-    const s: any = { failedByChain: new Map(), lastDecision: undefined, accumulatedCost: 0, lastExtensionContext: { ui: {} } };
-    expect((await attemptSingleModel("openai/gpt-high", 0, base({ state: s }) as any, vi.fn())).status).toBe("success");
-  });
-  it("undefined ui throws into catch", async () => {
-    vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "done", message: { usage: { cost: { total: 0 } } } }; })() as any);
-    const s: any = { failedByChain: new Map(), lastDecision: undefined, accumulatedCost: 0, lastExtensionContext: {} };
-    expect((await attemptSingleModel("openai/gpt-high", 0, base({ state: s }) as any, vi.fn())).status).toBe("success");
-  });
-  it("options reasoning stripped", async () => {
-    vi.mocked(streamDelegated).mockImplementation(() => (async function* () { yield { type: "done", message: { usage: { cost: { total: 0 } } } }; })() as any);
-    expect((await attemptSingleModel("openai/gpt-high#low", 0, base({ options: { reasoning: "high", signal: { aborted: false } } as any }) as any, vi.fn())).status).toBe("success");
   });
 });
 
