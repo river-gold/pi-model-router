@@ -46,7 +46,7 @@ describe("classifier boost", () => {
       yield { type: "text_delta", delta: "bad" };
     })();
     const s2 = (async function* () {
-      yield { type: "text_delta", delta: "Tier: high\nReasoning: ok" };
+      yield { type: "text_delta", delta: "high" };
     })();
     streamSimple.mockReturnValueOnce(s1 as any).mockReturnValueOnce(s2 as any);
     const onAttempt = vi.fn();
@@ -120,7 +120,7 @@ describe("classifier boost", () => {
   it("runClassifier with reasoning option", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
-      yield { type: "text_delta", delta: "Tier: low\nReasoning: ok" };
+      yield { type: "text_delta", delta: "low" };
     })();
     streamSimple.mockReturnValue(s as any);
     const r = await runClassifier("openai/gpt", reg, ctx, 0, "high" as any);
@@ -131,7 +131,7 @@ describe("classifier boost", () => {
   it("runClassifier with historySize >0 and history text", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
-      yield { type: "text_delta", delta: "Tier: medium\nReasoning: ok" };
+      yield { type: "text_delta", delta: "medium" };
     })();
     streamSimple.mockReturnValue(s as any);
     const histCtx: Context = {
@@ -149,7 +149,7 @@ describe("classifier boost", () => {
   it("runClassifier with historySize but no historyText", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
-      yield { type: "text_delta", delta: "Tier: low\nReasoning: ok" };
+      yield { type: "text_delta", delta: "low" };
     })();
     streamSimple.mockReturnValue(s as any);
     const singleCtx: Context = { messages: [{ role: "user", content: "cur", timestamp: 1 }] };

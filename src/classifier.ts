@@ -18,16 +18,11 @@ Tiers:
 - xhigh: Cross-cutting or high-blast-radius work: migrations, ambiguous RCA, security-sensitive changes, multi-repo/system design, risky refactors.
 - max: Novel or irreversible work: greenfield strategy, adversarial audit, long-horizon research with conflicting sources, eval/algorithm invention.
 
-Do not answer the user's request. Do not use tools. Do not explain beyond the two lines.
-Return ONLY these two lines and nothing else:
-Tier: [minimal|low|medium|high|xhigh|max]
-Reasoning: [one short sentence]`;
+Do not answer the user's request. Do not use tools.
+Return ONLY one word: minimal|low|medium|high|xhigh|max. No other text.`;
 
 const OUTPUT_CONSTRAINT =
-  "Classify the latest user message. Output ONLY two lines, no other text:\nTier: <minimal|low|medium|high|xhigh|max>\nReasoning: <one short sentence>";
-
-const TIER_RE = /tier\s*[:：]\s*(minimal|low|medium|high|xhigh|max)\b/i;
-const REASON_RE = /reasoning\s*[:：]\s*(.+)/i;
+  "Classify the latest user message. Output ONLY one word: minimal|low|medium|high|xhigh|max. No other text.";
 
 export const parseClassifierOutput = (
   fullText: string,
@@ -39,19 +34,13 @@ export const parseClassifierOutput = (
       reasoningLine?: string;
     }
   | undefined => {
-  const trimmed = fullText.trim();
+  const trimmed = fullText.trim().toLowerCase();
   if (!trimmed) return undefined;
-  const tierMatch = trimmed.match(TIER_RE);
-  if (!tierMatch) return undefined;
-  const tierValue = tierMatch[1].toLowerCase();
-  /* v8 ignore next */
-  if (!isRouterTier(tierValue)) return undefined;
-  const reasonMatch = trimmed.match(REASON_RE);
+  if (!isRouterTier(trimmed)) return undefined;
   return {
-    tier: tierValue,
-    reasoning: reasonMatch?.[1]?.trim() || "Classifier decision.",
-    tierLine: tierMatch[0].trim(),
-    reasoningLine: reasonMatch?.[0]?.trim(),
+    tier: trimmed,
+    reasoning: "Classifier decision.",
+    tierLine: trimmed,
   };
 };
 

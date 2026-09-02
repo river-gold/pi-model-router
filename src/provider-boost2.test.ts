@@ -252,7 +252,7 @@ describe("provider boost2", () => {
     const reg = buildRegistry();
     // mock classifier stream to return tier
     const classifierStream = (async function* () {
-      yield { type: "text_delta", delta: "Tier: high\nReasoning: ok" };
+      yield { type: "text_delta", delta: "high" };
     })();
     const delegateStream = (async function* () {
       yield { type: "text_delta", delta: "ans" };

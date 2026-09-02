@@ -27,8 +27,7 @@ describe("classifier.ts", () => {
 
   it("should return tier and reasoning from LLM", async () => {
     const s = (async function* () {
-      yield { type: "text_delta", delta: "Tier: high\n" };
-      yield { type: "text_delta", delta: "Reasoning: test" };
+      yield { type: "text_delta", delta: "high" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
     const r = await runClassifier(
@@ -37,7 +36,7 @@ describe("classifier.ts", () => {
       baseContext,
       "off" as unknown as import("@earendil-works/pi-agent-core").ThinkingLevel,
     );
-    expect(r).toEqual({ tier: "high", reasoning: "test" });
+    expect(r).toEqual({ tier: "high", reasoning: "Classifier decision." });
   });
 
   it("should return undefined on invalid format", async () => {
@@ -56,7 +55,7 @@ describe("classifier.ts", () => {
 
   it("should pass history when historySize >0", async () => {
     const s = (async function* () {
-      yield { type: "text_delta", delta: "Tier: low\nReasoning: ok" };
+      yield { type: "text_delta", delta: "low" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
     const ctx: Context = {
@@ -87,7 +86,7 @@ describe("classifier.ts", () => {
     const controller = new AbortController();
     controller.abort();
     const s = (async function* () {
-      yield { type: "text_delta", delta: "Tier: high\nReasoning: ok" };
+      yield { type: "text_delta", delta: "high" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
     const r = await runClassifier(
@@ -106,7 +105,7 @@ describe("classifier.ts", () => {
   it("should pass signal to streamSimple", async () => {
     const controller = new AbortController();
     const s = (async function* () {
-      yield { type: "text_delta", delta: "Tier: medium\nReasoning: ok" };
+      yield { type: "text_delta", delta: "medium" };
     })();
     vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
     await runClassifier(
@@ -122,25 +121,24 @@ describe("classifier.ts", () => {
   });
 
   it("parseClassifierOutput extracts Tier anywhere in the text", () => {
-    const wrapped = parseClassifierOutput(
-      "아니요, 커버리지 강제 안 함.\n\nTier: low\nReasoning: informational Q&A",
-    );
-    expect(wrapped).toMatchObject({
+    expect(parseClassifierOutput("low")).toMatchObject({
       tier: "low",
-      reasoning: "informational Q&A",
+      reasoning: "Classifier decision.",
     });
-    expect(parseClassifierOutput("invalid")).toBeUndefined();
-    expect(parseClassifierOutput("**Tier: high**\nReasoning: debug")).toMatchObject({
+    expect(parseClassifierOutput("  HIGH  ")).toMatchObject({
       tier: "high",
     });
+    expect(parseClassifierOutput("invalid")).toBeUndefined();
+    expect(parseClassifierOutput("Tier: low")).toBeUndefined();
+    expect(parseClassifierOutput("Tier: low\nReasoning: x")).toBeUndefined();
   });
 
   it("should handle historySize as number and thinking as string overload", async () => {
     const s1 = (async function* () {
-      yield { type: "text_delta", delta: "Tier: medium\nReasoning: ok" };
+      yield { type: "text_delta", delta: "medium" };
     })();
     const s2 = (async function* () {
-      yield { type: "text_delta", delta: "Tier: medium\nReasoning: ok" };
+      yield { type: "text_delta", delta: "medium" };
     })();
     vi.mocked(streamSimple)
       .mockReturnValueOnce(s1 as unknown as ReturnType<typeof streamSimple>)

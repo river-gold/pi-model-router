@@ -35,9 +35,11 @@
   },
   "scripts": {
     "tsc": "tsc --noEmit",
-    "build": "tsc",
-    "prepublishOnly": "npm run tsc",
-    "test": "vitest run"
+    "test": "vitest run --coverage",
+    "lint": "oxlint --format stylish",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
   },
   "devDependencies": {
     "@earendil-works/pi-agent-core": "^0.84.4",

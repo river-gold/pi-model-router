@@ -720,12 +720,14 @@ describe("coverage-boost logger", () => {
 
 describe("coverage-boost classifier parse", () => {
   it("various tier formats", () => {
-    expect(parseClassifierOutput("Tier: minimal\nReasoning: ok")?.tier).toBe("minimal");
-    expect(parseClassifierOutput("tier：high\nreasoning：test")?.tier).toBe("high");
-    expect(parseClassifierOutput("  Tier: low  ")).toBeDefined();
+    expect(parseClassifierOutput("minimal")?.tier).toBe("minimal");
+    expect(parseClassifierOutput("  high ")?.tier).toBe("high");
+    expect(parseClassifierOutput("  low  ")?.tier).toBe("low");
     expect(parseClassifierOutput("")).toBeUndefined();
     expect(parseClassifierOutput("no tier here")).toBeUndefined();
-    expect(parseClassifierOutput("Tier: high\nReasoning:")?.reasoning).toBe("Classifier decision.");
+    expect(parseClassifierOutput("HIGH")?.tier).toBe("high");
+    expect(parseClassifierOutput("Tier: high")).toBeUndefined();
+    expect(parseClassifierOutput("Tier: high\nReasoning:")).toBeUndefined();
   });
 });
 
