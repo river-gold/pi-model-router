@@ -10,8 +10,8 @@ import type {
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { registerRouterProvider } from "./provider";
-import type { RouterConfig } from "./types";
+import { registerRouterProvider } from "../src/provider";
+import type { RouterConfig } from "../src/types";
 
 interface MockEvent {
   type: string;

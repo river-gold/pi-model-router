@@ -4,7 +4,7 @@ import {
   CLASSIFIER_SYSTEM_PROMPT,
   parseClassifierOutput,
   runClassifierWithFallbacksDetailed,
-} from "./classifier";
+} from "../src/classifier";
 import type { Context } from "@earendil-works/pi-ai";
 
 const streamSimple = vi.fn();

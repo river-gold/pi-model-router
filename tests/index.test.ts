@@ -1,8 +1,8 @@
 /* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import routerExtension from "./index";
+import routerExtension from "../index";
 
-vi.mock("./src/config", () => {
+vi.mock("../src/config", () => {
   const ROUTER_TIERS = ["max", "xhigh", "high", "medium", "low", "minimal"] as const;
   return {
     loadRouterConfig: () => ({

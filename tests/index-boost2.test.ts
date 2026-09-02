@@ -1,7 +1,7 @@
 /* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import routerExtension from "../index";
-import * as configModule from "./config";
+import * as configModule from "../src/config";
 
 describe("index boost2", () => {
   let mockPi: any, listeners: Record<string, Function[]>;

@@ -1,10 +1,10 @@
 /* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
-import { registerRouterProvider } from "./provider";
+import { registerRouterProvider } from "../src/provider";
 import type { Api, Model, Context } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterConfig } from "./types";
+import type { RouterConfig } from "../src/types";
 
 vi.mock("@earendil-works/pi-ai", () => ({ createAssistantMessageEventStream: vi.fn() }));
 const streamSimple = vi.fn();

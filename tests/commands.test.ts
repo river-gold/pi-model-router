@@ -1,7 +1,7 @@
 /* oxlint-disable */
 import { describe, it, expect, vi } from "vitest";
-import { registerCommands } from "./commands";
-import type { RouterConfig, RoutingDecision } from "./types";
+import { registerCommands } from "../src/commands";
+import type { RouterConfig, RoutingDecision } from "../src/types";
 
 describe("commands.ts", () => {
   const buildMockPi = () => {

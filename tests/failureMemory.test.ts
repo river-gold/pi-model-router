@@ -5,7 +5,7 @@ import {
   normalizeFailedRef,
   chainKeyForRoute,
   CLASSIFIER_CHAIN_KEY,
-} from "./failureMemory";
+} from "../src/failureMemory";
 
 describe("failureMemory", () => {
   it("normalize trims", () => {

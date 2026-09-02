@@ -6,7 +6,7 @@ import {
   getHistoryPairsText,
   estimateTokens,
   truncateContext,
-} from "./context";
+} from "../src/context";
 import type { Context, Message } from "@earendil-works/pi-ai";
 
 describe("context.ts", () => {

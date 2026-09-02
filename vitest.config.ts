@@ -13,6 +13,6 @@ export default defineConfig({
         statements: 100,
       },
     },
-    include: ["**/*.test.ts"],
+    include: ["tests/**/*.test.ts"],
   },
 });

@@ -1,6 +1,6 @@
 /* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { runClassifierWithFallbacksDetailed } from "./classifier";
+import { runClassifierWithFallbacksDetailed } from "../src/classifier";
 import type { Context } from "@earendil-works/pi-ai";
 
 const streamSimple = vi.fn();

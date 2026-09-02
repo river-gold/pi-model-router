@@ -11,8 +11,8 @@ import {
   parseConfigFile,
   resolveDelegatedReasoning,
   resolveEffectiveClassifier,
-} from "./config";
-import type { RouterConfig, RouterProfile } from "./types";
+} from "../src/config";
+import type { RouterConfig, RouterProfile } from "../src/types";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   getAgentDir: () => "/mock/agent/dir",

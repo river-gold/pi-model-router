@@ -6,8 +6,8 @@ import {
   decideRouting,
   resolveAvailableTier,
   thinkingToTier,
-} from "./routing";
-import type { RouterProfile } from "./types";
+} from "../src/routing";
+import type { RouterProfile } from "../src/types";
 
 describe("routing.ts", () => {
   describe("thinkingToTier", () => {

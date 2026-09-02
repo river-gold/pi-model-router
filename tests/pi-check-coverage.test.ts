@@ -1,6 +1,6 @@
 /* oxlint-disable */
 import { describe, it, expect, vi } from "vitest";
-import { isRouterPersistedState, buildPersistedState } from "./state";
+import { isRouterPersistedState, buildPersistedState } from "../src/state";
 import {
   stripJsonc,
   isObjectRecord,
@@ -12,24 +12,24 @@ import {
   resolveMaxTokens,
   profileNames,
   resolveProfileName,
-} from "./config";
+} from "../src/config";
 import {
   getLastUserText,
   getHistoryPairsText,
   truncateContext,
   extractTextFromContent,
   estimateTokens,
-} from "./context";
-import { isRecordablePreStreamError, chainKeyForRoute, normalizeFailedRef } from "./failureMemory";
+} from "../src/context";
+import { isRecordablePreStreamError, chainKeyForRoute, normalizeFailedRef } from "../src/failureMemory";
 import {
   thinkingToTier,
   resolveAvailableTier,
   buildRoutingDecision,
   decideRouting,
-} from "./routing";
-import { parseClassifierOutput } from "./classifier";
-import { formatDecision, updateStatus } from "./ui";
-import { modelWithAuthBaseUrl, streamDelegated } from "./stream";
+} from "../src/routing";
+import { parseClassifierOutput } from "../src/classifier";
+import { formatDecision, updateStatus } from "../src/ui";
+import { modelWithAuthBaseUrl, streamDelegated } from "../src/stream";
 
 describe("pi-check coverage补", () => {
   it("state all branches", () => {
@@ -277,7 +277,7 @@ describe("pi-check coverage补", () => {
     ).toThrow();
   });
   it("commands etc", async () => {
-    const { registerCommands } = await import("./commands");
+    const { registerCommands } = await import("../src/commands");
     const pi: any = { registerCommand: vi.fn() };
     registerCommands(
       pi,

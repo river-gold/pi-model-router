@@ -3,8 +3,8 @@ import type { Api, AssistantMessageEventStream, Context, Model } from "@earendil
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { registerRouterProvider } from "./provider";
-import type { RouterConfig } from "./types";
+import { registerRouterProvider } from "../src/provider";
+import type { RouterConfig } from "../src/types";
 
 vi.mock("@earendil-works/pi-ai", () => ({
   createAssistantMessageEventStream: vi.fn(),
