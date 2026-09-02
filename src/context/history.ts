@@ -9,12 +9,8 @@ export const collectUserIndices = (messages: Context["messages"]): number[] => {
   return out;
 };
 
-export const resolveHistoryUserIndices = (
-  userIndices: number[],
-  pairCount: number,
-): number[] => {
+export const resolveHistoryUserIndices = (userIndices: number[], pairCount: number): number[] => {
   if (userIndices.length === 0) return [];
-  const lastIdx = userIndices[userIndices.length - 1]!;
   // exclude last (current) user
   const beforeLast = userIndices.slice(0, -1);
   // take last pairCount from before-last

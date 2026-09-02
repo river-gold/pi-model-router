@@ -14,7 +14,12 @@ describe("logger/log", () => {
     const appendFile = vi.fn().mockResolvedValue(undefined);
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const buildLogLine = vi.fn().mockReturnValue("line\n");
-    const log = createLogClassifierSync(appendFile as any, ensureLogDir as any, buildLogLine as any, "/tmp/log");
+    const log = createLogClassifierSync(
+      appendFile as any,
+      ensureLogDir as any,
+      buildLogLine as any,
+      "/tmp/log",
+    );
     log(baseEntry);
     // wait for async IIFE
     await new Promise((r) => setTimeout(r, 10));
@@ -39,7 +44,12 @@ describe("logger/log", () => {
   it("never throws on ensure failure", async () => {
     const appendFile = vi.fn();
     const ensureLogDir = vi.fn().mockRejectedValue(new Error("fail"));
-    const log = createLogClassifierSync(appendFile as any, ensureLogDir as any, undefined as any, "/tmp/log");
+    const log = createLogClassifierSync(
+      appendFile as any,
+      ensureLogDir as any,
+      undefined as any,
+      "/tmp/log",
+    );
     log(baseEntry);
     await new Promise((r) => setTimeout(r, 10));
     expect(appendFile).not.toHaveBeenCalled();
@@ -48,7 +58,12 @@ describe("logger/log", () => {
   it("never throws on append failure", async () => {
     const appendFile = vi.fn().mockRejectedValue(new Error("fail"));
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
-    const log = createLogClassifierSync(appendFile as any, ensureLogDir as any, undefined as any, "/tmp/log");
+    const log = createLogClassifierSync(
+      appendFile as any,
+      ensureLogDir as any,
+      undefined as any,
+      "/tmp/log",
+    );
     log(baseEntry);
     await new Promise((r) => setTimeout(r, 10));
     expect(appendFile).toHaveBeenCalled();
@@ -61,7 +76,12 @@ describe("logger/log", () => {
     const buildLogLine = vi.fn().mockImplementation(() => {
       throw new Error("build fail");
     });
-    const log = createLogClassifierSync(appendFile as any, ensureLogDir as any, buildLogLine as any, "/tmp/log");
+    const log = createLogClassifierSync(
+      appendFile as any,
+      ensureLogDir as any,
+      buildLogLine as any,
+      "/tmp/log",
+    );
     log(baseEntry);
     await new Promise((r) => setTimeout(r, 10));
     expect(appendFile).not.toHaveBeenCalled();
@@ -70,7 +90,12 @@ describe("logger/log", () => {
   it("handles all optional fields", async () => {
     const appendFile = vi.fn().mockResolvedValue(undefined);
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
-    const log = createLogClassifierSync(appendFile as any, ensureLogDir as any, undefined as any, "/tmp/log");
+    const log = createLogClassifierSync(
+      appendFile as any,
+      ensureLogDir as any,
+      undefined as any,
+      "/tmp/log",
+    );
     const entry: ClassifierLogEntry = {
       timestamp: "t",
       model: "m",

@@ -41,10 +41,12 @@ export const createTryRestoreFallback = (
   getAnyModelFn: typeof getAnyModel = getAnyModel,
 ) => {
   const fn = async (ctx: ExtensionContext): Promise<boolean> => {
-    if (state.lastNonRouterModel && (await tryFallbackByRef(ctx, state.lastNonRouterModel))) return true;
+    if (state.lastNonRouterModel && (await tryFallbackByRef(ctx, state.lastNonRouterModel)))
+      return true;
     try {
       const anyModel = getAnyModelFn(ctx.modelRegistry);
-      if (anyModel && (await tryFallbackByRef(ctx, `${anyModel.provider}/${anyModel.id}`))) return true;
+      if (anyModel && (await tryFallbackByRef(ctx, `${anyModel.provider}/${anyModel.id}`)))
+        return true;
     } catch {
       // ignore
     }
@@ -68,7 +70,10 @@ export const createEnsureValidActiveRouterProfile = (
     state.routerEnabled = false;
     state.selectedProfile = undefined;
     if (await tryRestoreFallback(ctx)) return;
-    ctx.ui.notify("Router disabled: no fallback model available. Select a model manually.", "warning");
+    ctx.ui.notify(
+      "Router disabled: no fallback model available. Select a model manually.",
+      "warning",
+    );
   };
   return fn;
 };

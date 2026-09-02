@@ -100,7 +100,9 @@ describe("failureMemory/isRecordable", () => {
       expect(isRecordablePreStreamError(new Error("500 Internal Server Error"))).toBe(true);
       expect(isRecordablePreStreamError(new Error("503"))).toBe(true);
       expect(isRecordablePreStreamError(new Error("server error"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("Model failed before sending content"))).toBe(true);
+      expect(isRecordablePreStreamError(new Error("Model failed before sending content"))).toBe(
+        true,
+      );
       expect(isRecordablePreStreamError(new Error("No delegated stream"))).toBe(true);
       expect(isRecordablePreStreamError(new Error("overloaded"))).toBe(true);
       expect(isRecordablePreStreamError(new Error("unavailable"))).toBe(true);

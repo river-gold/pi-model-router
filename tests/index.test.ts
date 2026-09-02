@@ -9,13 +9,19 @@ describe("index re-export", () => {
   });
 });
 
-
 vi.mock("../src/config", async () => {
   const actual = await vi.importActual<typeof import("../src/config")>("../src/config");
   return {
     ...actual,
     loadRouterConfig: vi.fn(() => ({
-      config: { profiles: { balanced: { high: { models: ["openai/gpt-4o"] }, medium: { models: ["openai/gpt-4o-mini"] } } } } as unknown as import("../src/types").RouterConfig,
+      config: {
+        profiles: {
+          balanced: {
+            high: { models: ["openai/gpt-4o"] },
+            medium: { models: ["openai/gpt-4o-mini"] },
+          },
+        },
+      } as unknown as import("../src/types").RouterConfig,
       warnings: [],
     })),
   };
@@ -28,13 +34,21 @@ describe("router extension public behavior", () => {
   const makeCtx = (over: any = {}) => ({
     cwd: "/mock",
     modelRegistry: {
-      find: vi.fn((p: string, id: string) => ({ provider: p, id, contextWindow: 100000, maxTokens: 4000 }) as any),
+      find: vi.fn(
+        (p: string, id: string) =>
+          ({ provider: p, id, contextWindow: 100000, maxTokens: 4000 }) as any,
+      ),
       list: vi.fn(() => [{ provider: "openai", id: "gpt-4o" }]),
       getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k" }),
     },
     model: { provider: "router", id: "balanced" },
     sessionManager: { getBranch: () => [] as any[] },
-    ui: { setStatus: vi.fn(), setHiddenThinkingLabel: vi.fn(), notify: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+    ui: {
+      setStatus: vi.fn(),
+      setHiddenThinkingLabel: vi.fn(),
+      notify: vi.fn(),
+      theme: { fg: (_: string, t: string) => t },
+    },
     ...over,
   });
 
@@ -45,7 +59,9 @@ describe("router extension public behavior", () => {
       registerCommand: vi.fn(),
       setModel: vi.fn().mockResolvedValue(true),
       appendEntry: vi.fn(),
-      on: vi.fn((e: string, h: Function) => { listeners[e] = h; }),
+      on: vi.fn((e: string, h: Function) => {
+        listeners[e] = h;
+      }),
       getThinkingLevel: vi.fn().mockReturnValue("off"),
     };
   });
@@ -64,7 +80,9 @@ describe("router extension public behavior", () => {
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
     expect(ctx.ui.setStatus).toHaveBeenCalled();
-    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "router", id: "balanced" }));
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "router", id: "balanced" }),
+    );
   });
 
   it("selects router profile via model_select", async () => {
@@ -84,7 +102,10 @@ describe("router extension public behavior", () => {
     pi.appendEntry.mockClear();
     await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
     expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
-    expect(pi.appendEntry).toHaveBeenCalledWith("router-state", expect.objectContaining({ enabled: false, lastNonRouterModel: "anthropic/claude" }));
+    expect(pi.appendEntry).toHaveBeenCalledWith(
+      "router-state",
+      expect.objectContaining({ enabled: false, lastNonRouterModel: "anthropic/claude" }),
+    );
   });
 
   it("handles unknown profile with fallback restore", async () => {
@@ -93,27 +114,68 @@ describe("router extension public behavior", () => {
     await listeners["session_start"]({}, ctx);
     await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
     pi.setModel.mockClear();
-    const fallbackCtx = makeCtx({ modelRegistry: { find: vi.fn((p: string, id: string) => p === "anthropic" && id === "claude" ? ({ provider: p, id }) as any : undefined), list: () => [{ provider: "anthropic", id: "claude" }] } });
+    const fallbackCtx = makeCtx({
+      modelRegistry: {
+        find: vi.fn((p: string, id: string) =>
+          p === "anthropic" && id === "claude" ? ({ provider: p, id } as any) : undefined,
+        ),
+        list: () => [{ provider: "anthropic", id: "claude" }],
+      },
+    });
     await listeners["model_select"]({ model: { provider: "router", id: "unknown" } }, fallbackCtx);
-    expect(fallbackCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown router profile"), "error");
-    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic", id: "claude" }));
+    expect(fallbackCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Unknown router profile"),
+      "error",
+    );
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "anthropic", id: "claude" }),
+    );
   });
 
   it("warns when unknown profile has no fallback", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
-    const noFallbackCtx = makeCtx({ modelRegistry: { find: vi.fn(() => undefined), list: () => [] } });
-    await listeners["model_select"]({ model: { provider: "router", id: "unknown" } }, noFallbackCtx);
-    expect(noFallbackCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown router profile"), "error");
-    expect(noFallbackCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("no fallback"), "warning");
+    const noFallbackCtx = makeCtx({
+      modelRegistry: { find: vi.fn(() => undefined), list: () => [] },
+    });
+    await listeners["model_select"](
+      { model: { provider: "router", id: "unknown" } },
+      noFallbackCtx,
+    );
+    expect(noFallbackCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Unknown router profile"),
+      "error",
+    );
+    expect(noFallbackCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("no fallback"),
+      "warning",
+    );
   });
 
   it("restores persisted state from session branch", async () => {
     routerExtension(pi);
-    const ctx = makeCtx({ sessionManager: { getBranch: () => [{ type: "custom", customType: "router-state", data: { enabled: true, selectedProfile: "balanced", debugEnabled: true, accumulatedCost: 0.5, timestamp: Date.now() } }] } });
+    const ctx = makeCtx({
+      sessionManager: {
+        getBranch: () => [
+          {
+            type: "custom",
+            customType: "router-state",
+            data: {
+              enabled: true,
+              selectedProfile: "balanced",
+              debugEnabled: true,
+              accumulatedCost: 0.5,
+              timestamp: Date.now(),
+            },
+          },
+        ],
+      },
+    });
     await listeners["session_start"]({}, ctx);
-    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "router", id: "balanced" }));
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "router", id: "balanced" }),
+    );
   });
 
   it("restores router model on turn_end when enabled", async () => {
@@ -123,7 +185,9 @@ describe("router extension public behavior", () => {
     pi.setModel.mockClear();
     ctx.model = { provider: "openai", id: "gpt-4o" } as any;
     await listeners["turn_end"]({}, ctx);
-    expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: "router", id: "balanced" }));
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "router", id: "balanced" }),
+    );
   });
 
   it("ignores model_select before initialization", async () => {
@@ -150,17 +214,32 @@ describe("router extension public behavior", () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
-    pi.appendEntry.mockImplementation(() => { throw new Error("append failed"); });
+    pi.appendEntry.mockImplementation(() => {
+      throw new Error("append failed");
+    });
     await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
     expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
   });
 
   it("handles setModel failure on restore", async () => {
     routerExtension(pi);
-    const ctx = makeCtx({ sessionManager: { getBranch: () => [{ type: "custom", customType: "router-state", data: { enabled: true, selectedProfile: "balanced", timestamp: Date.now() } }] } });
+    const ctx = makeCtx({
+      sessionManager: {
+        getBranch: () => [
+          {
+            type: "custom",
+            customType: "router-state",
+            data: { enabled: true, selectedProfile: "balanced", timestamp: Date.now() },
+          },
+        ],
+      },
+    });
     pi.setModel.mockResolvedValue(false);
     await listeners["session_start"]({}, ctx);
-    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Failed to restore"), "warning");
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to restore"),
+      "warning",
+    );
   });
 
   it("handles find throws in fallback", async () => {
@@ -168,8 +247,18 @@ describe("router extension public behavior", () => {
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
     await listeners["model_select"]({ model: { provider: "anthropic", id: "claude" } }, ctx);
-    const badCtx = makeCtx({ modelRegistry: { find: vi.fn(() => { throw new Error("find failed"); }), list: () => [] } });
+    const badCtx = makeCtx({
+      modelRegistry: {
+        find: vi.fn(() => {
+          throw new Error("find failed");
+        }),
+        list: () => [],
+      },
+    });
     await listeners["model_select"]({ model: { provider: "router", id: "unknown" } }, badCtx);
-    expect(badCtx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown router profile"), "error");
+    expect(badCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Unknown router profile"),
+      "error",
+    );
   });
 });

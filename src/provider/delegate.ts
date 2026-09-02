@@ -1,12 +1,18 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RoutingDecision } from "../types";
-import { parseCanonicalModelRef, formatModelRef, ROUTER_TIERS, resolveContextWindow, resolveDelegatedReasoning } from "../config";
+import {
+  parseCanonicalModelRef,
+  formatModelRef,
+  ROUTER_TIERS,
+  resolveContextWindow,
+  resolveDelegatedReasoning,
+} from "../config";
 import { truncateContext } from "../context";
 import { modelWithAuthBaseUrl, streamDelegated } from "../stream";
 import { chainKeyForRoute, normalizeFailedRef, isRecordablePreStreamError } from "../failureMemory";
-import { isEscalationCall, validateEscalationLevel } from "../escalation";
-import { resolveAvailableTier } from "../routing";
+import { ESCALATION_TOOL_NAME, isEscalationCall, validateEscalationLevel } from "../escalation";
+import { buildRoutingDecision, resolveAvailableTier } from "../routing";
 import type { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 export type DelegateParams = {
@@ -27,11 +33,22 @@ export type DelegateParams = {
   recordDebugDecision: (d: RoutingDecision) => void;
 };
 
-export type DelegateResult = { success: boolean; costDelta: number; fallbackDecision?: RoutingDecision; lastError?: unknown; escalationTier?: string; escalationReason?: string };
+export type DelegateResult = {
+  success: boolean;
+  costDelta: number;
+  fallbackDecision?: RoutingDecision;
+  lastError?: unknown;
+  escalationTier?: string;
+  escalationReason?: string;
+};
 
-export const getInitialModelsToTry = (profile: RouterProfile, decision: RoutingDecision): string[] => {
+export const getInitialModelsToTry = (
+  profile: RouterProfile,
+  decision: RoutingDecision,
+): string[] => {
   const tierModels = profile[decision.tier]?.models;
-  if (!tierModels?.length) return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
+  if (!tierModels?.length)
+    return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
   return [...new Set(tierModels)];
 };
 
@@ -51,11 +68,13 @@ export const filterByFailureMemory = (
   return { filtered, skipped, allFiltered: filtered.length === 0 && modelsToTry.length > 0 };
 };
 
-export const createRecordFailure = (state: DelegateParams["state"], routeChainKey: string) => (ref: string): void => {
-  const s = state.failedByChain.get(routeChainKey) ?? new Set<string>();
-  if (!state.failedByChain.has(routeChainKey)) state.failedByChain.set(routeChainKey, s);
-  s.add(normalizeFailedRef(ref));
-};
+export const createRecordFailure =
+  (state: DelegateParams["state"], routeChainKey: string) =>
+  (ref: string): void => {
+    const s = state.failedByChain.get(routeChainKey) ?? new Set<string>();
+    if (!state.failedByChain.has(routeChainKey)) state.failedByChain.set(routeChainKey, s);
+    s.add(normalizeFailedRef(ref));
+  };
 
 export const resolveTargetLimit = (
   profile: RouterProfile,
@@ -73,15 +92,30 @@ export const resolveTargetLimit = (
   return found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
 };
 
-export const buildEffectiveContext = (context: Context, targetLimit: number, routerModel: Model<Api>): Context =>
-  targetLimit < (routerModel.contextWindow ?? Infinity) ? truncateContext(context, targetLimit) : context;
+export const buildEffectiveContext = (
+  context: Context,
+  targetLimit: number,
+  routerModel: Model<Api>,
+): Context =>
+  targetLimit < (routerModel.contextWindow ?? Infinity)
+    ? truncateContext(context, targetLimit)
+    : context;
 
 export const isContentEvent = (type: string): boolean =>
-  type === "text_delta" || type === "thinking_delta" || type === "toolcall_delta" || type === "toolcall_end";
+  type === "text_delta" ||
+  type === "thinking_delta" ||
+  type === "toolcall_delta" ||
+  type === "toolcall_end";
 
 export const collectBufferedResult = (
   bufferedEvents: unknown[],
-): { gotDone: boolean; gotError: boolean; bufferedErrorMessage?: string; pendingCostDelta: number; contentReceived: boolean } => {
+): {
+  gotDone: boolean;
+  gotError: boolean;
+  bufferedErrorMessage?: string;
+  pendingCostDelta: number;
+  contentReceived: boolean;
+} => {
   let gotDone = false;
   let gotError = false;
   let bufferedErrorMessage: string | undefined;
@@ -91,7 +125,9 @@ export const collectBufferedResult = (
     const type = (event as { type: string }).type;
     if (type === "done") {
       gotDone = true;
-      pendingCostDelta = (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost?.total ?? 0;
+      pendingCostDelta =
+        (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost
+          ?.total ?? 0;
     } else if (type === "error") {
       gotError = true;
       const errObj = (event as { error?: unknown }).error as { errorMessage?: unknown } | undefined;
@@ -106,9 +142,56 @@ export const resolveAuthError = (
   auth: { ok: boolean; apiKey?: string; error?: string },
   targetProvider: string,
   targetModelId: string,
-): Error => (!auth.ok ? new Error(`Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`) : new Error(`No API key for routed model: ${targetProvider}/${targetModelId}`));
+): Error =>
+  !auth.ok
+    ? new Error(`Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`)
+    : new Error(`No API key for routed model: ${targetProvider}/${targetModelId}`);
 
 export const shouldSkipRouterModel = (provider: string): boolean => provider === "router";
+
+export const extractEscalation = (
+  event: unknown,
+  profile: RouterProfile,
+  decision: RoutingDecision,
+): { tier: string; reason: string } | undefined => {
+  if ((event as { type: string }).type !== "toolcall_end") return undefined;
+  const tc = (event as { toolCall?: { name?: string; arguments?: Record<string, unknown> } })
+    .toolCall;
+  if (!tc) return undefined;
+  if (!isEscalationCall(tc.name ?? "")) return undefined;
+  const req = validateEscalationLevel(tc.arguments?.level);
+  if (!req) return undefined;
+  const t = resolveAvailableTier(profile, req);
+  if (t === decision.tier) return undefined;
+  const r = tc.arguments?.reason;
+  return { tier: t, reason: typeof r === "string" ? r : "" };
+};
+
+export const collectEscalation = async (
+  stream: AsyncIterable<unknown>,
+  profile: RouterProfile,
+  decision: RoutingDecision,
+  options: DelegateParams["options"],
+  buffered: unknown[],
+  onContent: (type: string) => void,
+): Promise<{ tier: string; reason: string } | undefined> => {
+  let found: { tier: string; reason: string } | undefined;
+  for await (const event of stream) {
+    if (options?.signal?.aborted) throw new Error("aborted");
+    buffered.push(event);
+    onContent((event as { type: string }).type);
+    const e = extractEscalation(event, profile, decision);
+    if (e) found = e;
+  }
+  return found;
+};
+
+export const stripEscalationTool = (context: Context): Context => {
+  const tools = (context.tools ?? []).filter(
+    (t: { name: string }) => t.name !== ESCALATION_TOOL_NAME,
+  );
+  return { ...context, tools };
+};
 
 export const buildFallbackDecision = (decision: RoutingDecision, modelRef: string): void => {
   const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
@@ -133,7 +216,18 @@ export const attemptSingleModel = async (
   params: DelegateParams,
   recordRouteFailure: (ref: string) => void,
 ): Promise<AttemptResult> => {
-  const { registry, profile, decision, routerModel, context, options, state, withCommitMutex, stream, recordDebugDecision } = params;
+  const {
+    registry,
+    profile,
+    decision,
+    routerModel,
+    context,
+    options,
+    state,
+    withCommitMutex,
+    stream,
+    recordDebugDecision,
+  } = params;
   const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
   const tryThinking = thinking ?? decision.thinking;
   if (shouldSkipRouterModel(provider)) return { status: "skip" };
@@ -145,26 +239,37 @@ export const attemptSingleModel = async (
   }
   const auth = await registry.getApiKeyAndHeaders(targetModel);
   if (!auth.ok || !auth.apiKey) {
-    const err = resolveAuthError(auth as { ok: boolean; apiKey?: string; error?: string }, provider, modelId);
+    const err = resolveAuthError(
+      auth as { ok: boolean; apiKey?: string; error?: string },
+      provider,
+      modelId,
+    );
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
     return { status: "retry", error: err };
   }
   if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
   const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, provider, modelId);
   const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
-  const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as SimpleStreamOptions["reasoning"] | undefined;
+  const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
+    | SimpleStreamOptions["reasoning"]
+    | undefined;
   try {
     const label = `Thinking (${provider}/${modelId})...`;
     if (delegatedReasoning) state.lastExtensionContext?.ui.setHiddenThinkingLabel?.(label);
     else state.lastExtensionContext?.ui.setHiddenThinkingLabel?.();
   } catch {}
   const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
-  const delegatedStream = streamDelegated(registry, modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }), effectiveContext, {
-    ...delegationOptions,
-    apiKey: auth.apiKey,
-    headers: auth.headers,
-    ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
-  });
+  const delegatedStream = streamDelegated(
+    registry,
+    modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }),
+    effectiveContext,
+    {
+      ...delegationOptions,
+      apiKey: auth.apiKey,
+      headers: auth.headers,
+      ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
+    },
+  );
   if (!delegatedStream) {
     const err = new Error("No delegated stream available");
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
@@ -172,30 +277,44 @@ export const attemptSingleModel = async (
   }
   const bufferedEvents: unknown[] = [];
   let contentReceivedForTry = false;
-  let escalationTier: string | undefined;
-  let escalationReason: string | undefined;
-  for await (const event of delegatedStream) {
-    if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
-    bufferedEvents.push(event);
-    if (isContentEvent((event as { type: string }).type)) contentReceivedForTry = true;
-    if ((event as { type: string }).type === "toolcall_end") {
-      const tc = (event as { toolCall?: { name?: string; arguments?: Record<string, unknown> } }).toolCall;
-      if (tc && isEscalationCall(tc.name ?? "")) {
-        const req = validateEscalationLevel(tc.arguments?.level);
-        if (req) { const t = resolveAvailableTier(profile, req); if (t !== decision.tier) { escalationTier = t; escalationReason = String(tc.arguments?.reason ?? ""); } }
-      }
-    }
+  let escalation: { tier: string; reason: string } | undefined;
+  try {
+    escalation = await collectEscalation(
+      delegatedStream,
+      profile,
+      decision,
+      options,
+      bufferedEvents,
+      (t) => {
+        if (isContentEvent(t)) contentReceivedForTry = true;
+      },
+    );
+  } catch (e) {
+    if ((e as Error).message === "aborted")
+      return { status: "nonRetryable", error: new Error("aborted") };
+    throw e;
   }
-  if (escalationTier) return { status: "retry", error: Object.assign(new Error(`ESCALATION:${escalationTier}`), { escalationTier, escalationReason }) };
+  if (escalation)
+    return {
+      status: "retry",
+      error: Object.assign(new Error(`ESCALATION:${escalation.tier}`), {
+        escalationTier: escalation.tier,
+        escalationReason: escalation.reason,
+      }),
+    };
   const collected = collectBufferedResult(bufferedEvents);
   contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
   if (collected.gotDone) {
     for (const ev of bufferedEvents) stream.push(ev as never);
-    if (collected.pendingCostDelta) await withCommitMutex(async () => { state.accumulatedCost += collected.pendingCostDelta; });
+    if (collected.pendingCostDelta)
+      await withCommitMutex(async () => {
+        state.accumulatedCost += collected.pendingCostDelta;
+      });
     if (index > 0) {
       buildFallbackDecision(decision, modelRef);
       await withCommitMutex(async () => {
-        if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile) state.lastDecision = { ...decision };
+        if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile)
+          state.lastDecision = { ...decision };
       });
       recordDebugDecision(decision);
     }
@@ -204,7 +323,12 @@ export const attemptSingleModel = async (
   if (collected.gotError) {
     if (contentReceivedForTry) {
       for (const ev of bufferedEvents) stream.push(ev as never);
-      return { status: "nonRetryable", error: new Error(`NON_RETRYABLE: ${collected.bufferedErrorMessage || "Model failed after sending content."}`) };
+      return {
+        status: "nonRetryable",
+        error: new Error(
+          `NON_RETRYABLE: ${collected.bufferedErrorMessage || "Model failed after sending content."}`,
+        ),
+      };
     }
     const err = new Error(collected.bufferedErrorMessage || "Model failed before sending content.");
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
@@ -215,18 +339,60 @@ export const attemptSingleModel = async (
   return { status: "retry", error: err };
 };
 
-export const delegateToTierModels = async (params: DelegateParams): Promise<DelegateResult> => {
-  const { profile, decision, state } = params;
-  const initialModels = getInitialModelsToTry(profile, decision);
-  const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
+export const applySelfEscalation = (
+  params: DelegateParams,
+  curDecision: RoutingDecision,
+  esc: { escalationTier: string; escalationReason?: string },
+): { decision: RoutingDecision; params: DelegateParams } => {
+  const target = resolveAvailableTier(params.profile, esc.escalationTier as never);
+  const reason = typeof esc.escalationReason === "string" ? esc.escalationReason : "";
+  const newDecision = buildRoutingDecision(
+    curDecision.profile,
+    params.profile,
+    target,
+    `Self-escalation ${curDecision.tier} -> ${target}: ${reason}`,
+    true,
+  );
+  params.state.lastDecision = newDecision;
+  params.recordDebugDecision(newDecision);
+  params.state.lastExtensionContext?.ui.notify?.(
+    `🚥 router:${newDecision.profile} escalated ${curDecision.tier} -> ${target}`,
+    "info",
+  );
+  return {
+    decision: newDecision,
+    params: { ...params, context: stripEscalationTool(params.context) },
+  };
+};
+
+export const runDelegateAttempt = async (
+  params: DelegateParams,
+  curDecision: RoutingDecision,
+): Promise<{ success: boolean; costDelta: number; lastError?: unknown }> => {
+  const { profile, state } = params;
+  const initialModels = getInitialModelsToTry(profile, curDecision);
+  const routeChainKey = chainKeyForRoute(curDecision.profile, curDecision.tier);
   const recordRouteFailure = createRecordFailure(state, routeChainKey);
-  const { filtered: modelsToTry, allFiltered, skipped: skippedDueToMemory } = filterByFailureMemory(initialModels, state.failedByChain.get(routeChainKey));
-  if (allFiltered) throw new Error(`All models in ${decision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`);
+  const {
+    filtered: modelsToTry,
+    allFiltered,
+    skipped: skippedDueToMemory,
+  } = filterByFailureMemory(initialModels, state.failedByChain.get(routeChainKey));
+  if (allFiltered) {
+    throw new Error(
+      `All models in ${curDecision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`,
+    );
+  }
   let lastError: unknown;
   let success = false;
   let costDelta = 0;
   for (let i = 0; i < modelsToTry.length; i++) {
-    const result = await attemptSingleModel(modelsToTry[i], i, params, recordRouteFailure);
+    const result = await attemptSingleModel(
+      modelsToTry[i],
+      i,
+      { ...params, decision: curDecision },
+      recordRouteFailure,
+    );
     if (result.status === "skip") continue;
     if (result.status === "success") {
       success = true;
@@ -235,12 +401,39 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
     }
     if (result.status === "nonRetryable") {
       const msg = result.error.message;
-      lastError = msg.startsWith("NON_RETRYABLE:") ? new Error(msg.slice("NON_RETRYABLE: ".length)) : result.error;
+      lastError = msg.startsWith("NON_RETRYABLE:")
+        ? new Error(msg.slice("NON_RETRYABLE: ".length))
+        : result.error;
       break;
     }
     lastError = result.error;
   }
-  const esc = lastError as { escalationTier?: string; escalationReason?: string } | undefined;
-  if (esc?.escalationTier) return { success: false, costDelta, escalationTier: esc.escalationTier, escalationReason: esc.escalationReason, lastError };
-  return { success, costDelta, fallbackDecision: decision, lastError };
+  return { success, costDelta, lastError };
+};
+
+export const toDelegateResult = (
+  attempt: { success: boolean; costDelta: number; lastError?: unknown },
+  decision: RoutingDecision,
+): DelegateResult => {
+  if (attempt.success) {
+    return {
+      success: true,
+      costDelta: attempt.costDelta,
+      fallbackDecision: decision,
+      lastError: attempt.lastError,
+    };
+  }
+  return { success: false, costDelta: attempt.costDelta, lastError: attempt.lastError };
+};
+
+export const delegateToTierModels = async (params: DelegateParams): Promise<DelegateResult> => {
+  const first = await runDelegateAttempt(params, params.decision);
+  const esc = first.lastError as { escalationTier?: string; escalationReason?: string } | undefined;
+  if (!esc?.escalationTier) return toDelegateResult(first, params.decision);
+  const next = applySelfEscalation(params, params.decision, {
+    escalationTier: esc.escalationTier,
+    escalationReason: esc.escalationReason,
+  });
+  const second = await runDelegateAttempt(next.params, next.decision);
+  return toDelegateResult(second, next.decision);
 };

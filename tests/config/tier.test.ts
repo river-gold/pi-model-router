@@ -3,7 +3,8 @@ import { mergeTier, normalizeTierConfig } from "../../src/config/tier";
 
 describe("tier", () => {
   describe("mergeTier", () => {
-    it("both undefined -> undefined", () => expect(mergeTier(undefined, undefined)).toBeUndefined());
+    it("both undefined -> undefined", () =>
+      expect(mergeTier(undefined, undefined)).toBeUndefined());
     it("existing only -> existing", () => {
       const e = { models: ["openai/gpt-4o"] };
       expect(mergeTier(e, undefined)).toBe(e);
@@ -70,27 +71,54 @@ describe("tier", () => {
     });
     it("valid without thinking", () => {
       const w: string[] = [];
-      expect(normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.thinking).toBeUndefined();
+      expect(
+        normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.thinking,
+      ).toBeUndefined();
     });
     it("with contextWindow valid", () => {
       const w: string[] = [];
-      const r = normalizeTierConfig({ models: ["openai/gpt-4o"], contextWindow: 50000 }, "p", "high", w);
+      const r = normalizeTierConfig(
+        { models: ["openai/gpt-4o"], contextWindow: 50000 },
+        "p",
+        "high",
+        w,
+      );
       expect(r?.contextWindow).toBe(50000);
       expect(r?.resolvedContextWindow).toBe(50000);
     });
     it("with contextWindow invalid (negative, zero, non-number)", () => {
       const w: string[] = [];
-      const r1 = normalizeTierConfig({ models: ["openai/gpt-4o"], contextWindow: -1 }, "p", "high", w);
+      const r1 = normalizeTierConfig(
+        { models: ["openai/gpt-4o"], contextWindow: -1 },
+        "p",
+        "high",
+        w,
+      );
       expect(r1?.contextWindow).toBeUndefined();
       expect(r1?.resolvedContextWindow).toBe(128000);
-      const r2 = normalizeTierConfig({ models: ["openai/gpt-4o"], contextWindow: 0 }, "p", "high", []);
+      const r2 = normalizeTierConfig(
+        { models: ["openai/gpt-4o"], contextWindow: 0 },
+        "p",
+        "high",
+        [],
+      );
       expect(r2?.contextWindow).toBeUndefined();
-      const r3 = normalizeTierConfig({ models: ["openai/gpt-4o"], contextWindow: "bad" }, "p", "high", []);
+      const r3 = normalizeTierConfig(
+        { models: ["openai/gpt-4o"], contextWindow: "bad" },
+        "p",
+        "high",
+        [],
+      );
       expect(r3?.contextWindow).toBeUndefined();
     });
     it("with maxTokens valid/invalid", () => {
       const w: string[] = [];
-      const r1 = normalizeTierConfig({ models: ["openai/gpt-4o"], maxTokens: 2000 }, "p", "high", w);
+      const r1 = normalizeTierConfig(
+        { models: ["openai/gpt-4o"], maxTokens: 2000 },
+        "p",
+        "high",
+        w,
+      );
       expect(r1?.maxTokens).toBe(2000);
       expect(r1?.resolvedMaxTokens).toBe(2000);
       const r2 = normalizeTierConfig({ models: ["openai/gpt-4o"], maxTokens: -5 }, "p", "high", []);
@@ -100,9 +128,18 @@ describe("tier", () => {
       expect(r3?.maxTokens).toBeUndefined();
     });
     it("with reasoning true/false/non-boolean", () => {
-      expect(normalizeTierConfig({ models: ["openai/gpt-4o"], reasoning: true }, "p", "high", [])?.reasoning).toBe(true);
-      expect(normalizeTierConfig({ models: ["openai/gpt-4o"], reasoning: false }, "p", "high", [])?.reasoning).toBe(false);
-      expect(normalizeTierConfig({ models: ["openai/gpt-4o"], reasoning: "yes" }, "p", "high", [])?.reasoning).toBeUndefined();
+      expect(
+        normalizeTierConfig({ models: ["openai/gpt-4o"], reasoning: true }, "p", "high", [])
+          ?.reasoning,
+      ).toBe(true);
+      expect(
+        normalizeTierConfig({ models: ["openai/gpt-4o"], reasoning: false }, "p", "high", [])
+          ?.reasoning,
+      ).toBe(false);
+      expect(
+        normalizeTierConfig({ models: ["openai/gpt-4o"], reasoning: "yes" }, "p", "high", [])
+          ?.reasoning,
+      ).toBeUndefined();
     });
     it("multiple models with trimming and valid", () => {
       const w: string[] = [];

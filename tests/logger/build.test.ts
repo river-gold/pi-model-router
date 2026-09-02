@@ -20,10 +20,10 @@ describe("logger/build", () => {
     expect(line).toContain("model=openai/gpt-4o");
     expect(line).toContain("thinking=high");
     expect(line).toContain("success=true");
-    expect(line).toContain("tierLine=\"tier: high\"");
+    expect(line).toContain('tierLine="tier: high"');
     expect(line).toContain("parsedTier=high");
     expect(line).toContain("error=some error");
-    expect(line).toContain("fullText=\"hello world\"");
+    expect(line).toContain('fullText="hello world"');
   });
 
   it("uses defaults for undefined optional fields", () => {
@@ -35,8 +35,8 @@ describe("logger/build", () => {
     };
     const line = buildLogLine(entry);
     expect(line).toContain("thinking=-");
-    expect(line).toContain("tierLine=\"\"");
-    expect(line).toContain("reasoningLine=\"\"");
+    expect(line).toContain('tierLine=""');
+    expect(line).toContain('reasoningLine=""');
     expect(line).toContain("parsedTier=-");
     expect(line).toContain("error=-");
     expect(line).toContain("success=false");
@@ -91,11 +91,11 @@ describe("logger/build", () => {
       timestamp: "t",
       model: "m",
       fullText: 'a\nb "c"',
-      tierLine: 'x\ny',
+      tierLine: "x\ny",
       success: true,
     };
     const line = buildLogLine(entry);
     expect(line).toContain(JSON.stringify('a\nb "c"'));
-    expect(line).toContain(JSON.stringify('x\ny'));
+    expect(line).toContain(JSON.stringify("x\ny"));
   });
 });

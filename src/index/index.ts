@@ -7,11 +7,6 @@ export {
   createTryRestoreFallback,
   createEnsureValidActiveRouterProfile,
 } from "./fallback";
-export {
-  handleSessionStart,
-  handleModelSelect,
-  handleTurnStart,
-  handleTurnEnd,
-} from "./handlers";
+export { handleSessionStart, handleModelSelect, handleTurnStart, handleTurnEnd } from "./handlers";
 export { default as routerExtension, createExtensionState } from "./extension";
 export { SESSION_RESTORE_DELAY_MS } from "../session";

@@ -70,8 +70,10 @@ describe("modelRef", () => {
 
   describe("formatModelRef", () => {
     it("without thinking", () => expect(formatModelRef("openai", "gpt-4o")).toBe("openai/gpt-4o"));
-    it("with thinking", () => expect(formatModelRef("openai", "gpt-4o", "high")).toBe("openai/gpt-4o#high"));
-    it("with off", () => expect(formatModelRef("openai", "gpt-4o", "off")).toBe("openai/gpt-4o#off"));
+    it("with thinking", () =>
+      expect(formatModelRef("openai", "gpt-4o", "high")).toBe("openai/gpt-4o#high"));
+    it("with off", () =>
+      expect(formatModelRef("openai", "gpt-4o", "off")).toBe("openai/gpt-4o#off"));
     it("without thinking undefined", () =>
       expect(formatModelRef("openai", "gpt-4o", undefined)).toBe("openai/gpt-4o"));
   });

@@ -3,6 +3,7 @@ import { loadRouterConfig, profileNames, resolveProfileName } from "../config";
 import { registerRouterProvider } from "../provider";
 import { updateStatus } from "../ui";
 import type { RouterState } from "../state";
+import type { RoutingDecision } from "../types";
 
 export type ReloadDeps = {
   loadRouterConfig: typeof loadRouterConfig;
@@ -16,7 +17,7 @@ export const createReloadConfig = (
   pi: ExtensionAPI,
   state: RouterState,
   persistState: () => void,
-  recordDebugDecision: (d: import("../types").RoutingDecision) => void,
+  recordDebugDecision: (d: RoutingDecision) => void,
   deps: ReloadDeps = {
     loadRouterConfig,
     profileNames,
@@ -80,13 +81,17 @@ export const createReloadConfig = (
       {
         persistState,
         recordDebugDecision,
-        updateStatus: (c) => deps.updateStatus(c, state.routerEnabled, state.selectedProfile, state.lastDecision),
+        updateStatus: (c) =>
+          deps.updateStatus(c, state.routerEnabled, state.selectedProfile, state.lastDecision),
       },
     );
     if (ctx) {
       deps.updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision);
       if (state.lastConfigWarnings.length > 0)
-        ctx.ui.notify(`Router Configuration Warnings:\n${state.lastConfigWarnings.join("\n")}`, "warning");
+        ctx.ui.notify(
+          `Router Configuration Warnings:\n${state.lastConfigWarnings.join("\n")}`,
+          "warning",
+        );
     }
   };
   return fn;

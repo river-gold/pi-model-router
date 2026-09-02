@@ -73,7 +73,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       historySize = rawHistorySize;
     } else {
       warnings.push(
-        `Invalid historySize "${String(rawHistorySize)}": expected integer between 0 and ${MAX_HISTORY_SIZE}. Using default ${DEFAULT_HISTORY_SIZE}.`,
+        `Invalid historySize "${JSON.stringify(rawHistorySize)}": expected integer between 0 and ${MAX_HISTORY_SIZE}. Using default ${DEFAULT_HISTORY_SIZE}.`,
       );
       historySize = DEFAULT_HISTORY_SIZE;
     }

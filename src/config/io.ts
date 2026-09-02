@@ -73,7 +73,12 @@ export const resolveConfigPaths = (
   cwd: string,
   getAgentDirFn: AgentDirProvider,
   joinFn: PathJoin,
-): { globalJsonPath: string; globalJsoncPath: string; projectJsonPath: string; projectJsoncPath: string } => ({
+): {
+  globalJsonPath: string;
+  globalJsoncPath: string;
+  projectJsonPath: string;
+  projectJsoncPath: string;
+} => ({
   globalJsonPath: joinFn(getAgentDirFn(), CONFIG_FILE_NAMES.globalJson),
   globalJsoncPath: joinFn(getAgentDirFn(), CONFIG_FILE_NAMES.globalJsonc),
   projectJsonPath: joinFn(cwd, ".pi", CONFIG_FILE_NAMES.projectJson),

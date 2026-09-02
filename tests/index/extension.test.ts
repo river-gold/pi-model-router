@@ -1,10 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import routerExtension from "../../src/index/extension";
-import { createRouterState } from "../../src/state/create";
 
 vi.mock("../../src/commands", async () => {
-  const actual = await vi.importActual("../../src/commands") as any;
-  return { ...actual, registerCommands: vi.fn((...args: any[]) => actual.registerCommands(...args)) };
+  const actual = (await vi.importActual("../../src/commands")) as any;
+  return {
+    ...actual,
+    registerCommands: vi.fn((...args: any[]) => actual.registerCommands(...args)),
+  };
 });
 
 import { registerCommands } from "../../src/commands";
@@ -18,7 +20,9 @@ describe("index/extension", () => {
         registerCommand: vi.fn(),
         setModel: vi.fn().mockResolvedValue(true),
         appendEntry: vi.fn(),
-        on: vi.fn((e: string, h: Function) => { listeners[e] = h; }),
+        on: vi.fn((e: string, h: Function) => {
+          listeners[e] = h;
+        }),
         getThinkingLevel: vi.fn().mockReturnValue("off"),
       } as any,
       listeners,
@@ -28,12 +32,20 @@ describe("index/extension", () => {
   const makeCtx = (over: any = {}) => ({
     cwd: "/cwd",
     modelRegistry: {
-      find: vi.fn((p: string, id: string) => ({ provider: p, id, contextWindow: 100000, maxTokens: 4000 }) as any),
+      find: vi.fn(
+        (p: string, id: string) =>
+          ({ provider: p, id, contextWindow: 100000, maxTokens: 4000 }) as any,
+      ),
       list: vi.fn(() => []),
     },
     model: { provider: "router", id: "balanced" },
     sessionManager: { getBranch: () => [] },
-    ui: { setStatus: vi.fn(), setHiddenThinkingLabel: vi.fn(), notify: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+    ui: {
+      setStatus: vi.fn(),
+      setHiddenThinkingLabel: vi.fn(),
+      notify: vi.fn(),
+      theme: { fg: (_: string, t: string) => t },
+    },
     ...over,
   });
 
@@ -140,8 +152,14 @@ describe("index/extension", () => {
     const { pi, listeners } = makePi();
     // Mock loadRouterConfig to return debug true
     vi.doMock("../../src/config", async () => {
-      const actual = await vi.importActual("../../src/config") as any;
-      return { ...actual, loadRouterConfig: vi.fn().mockReturnValue({ config: { debug: true, profiles: { balanced: { medium: { models: ["openai/a"] } } } }, warnings: [] }) };
+      const actual = (await vi.importActual("../../src/config")) as any;
+      return {
+        ...actual,
+        loadRouterConfig: vi.fn().mockReturnValue({
+          config: { debug: true, profiles: { balanced: { medium: { models: ["openai/a"] } } } },
+          warnings: [],
+        }),
+      };
     });
     routerExtension(pi);
     const ctx = makeCtx();
@@ -156,12 +174,13 @@ describe("index/extension", () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
-    const registryModel = { provider: "router", id: "balanced", contextWindow: 100000, maxTokens: 4000 };
+    const registryModel = {
+      provider: "router",
+      id: "balanced",
+      contextWindow: 100000,
+      maxTokens: 4000,
+    };
     ctx.modelRegistry.find = vi.fn().mockReturnValue(registryModel as any);
-    const setModelSpy = vi.fn().mockResolvedValue(true);
-    // Need to mock setModel to track calls, but we can check that after model_select with same window, setModel not called for that specific case
-    // The extension's setModelInternally is via pi.setModel, which is mocked
-    const pi2 = makePi().pi;
     // Use a fresh pi with spy
     const { pi: pi3, listeners: listeners3 } = makePi();
     // Override find to return same window as event
@@ -174,7 +193,17 @@ describe("index/extension", () => {
     await listeners3["session_start"]({}, ctx3);
     // Clear setModel calls from session_start
     pi3.setModel.mockClear();
-    await listeners3["model_select"]({ model: { provider: "router", id: "balanced", contextWindow: 100000, maxTokens: 4000 } as any }, ctx3);
+    await listeners3["model_select"](
+      {
+        model: {
+          provider: "router",
+          id: "balanced",
+          contextWindow: 100000,
+          maxTokens: 4000,
+        } as any,
+      },
+      ctx3,
+    );
     // Should not have called setModelInternally because windows are equal
     expect(pi3.setModel).not.toHaveBeenCalled();
   });
@@ -186,13 +215,28 @@ describe("index/extension", () => {
     await listeners["session_start"]({}, ctx);
     // Use a fresh extension instance with a registry that returns different maxTokens
     const { pi: pi3, listeners: listeners3 } = makePi();
-    const registryModel = { provider: "router", id: "balanced", contextWindow: 100000, maxTokens: 8000 };
+    const registryModel = {
+      provider: "router",
+      id: "balanced",
+      contextWindow: 100000,
+      maxTokens: 8000,
+    };
     const ctx3 = makeCtx({
       modelRegistry: { find: vi.fn().mockReturnValue(registryModel as any), list: vi.fn(() => []) },
     });
     routerExtension(pi3);
     await listeners3["session_start"]({}, ctx3);
-    await listeners3["model_select"]({ model: { provider: "router", id: "balanced", contextWindow: 100000, maxTokens: 4000 } as any }, ctx3);
+    await listeners3["model_select"](
+      {
+        model: {
+          provider: "router",
+          id: "balanced",
+          contextWindow: 100000,
+          maxTokens: 4000,
+        } as any,
+      },
+      ctx3,
+    );
     // Should handle without throwing and set routerEnabled
     expect(ctx3.ui.setStatus).toHaveBeenCalled();
   });
@@ -203,7 +247,10 @@ describe("index/extension", () => {
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
     ctx.modelRegistry.find = vi.fn().mockReturnValue(undefined);
-    await listeners["model_select"]({ model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any }, ctx);
+    await listeners["model_select"](
+      { model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any },
+      ctx,
+    );
     expect(ctx.ui.setStatus).toHaveBeenCalled();
   });
 

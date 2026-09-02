@@ -1,7 +1,6 @@
 import { RECORDABLE_PATTERNS } from "./constants";
 
-export const isNonRetryableMessage = (msg: string): boolean =>
-  msg.startsWith("NON_RETRYABLE:");
+export const isNonRetryableMessage = (msg: string): boolean => msg.startsWith("NON_RETRYABLE:");
 
 export const isAbortedOrStaleMessage = (msg: string): boolean =>
   msg.includes("aborted") || msg.includes("stale");

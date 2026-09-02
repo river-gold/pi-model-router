@@ -1,7 +1,12 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RouterProfile, RoutingDecision, RouterTier } from "../types";
-import { buildRoutingDecision, decideRouting, resolveAvailableTier, thinkingToTier } from "../routing";
+import {
+  buildRoutingDecision,
+  decideRouting,
+  resolveAvailableTier,
+  thinkingToTier,
+} from "../routing";
 
 export type ResolveRoutingDecisionParams = {
   profileName: string;
@@ -28,7 +33,12 @@ export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): Ro
     singleTier,
     validTierCount,
   } = params;
-  let decision: RoutingDecision = decideRouting(context, profileName, profile, snapshotLastDecision);
+  let decision: RoutingDecision = decideRouting(
+    context,
+    profileName,
+    profile,
+    snapshotLastDecision,
+  );
   const isSingleTier = validTierCount === 1 && singleTier !== undefined;
   if (isToolLoop && snapshotLastDecision) {
     decision = buildRoutingDecision(

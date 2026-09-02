@@ -24,10 +24,7 @@ export const findStartIndex = (
   return messages.length;
 };
 
-export const alignToUserBoundary = (
-  messages: Context["messages"],
-  startIndex: number,
-): number => {
+export const alignToUserBoundary = (messages: Context["messages"], startIndex: number): number => {
   if (startIndex >= messages.length) return startIndex;
   for (let a = startIndex; a < messages.length; a++) {
     if (messages[a]!.role === "user") return a;

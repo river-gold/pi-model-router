@@ -20,10 +20,14 @@ describe("merge", () => {
     });
     it("merges overlapping profile tiers", () => {
       const base: RouterConfig = {
-        profiles: { balanced: { medium: { models: ["openai/a"] }, low: { models: ["openai/low"] } } },
+        profiles: {
+          balanced: { medium: { models: ["openai/a"] }, low: { models: ["openai/low"] } },
+        },
       };
       const override: Partial<RouterConfig> = {
-        profiles: { balanced: { high: { models: ["openai/high"] }, medium: { models: ["openai/b"] } } },
+        profiles: {
+          balanced: { high: { models: ["openai/high"] }, medium: { models: ["openai/b"] } },
+        },
       };
       const merged = mergeConfig(base, override);
       expect(merged.profiles.balanced.medium?.models).toEqual(["openai/b"]);
@@ -32,7 +36,9 @@ describe("merge", () => {
     });
     it("skips non-object profile", () => {
       const base: RouterConfig = { profiles: {} };
-      const override = { profiles: { bad: "not-object" as unknown as any } } as Partial<RouterConfig>;
+      const override = {
+        profiles: { bad: "not-object" as unknown as any },
+      } as Partial<RouterConfig>;
       const merged = mergeConfig(base, override);
       expect(merged.profiles.bad).toBeUndefined();
     });
@@ -75,7 +81,9 @@ describe("merge", () => {
     });
     it("profile classifierModels merging", () => {
       const base: RouterConfig = {
-        profiles: { p: { medium: { models: ["openai/a"] }, classifierModels: [{ model: "openai/c1" }] } },
+        profiles: {
+          p: { medium: { models: ["openai/a"] }, classifierModels: [{ model: "openai/c1" }] },
+        },
       };
       const override: Partial<RouterConfig> = {
         profiles: { p: { classifierModels: [{ model: "openai/c2" }] } as any },
@@ -85,7 +93,9 @@ describe("merge", () => {
     });
     it("profile classifierModels keeps existing if next undefined", () => {
       const base: RouterConfig = {
-        profiles: { p: { medium: { models: ["openai/a"] }, classifierModels: [{ model: "openai/c1" }] } },
+        profiles: {
+          p: { medium: { models: ["openai/a"] }, classifierModels: [{ model: "openai/c1" }] },
+        },
       };
       const override: Partial<RouterConfig> = {
         profiles: { p: { high: { models: ["openai/high"] } } as any },
@@ -98,7 +108,9 @@ describe("merge", () => {
         profiles: { p: { max: { models: ["openai/max"] } } },
       };
       const override: Partial<RouterConfig> = {
-        profiles: { p: { xhigh: { models: ["openai/xhigh"] }, minimal: { models: ["openai/min"] } } as any },
+        profiles: {
+          p: { xhigh: { models: ["openai/xhigh"] }, minimal: { models: ["openai/min"] } } as any,
+        },
       };
       const merged = mergeConfig(base, override);
       expect(merged.profiles.p.max?.models).toEqual(["openai/max"]);

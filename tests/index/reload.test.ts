@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createReloadConfig } from "../../src/index/reload";
 import { createRouterState } from "../../src/state/create";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -12,10 +12,13 @@ describe("index/reload", () => {
     return s;
   };
 
-  const makePi = () => ({ registerProvider: vi.fn() } as any);
+  const makePi = () => ({ registerProvider: vi.fn() }) as any;
 
   const makeDeps = (over: any = {}) => ({
-    loadRouterConfig: vi.fn().mockReturnValue({ config: { debug: true, profiles: { balanced: { medium: { models: ["openai/a"] } } } }, warnings: [] }),
+    loadRouterConfig: vi.fn().mockReturnValue({
+      config: { debug: true, profiles: { balanced: { medium: { models: ["openai/a"] } } } },
+      warnings: [],
+    }),
     profileNames: vi.fn().mockReturnValue(["balanced"]),
     resolveProfileName: vi.fn().mockReturnValue("balanced"),
     registerRouterProvider: vi.fn(),
@@ -66,7 +69,11 @@ describe("index/reload", () => {
     const state = makeState();
     state.debugEnabled = false;
     const pi = makePi();
-    const deps = makeDeps({ loadRouterConfig: vi.fn().mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] }) });
+    const deps = makeDeps({
+      loadRouterConfig: vi
+        .fn()
+        .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] }),
+    });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
     reload(undefined, { preserveDebug: true });
     expect(state.debugEnabled).toBe(false);
@@ -76,7 +83,11 @@ describe("index/reload", () => {
     const state = makeState();
     state.debugEnabled = false;
     const pi = makePi();
-    const deps = makeDeps({ loadRouterConfig: vi.fn().mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] }) });
+    const deps = makeDeps({
+      loadRouterConfig: vi
+        .fn()
+        .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] }),
+    });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
     reload(undefined, { preserveDebug: false });
     expect(state.debugEnabled).toBe(true);
@@ -85,22 +96,28 @@ describe("index/reload", () => {
   it("with ctx calls updateStatus and notify warnings", () => {
     const state = makeState();
     const pi = makePi();
-    const deps = makeDeps({ loadRouterConfig: vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: ["warn1"] }) });
+    const deps = makeDeps({
+      loadRouterConfig: vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: ["warn1"] }),
+    });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
-    const ctx = { ui: { notify: vi.fn() } } as unknown as ExtensionContext;
-    reload(ctx);
+    const ctx = { ui: { notify: vi.fn() } };
+    const { notify } = ctx.ui;
+    reload(ctx as unknown as ExtensionContext);
     expect(deps.updateStatus).toHaveBeenCalledWith(ctx, false, "balanced", undefined);
-    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("warn1"), "warning");
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("warn1"), "warning");
   });
 
   it("with ctx no warnings does not notify", () => {
     const state = makeState();
     const pi = makePi();
-    const deps = makeDeps({ loadRouterConfig: vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: [] }) });
+    const deps = makeDeps({
+      loadRouterConfig: vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: [] }),
+    });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
-    const ctx = { ui: { notify: vi.fn() } } as unknown as ExtensionContext;
-    reload(ctx);
-    expect(ctx.ui.notify).not.toHaveBeenCalled();
+    const ctx = { ui: { notify: vi.fn() } };
+    const { notify } = ctx.ui;
+    reload(ctx as unknown as ExtensionContext);
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it("without ctx does not call updateStatus", () => {

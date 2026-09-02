@@ -51,7 +51,9 @@ describe("io", () => {
     it("catches readFileSync error", () => {
       const fs = {
         existsSync: () => true,
-        readFileSync: () => { throw new Error("read fail"); },
+        readFileSync: () => {
+          throw new Error("read fail");
+        },
       };
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/Failed to parse.*read fail/);
@@ -64,14 +66,18 @@ describe("io", () => {
     it("catches non-Error throw", () => {
       const fs = {
         existsSync: () => true,
-        readFileSync: () => { throw "string error"; },
+        readFileSync: () => {
+          throw "string error";
+        },
       };
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/string error/);
     });
     it("stripJsonc throws -> caught", () => {
       const fs = { existsSync: () => true, readFileSync: () => "{}" };
-      const strip = () => { throw new Error("strip fail"); };
+      const strip = () => {
+        throw new Error("strip fail");
+      };
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: strip });
       expect(parse("/f").warnings[0]).toMatch(/strip fail/);
     });
@@ -95,12 +101,38 @@ describe("io", () => {
         fs: { existsSync: () => true, readFileSync: () => "{}" } as any,
         getAgentDir: () => "/agent",
         join: (...parts: string[]) => parts.join("/"),
-        parseConfigFile: vi.fn()
-          .mockReturnValueOnce({ config: { debug: true, profiles: { a: { medium: { models: ["openai/a"] } } } } as Partial<RouterConfig>, warnings: ["w1"] })
-          .mockReturnValueOnce({ config: { profiles: { b: { high: { models: ["openai/b"] } } } } as Partial<RouterConfig>, warnings: ["w2"] })
-          .mockReturnValueOnce({ config: { profiles: { c: { low: { models: ["openai/c"] } } } } as Partial<RouterConfig>, warnings: [] })
-          .mockReturnValueOnce({ config: { profiles: { d: { minimal: { models: ["openai/d"] } } } } as Partial<RouterConfig>, warnings: ["w4"] }),
-        mergeConfig: vi.fn((base, override) => ({ profiles: { ...base.profiles, ...override.profiles }, debug: override.debug ?? base.debug } as RouterConfig)),
+        parseConfigFile: vi
+          .fn()
+          .mockReturnValueOnce({
+            config: {
+              debug: true,
+              profiles: { a: { medium: { models: ["openai/a"] } } },
+            } as Partial<RouterConfig>,
+            warnings: ["w1"],
+          })
+          .mockReturnValueOnce({
+            config: {
+              profiles: { b: { high: { models: ["openai/b"] } } },
+            } as Partial<RouterConfig>,
+            warnings: ["w2"],
+          })
+          .mockReturnValueOnce({
+            config: { profiles: { c: { low: { models: ["openai/c"] } } } } as Partial<RouterConfig>,
+            warnings: [],
+          })
+          .mockReturnValueOnce({
+            config: {
+              profiles: { d: { minimal: { models: ["openai/d"] } } },
+            } as Partial<RouterConfig>,
+            warnings: ["w4"],
+          }),
+        mergeConfig: vi.fn(
+          (base, override) =>
+            ({
+              profiles: { ...base.profiles, ...override.profiles },
+              debug: override.debug ?? base.debug,
+            }) as RouterConfig,
+        ),
         normalizeConfig: vi.fn((c) => ({ config: c as RouterConfig, warnings: ["norm"] })),
       };
       const load = createLoadRouterConfig(deps as any);
@@ -118,7 +150,8 @@ describe("io", () => {
         getAgentDir: () => "/agent",
         join: (...p: string[]) => p.join("/"),
         parseConfigFile: vi.fn().mockReturnValue({ config: {}, warnings: [] }),
-        mergeConfig: (b: any, o: any) => ({ ...b, ...o, profiles: { ...b.profiles, ...o.profiles } } as RouterConfig),
+        mergeConfig: (b: any, o: any) =>
+          ({ ...b, ...o, profiles: { ...b.profiles, ...o.profiles } }) as RouterConfig,
         normalizeConfig: (c: any) => ({ config: c, warnings: [] }),
       };
       const load = createLoadRouterConfig(deps as any);

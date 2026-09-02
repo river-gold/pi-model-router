@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   handleModelSelect,
   handleSessionStart,
@@ -33,7 +33,12 @@ describe("index/handlers", () => {
         modelRegistry: { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }) },
         model: { provider: "router", id: "balanced" },
         sessionManager: { getBranch: () => [] },
-        ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
       };
       await handleSessionStart({}, ctx, state, actions);
       expect(state.isInitialized).toBe(true);
@@ -57,7 +62,10 @@ describe("index/handlers", () => {
         model: { provider: "router", id: "balanced" },
       };
       await handleSessionStart({}, ctx, state, actions);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Router initialized"), "info");
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Router initialized"),
+        "info",
+      );
     });
   });
 
@@ -66,8 +74,21 @@ describe("index/handlers", () => {
       const state = makeState();
       state.isInitialized = false;
       const actions: any = makeActions();
-      const ctx: any = { ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } }, modelRegistry: { find: vi.fn() } };
-      await handleModelSelect({ model: { provider: "router", id: "balanced" } as any }, ctx, state, actions);
+      const ctx: any = {
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
+        modelRegistry: { find: vi.fn() },
+      };
+      await handleModelSelect(
+        { model: { provider: "router", id: "balanced" } as any },
+        ctx,
+        state,
+        actions,
+      );
       expect(actions.persistState).not.toHaveBeenCalled();
     });
 
@@ -76,8 +97,21 @@ describe("index/handlers", () => {
       state.isInitialized = true;
       state.isInternalModelSwitch = 1;
       const actions: any = makeActions();
-      const ctx: any = { ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } }, modelRegistry: { find: vi.fn() } };
-      await handleModelSelect({ model: { provider: "router", id: "balanced" } as any }, ctx, state, actions);
+      const ctx: any = {
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
+        modelRegistry: { find: vi.fn() },
+      };
+      await handleModelSelect(
+        { model: { provider: "router", id: "balanced" } as any },
+        ctx,
+        state,
+        actions,
+      );
       expect(actions.persistState).not.toHaveBeenCalled();
     });
 
@@ -86,10 +120,29 @@ describe("index/handlers", () => {
       state.isInitialized = true;
       const actions: any = makeActions();
       const ctx: any = {
-        ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-        modelRegistry: { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 }) },
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
+        modelRegistry: {
+          find: vi.fn().mockReturnValue({
+            provider: "router",
+            id: "balanced",
+            contextWindow: 100,
+            maxTokens: 100,
+          }),
+        },
       };
-      await handleModelSelect({ model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any }, ctx, state, actions);
+      await handleModelSelect(
+        {
+          model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any,
+        },
+        ctx,
+        state,
+        actions,
+      );
       expect(state.routerEnabled).toBe(true);
       expect(state.selectedProfile).toBe("balanced");
       expect(actions.persistState).toHaveBeenCalled();
@@ -100,10 +153,29 @@ describe("index/handlers", () => {
       state.isInitialized = true;
       const actions: any = makeActions();
       const ctx: any = {
-        ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-        modelRegistry: { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced", contextWindow: 200, maxTokens: 200 }) },
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
+        modelRegistry: {
+          find: vi.fn().mockReturnValue({
+            provider: "router",
+            id: "balanced",
+            contextWindow: 200,
+            maxTokens: 200,
+          }),
+        },
       };
-      await handleModelSelect({ model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any }, ctx, state, actions);
+      await handleModelSelect(
+        {
+          model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any,
+        },
+        ctx,
+        state,
+        actions,
+      );
       expect(actions.setModelInternally).toHaveBeenCalled();
     });
 
@@ -111,20 +183,55 @@ describe("index/handlers", () => {
       const state = makeState();
       state.isInitialized = true;
       state.currentConfig = { profiles: {} } as any;
-      const actions: any = { ...makeActions(), tryRestoreFallback: vi.fn().mockResolvedValue(true) };
-      const ctx: any = { ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } }, modelRegistry: { find: vi.fn() } };
-      await handleModelSelect({ model: { provider: "router", id: "unknown" } as any }, ctx, state, actions);
+      const actions: any = {
+        ...makeActions(),
+        tryRestoreFallback: vi.fn().mockResolvedValue(true),
+      };
+      const ctx: any = {
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
+        modelRegistry: { find: vi.fn() },
+      };
+      await handleModelSelect(
+        { model: { provider: "router", id: "unknown" } as any },
+        ctx,
+        state,
+        actions,
+      );
       expect(actions.tryRestoreFallback).toHaveBeenCalled();
-      expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown router profile"), "error");
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Unknown router profile"),
+        "error",
+      );
     });
 
     it("router unknown no fallback", async () => {
       const state = makeState();
       state.isInitialized = true;
       state.currentConfig = { profiles: {} } as any;
-      const actions: any = { ...makeActions(), tryRestoreFallback: vi.fn().mockResolvedValue(false) };
-      const ctx: any = { ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } }, modelRegistry: { find: vi.fn() } };
-      await handleModelSelect({ model: { provider: "router", id: "unknown" } as any }, ctx, state, actions);
+      const actions: any = {
+        ...makeActions(),
+        tryRestoreFallback: vi.fn().mockResolvedValue(false),
+      };
+      const ctx: any = {
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
+        modelRegistry: { find: vi.fn() },
+      };
+      await handleModelSelect(
+        { model: { provider: "router", id: "unknown" } as any },
+        ctx,
+        state,
+        actions,
+      );
       expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("no fallback"), "warning");
     });
 
@@ -132,8 +239,21 @@ describe("index/handlers", () => {
       const state = makeState();
       state.isInitialized = true;
       const actions: any = makeActions();
-      const ctx: any = { ui: { notify: vi.fn(), setHiddenThinkingLabel: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } }, modelRegistry: { find: vi.fn() } };
-      await handleModelSelect({ model: { provider: "openai", id: "gpt-4o" } as any }, ctx, state, actions);
+      const ctx: any = {
+        ui: {
+          notify: vi.fn(),
+          setHiddenThinkingLabel: vi.fn(),
+          setStatus: vi.fn(),
+          theme: { fg: (_: string, t: string) => t },
+        },
+        modelRegistry: { find: vi.fn() },
+      };
+      await handleModelSelect(
+        { model: { provider: "openai", id: "gpt-4o" } as any },
+        ctx,
+        state,
+        actions,
+      );
       expect(state.routerEnabled).toBe(false);
       expect(state.lastNonRouterModel).toBe("openai/gpt-4o");
       expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
@@ -166,18 +286,34 @@ describe("index/handlers", () => {
       const state = createRouterState();
       state.currentModelRegistry = undefined;
       const actions: any = { reloadConfig: vi.fn(), persistState: vi.fn() };
-      const ctx: any = { cwd: "/cwd", modelRegistry: { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }) }, model: { provider: "openai", id: "gpt" }, ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } } };
+      const ctx: any = {
+        cwd: "/cwd",
+        modelRegistry: { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }) },
+        model: { provider: "openai", id: "gpt" },
+        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+      };
       await handleTurnEnd({}, ctx, state, actions);
       expect(state.currentModelRegistry).toBe(ctx.modelRegistry);
     });
 
     it("restores router model when enabled and not router", async () => {
       const state = createRouterState();
-      state.currentModelRegistry = { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }) } as any;
+      state.currentModelRegistry = {
+        find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }),
+      } as any;
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
-      const actions: any = { reloadConfig: vi.fn(), persistState: vi.fn(), setModelInternally: vi.fn().mockResolvedValue(true) };
-      const ctx: any = { cwd: "/cwd", modelRegistry: state.currentModelRegistry, model: { provider: "openai", id: "gpt" }, ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } } };
+      const actions: any = {
+        reloadConfig: vi.fn(),
+        persistState: vi.fn(),
+        setModelInternally: vi.fn().mockResolvedValue(true),
+      };
+      const ctx: any = {
+        cwd: "/cwd",
+        modelRegistry: state.currentModelRegistry,
+        model: { provider: "openai", id: "gpt" },
+        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+      };
       await handleTurnEnd({}, ctx, state, actions);
       expect(actions.setModelInternally).toHaveBeenCalled();
     });
@@ -187,8 +323,17 @@ describe("index/handlers", () => {
       state.currentModelRegistry = { find: vi.fn() } as any;
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
-      const actions: any = { reloadConfig: vi.fn(), persistState: vi.fn(), setModelInternally: vi.fn() };
-      const ctx: any = { cwd: "/cwd", modelRegistry: state.currentModelRegistry, model: { provider: "router", id: "balanced" }, ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } } };
+      const actions: any = {
+        reloadConfig: vi.fn(),
+        persistState: vi.fn(),
+        setModelInternally: vi.fn(),
+      };
+      const ctx: any = {
+        cwd: "/cwd",
+        modelRegistry: state.currentModelRegistry,
+        model: { provider: "router", id: "balanced" },
+        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+      };
       await handleTurnEnd({}, ctx, state, actions);
       expect(actions.setModelInternally).not.toHaveBeenCalled();
     });
@@ -198,8 +343,17 @@ describe("index/handlers", () => {
       state.currentModelRegistry = { find: vi.fn() } as any;
       state.routerEnabled = true;
       state.selectedProfile = undefined;
-      const actions: any = { reloadConfig: vi.fn(), persistState: vi.fn(), setModelInternally: vi.fn() };
-      const ctx: any = { cwd: "/cwd", modelRegistry: state.currentModelRegistry, model: { provider: "openai", id: "gpt" }, ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } } };
+      const actions: any = {
+        reloadConfig: vi.fn(),
+        persistState: vi.fn(),
+        setModelInternally: vi.fn(),
+      };
+      const ctx: any = {
+        cwd: "/cwd",
+        modelRegistry: state.currentModelRegistry,
+        model: { provider: "openai", id: "gpt" },
+        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+      };
       await handleTurnEnd({}, ctx, state, actions);
       expect(actions.setModelInternally).not.toHaveBeenCalled();
     });
@@ -209,8 +363,17 @@ describe("index/handlers", () => {
       state.currentModelRegistry = { find: vi.fn().mockReturnValue(undefined) } as any;
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
-      const actions: any = { reloadConfig: vi.fn(), persistState: vi.fn(), setModelInternally: vi.fn() };
-      const ctx: any = { cwd: "/cwd", modelRegistry: state.currentModelRegistry, model: { provider: "openai", id: "gpt" }, ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } } };
+      const actions: any = {
+        reloadConfig: vi.fn(),
+        persistState: vi.fn(),
+        setModelInternally: vi.fn(),
+      };
+      const ctx: any = {
+        cwd: "/cwd",
+        modelRegistry: state.currentModelRegistry,
+        model: { provider: "openai", id: "gpt" },
+        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
+      };
       await handleTurnEnd({}, ctx, state, actions);
       expect(actions.setModelInternally).not.toHaveBeenCalled();
     });

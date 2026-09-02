@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createRouterState } from "../../src/state/create";
 
 vi.mock("../../src/provider", async () => {
-  const actual = await vi.importActual("../../src/provider") as any;
+  const actual = (await vi.importActual("../../src/provider")) as any;
   return { ...actual, registerRouterProvider: vi.fn() };
 });
 
@@ -82,7 +82,9 @@ describe("index/actions", () => {
     const state = createRouterState();
     const pi = { appendEntry: vi.fn(), setModel: vi.fn().mockResolvedValue(true) } as any;
     const actions = createRouterActions(pi, state);
-    const ctx = { modelRegistry: { find: vi.fn().mockReturnValue({ provider: "openai", id: "gpt" }) } } as any;
+    const ctx = {
+      modelRegistry: { find: vi.fn().mockReturnValue({ provider: "openai", id: "gpt" }) },
+    } as any;
     expect(await actions.tryFallbackByRef(ctx, "openai/gpt-4o")).toBe(true);
     expect(await actions.tryFallbackByRef(ctx, "invalid")).toBe(false);
     state.lastNonRouterModel = "openai/gpt";
@@ -94,7 +96,11 @@ describe("index/actions", () => {
     state.currentConfig = { profiles: { balanced: {} } } as any;
     const pi = { appendEntry: vi.fn(), setModel: vi.fn().mockResolvedValue(true) } as any;
     const actions = createRouterActions(pi, state);
-    const ctx = { model: { provider: "router", id: "balanced" }, ui: { notify: vi.fn() }, modelRegistry: { find: vi.fn() } } as any;
+    const ctx = {
+      model: { provider: "router", id: "balanced" },
+      ui: { notify: vi.fn() },
+      modelRegistry: { find: vi.fn() },
+    } as any;
     await actions.ensureValidActiveRouterProfile(ctx);
     expect(state.routerEnabled).toBe(true);
   });

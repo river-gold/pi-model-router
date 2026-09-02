@@ -1,8 +1,8 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterProfile } from "../types";
+import type { RouterProfile, ClassifierConfig, RouterTier } from "../types";
 import { resolveEffectiveClassifier } from "../config";
-import { runClassifierWithFallbacksDetailed } from "../classifier";
+import { runClassifierWithFallbacksDetailed, type ClassifierAttempt } from "../classifier";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
 
 // runClassifierBranch matches task signature: (registry, profile, state, context, signal, effectiveHistorySize, failedSet, classifierSource) -> {result, attempts}
@@ -10,7 +10,7 @@ export const runClassifierBranch = async (
   registry: ExtensionContext["modelRegistry"],
   profile: RouterProfile,
   state: {
-    currentConfig: { classifierModels?: import("../types").ClassifierConfig[]; historySize?: number };
+    currentConfig: { classifierModels?: ClassifierConfig[]; historySize?: number };
     failedByChain: Map<string, Set<string>>;
     lastExtensionContext: ExtensionContext | undefined;
   },
@@ -20,8 +20,8 @@ export const runClassifierBranch = async (
   failedSet: Set<string>,
   classifierSource: string,
 ): Promise<{
-  result: { tier: import("../types").RouterTier; reasoning: string } | undefined;
-  attempts: import("../classifier").ClassifierAttempt[];
+  result: { tier: RouterTier; reasoning: string } | undefined;
+  attempts: ClassifierAttempt[];
 }> => {
   const { classifiers: effectiveClassifiers } = resolveEffectiveClassifier(
     profile,

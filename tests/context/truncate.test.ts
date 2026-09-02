@@ -9,7 +9,7 @@ import {
 } from "../../src/context/truncate";
 import type { Context, Message } from "@earendil-works/pi-ai";
 
-const m = (role: string, content: string): Message => ({ role, content } as unknown as Message);
+const m = (role: string, content: string): Message => ({ role, content }) as unknown as Message;
 
 describe("truncate helpers", () => {
   describe("calculateSystemTokens", () => {
@@ -63,13 +63,15 @@ describe("truncate helpers", () => {
     it("already at user -> same", () =>
       expect(alignToUserBoundary([m("assistant", "a"), m("user", "b")], 1)).toBe(1));
     it("aligns to next user", () =>
-      expect(alignToUserBoundary([m("assistant", "a"), m("assistant", "b"), m("user", "c")], 0)).toBe(
-        2,
-      ));
+      expect(
+        alignToUserBoundary([m("assistant", "a"), m("assistant", "b"), m("user", "c")], 0),
+      ).toBe(2));
     it("no user found -> startIndex", () =>
       expect(alignToUserBoundary([m("assistant", "a"), m("assistant", "b")], 0)).toBe(0));
     it("start 1 no user after -> startIndex", () =>
-      expect(alignToUserBoundary([m("user", "a"), m("assistant", "b"), m("assistant", "c")], 1)).toBe(1));
+      expect(
+        alignToUserBoundary([m("user", "a"), m("assistant", "b"), m("assistant", "c")], 1),
+      ).toBe(1));
   });
 
   describe("countLeadingOrphanToolResults", () => {
@@ -82,17 +84,15 @@ describe("truncate helpers", () => {
         countLeadingOrphanToolResults([m("toolResult", "a") as any, m("toolResult", "b") as any]),
       ).toBe(2));
     it("orphan + user stops", () =>
-      expect(
-        countLeadingOrphanToolResults([m("toolResult", "a") as any, m("user", "b")]),
-      ).toBe(1));
+      expect(countLeadingOrphanToolResults([m("toolResult", "a") as any, m("user", "b")])).toBe(1));
     it("orphan + assistant not counted as orphan? assistant not toolResult", () =>
       expect(
         countLeadingOrphanToolResults([m("toolResult", "a") as any, m("assistant", "b")]),
       ).toBe(1));
     it("non-orphan first ->0", () =>
-      expect(countLeadingOrphanToolResults([m("assistant", "a"), m("toolResult", "b") as any])).toBe(
-        0,
-      ));
+      expect(
+        countLeadingOrphanToolResults([m("assistant", "a"), m("toolResult", "b") as any]),
+      ).toBe(0));
   });
 
   describe("truncateContext", () => {

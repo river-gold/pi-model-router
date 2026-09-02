@@ -51,7 +51,9 @@ describe("index/fallback", () => {
       const state = createRouterState();
       const pi = {} as any;
       const setModel = vi.fn().mockResolvedValue(true);
-      const ctx = { modelRegistry: { find: vi.fn().mockReturnValue({ provider: "openai", id: "gpt" }) } } as any;
+      const ctx = {
+        modelRegistry: { find: vi.fn().mockReturnValue({ provider: "openai", id: "gpt" }) },
+      } as any;
       const fn = createTryFallbackByRef(pi, state, setModel as any);
       expect(await fn(ctx, "openai/gpt-4o")).toBe(true);
       expect(setModel).toHaveBeenCalled();
@@ -68,7 +70,13 @@ describe("index/fallback", () => {
       const state = createRouterState();
       const pi = {} as any;
       const setModel = vi.fn();
-      const ctx = { modelRegistry: { find: vi.fn().mockImplementation(() => { throw new Error("fail"); }) } } as any;
+      const ctx = {
+        modelRegistry: {
+          find: vi.fn().mockImplementation(() => {
+            throw new Error("fail");
+          }),
+        },
+      } as any;
       const fn = createTryFallbackByRef(pi, state, setModel as any);
       expect(await fn(ctx, "openai/gpt")).toBe(false);
     });
@@ -120,7 +128,9 @@ describe("index/fallback", () => {
     it("handles getAnyModel throw", async () => {
       const state = createRouterState();
       const tryFallbackByRef = vi.fn();
-      const getAnyModel = vi.fn().mockImplementation(() => { throw new Error("fail"); });
+      const getAnyModel = vi.fn().mockImplementation(() => {
+        throw new Error("fail");
+      });
       const fn = createTryRestoreFallback(state, tryFallbackByRef as any, getAnyModel as any);
       expect(await fn({} as any)).toBe(false);
     });
@@ -159,7 +169,10 @@ describe("index/fallback", () => {
       expect(state.routerEnabled).toBe(false);
       expect(state.selectedProfile).toBeUndefined();
       expect(tryRestoreFallback).toHaveBeenCalled();
-      expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("no longer configured"), "warning");
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("no longer configured"),
+        "warning",
+      );
     });
     it("invalid profile fallback fails", async () => {
       const state = createRouterState();

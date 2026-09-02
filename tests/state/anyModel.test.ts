@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getAnyModel } from "../../src/state/anyModel";
 
 describe("state/anyModel", () => {
   it("returns from list", () => {
     const registry = {
-      list: () => [{ provider: "openai", id: "gpt-4o" }, { provider: "x", id: "y" }],
+      list: () => [
+        { provider: "openai", id: "gpt-4o" },
+        { provider: "x", id: "y" },
+      ],
     } as any;
     expect(getAnyModel(registry)).toEqual({ provider: "openai", id: "gpt-4o" });
   });

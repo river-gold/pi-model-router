@@ -12,12 +12,19 @@ export const handleSessionStart = async (
   actions: ReturnType<typeof createRouterActions>,
 ): Promise<void> => {
   state.isInitialized = true;
-  const helpers = { setModelInternally: actions.setModelInternally, persistState: actions.persistState };
+  const helpers = {
+    setModelInternally: actions.setModelInternally,
+    persistState: actions.persistState,
+  };
   await restoreStateFromSession(ctx, state, helpers, {
     reloadConfig: actions.reloadConfig,
     ensureValidActiveRouterProfile: actions.ensureValidActiveRouterProfile,
   });
-  if (state.debugEnabled) ctx.ui.notify(`Router initialized with profiles: ${profileNames(state.currentConfig).join(", ")}`, "info");
+  if (state.debugEnabled)
+    ctx.ui.notify(
+      `Router initialized with profiles: ${profileNames(state.currentConfig).join(", ")}`,
+      "info",
+    );
 };
 
 export const handleModelSelect = async (
@@ -34,7 +41,10 @@ export const handleModelSelect = async (
       state.routerEnabled = false;
       state.selectedProfile = undefined;
       if (await actions.tryRestoreFallback(ctx)) return;
-      ctx.ui.notify("Router disabled: no fallback model available. Select a model manually.", "warning");
+      ctx.ui.notify(
+        "Router disabled: no fallback model available. Select a model manually.",
+        "warning",
+      );
       return;
     }
     const registryModel = ctx.modelRegistry.find("router", profileName);
@@ -84,7 +94,8 @@ export const handleTurnEnd = async (
   }
   if (state.routerEnabled && state.selectedProfile && ctx.model?.provider !== "router") {
     const routerModel = ctx.modelRegistry.find("router", state.selectedProfile);
-    if (routerModel) await actions.setModelInternally(routerModel as NonNullable<ExtensionContext["model"]>);
+    if (routerModel)
+      await actions.setModelInternally(routerModel as NonNullable<ExtensionContext["model"]>);
   }
   actions.persistState();
   updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision);

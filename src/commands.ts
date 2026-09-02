@@ -74,14 +74,20 @@ export const formatStatusLines = (state: RouterStateView): string[] => {
     }
   }
   if (state.lastConfigWarnings.length > 0) {
-    lines.push("", "⚠️ Configuration Warnings:", ...state.lastConfigWarnings.map((w) => `  - ${w}`));
+    lines.push(
+      "",
+      "⚠️ Configuration Warnings:",
+      ...state.lastConfigWarnings.map((w) => `  - ${w}`),
+    );
   }
   return lines;
 };
 
 export const buildDebugShowMessage = (history: RoutingDecision[]): string => {
   if (history.length === 0) return "No recent routing decisions.";
-  const lines = history.map((d) => `[${new Date(d.timestamp).toLocaleTimeString()}] ${formatDecision(d)}`);
+  const lines = history.map(
+    (d) => `[${new Date(d.timestamp).toLocaleTimeString()}] ${formatDecision(d)}`,
+  );
   return `Recent Routing Decisions:\n${lines.join("\n")}`;
 };
 
@@ -166,7 +172,10 @@ export const registerCommands = (
     }
     actions.reloadConfig(ctx, { preserveDebug: true });
     await actions.ensureValidActiveRouterProfile(ctx);
-    ctx.ui.notify(`Router config reloaded. Profiles: ${profileNames(state.currentConfig).join(", ")}`, "info");
+    ctx.ui.notify(
+      `Router config reloaded. Profiles: ${profileNames(state.currentConfig).join(", ")}`,
+      "info",
+    );
   };
 
   const handleResetFailures = async (args: string[], ctx: ExtensionContext) => {
@@ -183,7 +192,8 @@ export const registerCommands = (
     getArgumentCompletions: (prefix) => {
       const { subcommand, subArgs, hasTrailingSpace } = parsePrefix(prefix);
       if (subcommand === "") return getSubcommandCompletions("");
-      if (subArgs.length === 0 && !hasTrailingSpace && subcommand !== "debug") return getSubcommandCompletions(subcommand);
+      if (subArgs.length === 0 && !hasTrailingSpace && subcommand !== "debug")
+        return getSubcommandCompletions(subcommand);
       if (subcommand === "debug") {
         const debugPrefix = subArgs[0] ?? "";
         const items = ["on", "off", "toggle", "clear", "show"]

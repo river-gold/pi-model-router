@@ -4,7 +4,10 @@ import type { RouterConfig } from "../../src/types";
 
 describe("normalizeConfig", () => {
   it("warns on unknown top-level fields", () => {
-    const { warnings } = normalizeConfig({ unknownField: 123, profiles: {} } as unknown as RouterConfig);
+    const { warnings } = normalizeConfig({
+      unknownField: 123,
+      profiles: {},
+    } as unknown as RouterConfig);
     expect(warnings.some((w) => w.includes('Unknown config field "unknownField"'))).toBe(true);
   });
   it("multiple unknown fields", () => {
@@ -12,12 +15,21 @@ describe("normalizeConfig", () => {
     expect(warnings.filter((w) => w.includes("Unknown config field")).length).toBe(2);
   });
   it("debug true/false/non-boolean", () => {
-    expect(normalizeConfig({ debug: true, profiles: {} } as unknown as RouterConfig).config.debug).toBe(true);
-    expect(normalizeConfig({ debug: false, profiles: {} } as unknown as RouterConfig).config.debug).toBe(false);
-    expect(normalizeConfig({ debug: "yes" as unknown as boolean, profiles: {} } as RouterConfig).config.debug).toBe(false);
+    expect(
+      normalizeConfig({ debug: true, profiles: {} } as unknown as RouterConfig).config.debug,
+    ).toBe(true);
+    expect(
+      normalizeConfig({ debug: false, profiles: {} } as unknown as RouterConfig).config.debug,
+    ).toBe(false);
+    expect(
+      normalizeConfig({ debug: "yes" as unknown as boolean, profiles: {} } as RouterConfig).config
+        .debug,
+    ).toBe(false);
   });
   it("profile not object -> skipped", () => {
-    const { warnings, config } = normalizeConfig({ profiles: { bad: "not-object" as any } } as RouterConfig);
+    const { warnings, config } = normalizeConfig({
+      profiles: { bad: "not-object" as any },
+    } as RouterConfig);
     expect(warnings.some((w) => w.includes('Profile "bad" is not an object'))).toBe(true);
     expect(config.profiles.bad).toBeUndefined();
   });
@@ -25,7 +37,7 @@ describe("normalizeConfig", () => {
     const { warnings, config } = normalizeConfig({
       profiles: { empty: {} as any },
     } as unknown as RouterConfig);
-    expect(warnings.some((w) => w.includes('has no valid tiers'))).toBe(true);
+    expect(warnings.some((w) => w.includes("has no valid tiers"))).toBe(true);
     expect(config.profiles.empty).toBeUndefined();
   });
   it("profile with valid tiers kept", () => {
@@ -80,14 +92,26 @@ describe("normalizeConfig", () => {
     expect(config.classifierModels).toBeUndefined();
   });
   it("historySize valid 0, 20, boundary", () => {
-    expect(normalizeConfig({ historySize: 0, profiles: {} } as unknown as RouterConfig).config.historySize).toBe(0);
-    expect(normalizeConfig({ historySize: 20, profiles: {} } as unknown as RouterConfig).config.historySize).toBe(20);
-    expect(normalizeConfig({ historySize: 5, profiles: {} } as unknown as RouterConfig).config.historySize).toBe(5);
+    expect(
+      normalizeConfig({ historySize: 0, profiles: {} } as unknown as RouterConfig).config
+        .historySize,
+    ).toBe(0);
+    expect(
+      normalizeConfig({ historySize: 20, profiles: {} } as unknown as RouterConfig).config
+        .historySize,
+    ).toBe(20);
+    expect(
+      normalizeConfig({ historySize: 5, profiles: {} } as unknown as RouterConfig).config
+        .historySize,
+    ).toBe(5);
   });
   it("historySize invalid negative, >20, float, string, NaN", () => {
     const cases = [-1, 21, 3.5, "5" as unknown as number, NaN, null as unknown as number];
     for (const v of cases) {
-      const { warnings, config } = normalizeConfig({ historySize: v, profiles: {} } as unknown as RouterConfig);
+      const { warnings, config } = normalizeConfig({
+        historySize: v,
+        profiles: {},
+      } as unknown as RouterConfig);
       expect(warnings.some((w) => w.includes("Invalid historySize"))).toBe(true);
       expect(config.historySize).toBe(0);
     }

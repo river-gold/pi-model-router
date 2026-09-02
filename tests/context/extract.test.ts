@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { extractPartText, extractTextFromContent } from "../../src/context/extract";
-import type { Message } from "@earendil-works/pi-ai";
 
 describe("extract", () => {
   describe("extractPartText", () => {
@@ -16,9 +15,7 @@ describe("extract", () => {
       );
     });
     it("toolCall with empty args", () => {
-      expect(extractPartText({ type: "toolCall", name: "fn", arguments: {} } as any)).toBe(
-        'fn {}',
-      );
+      expect(extractPartText({ type: "toolCall", name: "fn", arguments: {} } as any)).toBe("fn {}");
     });
     it("unknown type returns empty", () => {
       expect(extractPartText({ type: "image", url: "x" } as any)).toBe("");
@@ -50,7 +47,10 @@ describe("extract", () => {
     });
     it("array all empty returns empty", () => {
       expect(
-        extractTextFromContent([{ type: "image", url: "x" } as any, { type: "text", text: "" } as any]),
+        extractTextFromContent([
+          { type: "image", url: "x" } as any,
+          { type: "text", text: "" } as any,
+        ]),
       ).toBe("");
     });
   });

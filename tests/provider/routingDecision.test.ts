@@ -69,7 +69,10 @@ describe("resolveRoutingDecision", () => {
     });
     // high not available, low is singleTier but isToolLoop false and isSingleTier true would have already returned low
     // Use validTierCount 2 with only low to force resolveAvailableTier fallback
-    const profile2: RouterProfile = { low: { models: ["openai/gpt"] }, medium: { models: ["openai/gpt2"] } } as any;
+    const profile2: RouterProfile = {
+      low: { models: ["openai/gpt"] },
+      medium: { models: ["openai/gpt2"] },
+    } as any;
     const d2 = resolveRoutingDecision({
       profileName: "balanced",
       profile: profile2,

@@ -8,7 +8,11 @@ describe("provider/models", () => {
       const cfg: RouterConfig = {
         profiles: {
           balanced: {
-            medium: { models: ["openai/gpt-4o"], resolvedContextWindow: 128000, resolvedMaxTokens: 16384 } as any,
+            medium: {
+              models: ["openai/gpt-4o"],
+              resolvedContextWindow: 128000,
+              resolvedMaxTokens: 16384,
+            } as any,
           },
         },
       };
@@ -23,9 +27,23 @@ describe("provider/models", () => {
       const cfg: RouterConfig = {
         profiles: {
           p: {
-            low: { models: ["openai/low"], resolvedContextWindow: 10000, resolvedMaxTokens: 1000 } as any,
-            high: { models: ["openai/high"], contextWindow: 200000, resolvedContextWindow: 200000, maxTokens: 50000, resolvedMaxTokens: 50000 } as any,
-            medium: { models: ["openai/med"], resolvedContextWindow: 50000, resolvedMaxTokens: 2000 } as any,
+            low: {
+              models: ["openai/low"],
+              resolvedContextWindow: 10000,
+              resolvedMaxTokens: 1000,
+            } as any,
+            high: {
+              models: ["openai/high"],
+              contextWindow: 200000,
+              resolvedContextWindow: 200000,
+              maxTokens: 50000,
+              resolvedMaxTokens: 50000,
+            } as any,
+            medium: {
+              models: ["openai/med"],
+              resolvedContextWindow: 50000,
+              resolvedMaxTokens: 2000,
+            } as any,
           },
         },
       };
@@ -92,6 +110,9 @@ describe("provider/models", () => {
     });
 
     it("empty", () => expect(buildModelsKey([] as any)).toBe(""));
-    it("single", () => expect(buildModelsKey([{ id: "x", contextWindow: 1, maxTokens: 2, reasoning: true } as any])).toBe("x:1:2:true"));
+    it("single", () =>
+      expect(
+        buildModelsKey([{ id: "x", contextWindow: 1, maxTokens: 2, reasoning: true } as any]),
+      ).toBe("x:1:2:true"));
   });
 });

@@ -1,4 +1,9 @@
-import type { Api, AssistantMessage, Model, AssistantMessageEventStream } from "@earendil-works/pi-ai";
+import type {
+  Api,
+  AssistantMessage,
+  Model,
+  AssistantMessageEventStream,
+} from "@earendil-works/pi-ai";
 
 export const createErrorMessage = (model: Model<Api>, message: string): AssistantMessage => ({
   role: "assistant",

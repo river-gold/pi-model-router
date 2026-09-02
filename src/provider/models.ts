@@ -1,4 +1,4 @@
-import type { RouterConfig, RouterProfile } from "../types";
+import type { RouterConfig, RouterProfile, RouterTier } from "../types";
 import { profileNames, ROUTER_TIERS, resolveContextWindow, resolveMaxTokens } from "../config";
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from "../constants";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -22,8 +22,8 @@ export const buildModelDefinitions = (
     let maxContextWindow = DEFAULT_CONTEXT_WINDOW;
     let maxMaxTokens = DEFAULT_MAX_TOKENS;
     for (const tier of ROUTER_TIERS.filter((t) => profile[t])) {
-      const cw = resolveContextWindow(tier as import("../types").RouterTier, profile, registry);
-      const mot = resolveMaxTokens(tier as import("../types").RouterTier, profile, registry);
+      const cw = resolveContextWindow(tier as RouterTier, profile, registry);
+      const mot = resolveMaxTokens(tier as RouterTier, profile, registry);
       if (cw > maxContextWindow) maxContextWindow = cw;
       if (mot > maxMaxTokens) maxMaxTokens = mot;
     }
@@ -47,6 +47,5 @@ export const buildModelDefinitions = (
   });
 };
 
-export const buildModelsKey = (
-  definitions: ReturnType<typeof buildModelDefinitions>,
-): string => definitions.map((m) => `${m.id}:${m.contextWindow}:${m.maxTokens}:${m.reasoning}`).join(",");
+export const buildModelsKey = (definitions: ReturnType<typeof buildModelDefinitions>): string =>
+  definitions.map((m) => `${m.id}:${m.contextWindow}:${m.maxTokens}:${m.reasoning}`).join(",");

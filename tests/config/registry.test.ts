@@ -136,7 +136,11 @@ describe("registry", () => {
       const profile: RouterProfile = {
         high: { models: ["openai/gpt-4o"], resolvedMaxTokens: 5555 },
       };
-      const registry = { find: vi.fn().mockImplementation(() => { throw new Error("x"); }) } as any;
+      const registry = {
+        find: vi.fn().mockImplementation(() => {
+          throw new Error("x");
+        }),
+      } as any;
       expect(resolveMaxTokens("high", profile, registry)).toBe(5555);
     });
     it("invalid ref -> fallback", () => {
@@ -145,7 +149,9 @@ describe("registry", () => {
       expect(resolveMaxTokens("high", profile, registry)).toBe(1111);
     });
     it("no registry -> fallback", () => {
-      const profile: RouterProfile = { high: { models: ["openai/gpt-4o"], resolvedMaxTokens: 2222 } };
+      const profile: RouterProfile = {
+        high: { models: ["openai/gpt-4o"], resolvedMaxTokens: 2222 },
+      };
       expect(resolveMaxTokens("high", profile, undefined)).toBe(2222);
     });
     it("resolved undefined -> default", () => {

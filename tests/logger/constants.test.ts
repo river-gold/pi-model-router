@@ -10,7 +10,9 @@ describe("logger/constants", () => {
   });
 
   it("getLogPath with custom home", () => {
-    expect(getLogPath("/custom/home")).toBe(join("/custom/home", ".pi", "logs", "pi-model-router.log"));
+    expect(getLogPath("/custom/home")).toBe(
+      join("/custom/home", ".pi", "logs", "pi-model-router.log"),
+    );
   });
 
   it("getLogPath default", () => {

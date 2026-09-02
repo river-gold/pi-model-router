@@ -48,7 +48,7 @@ describe("jsonc", () => {
       expect(stripTrailingCommas('{"a":1 , \n}')).toBe('{"a":1  \n}');
     });
     it("removes trailing comma in array", () => {
-      expect(stripTrailingCommas('[1,2,]')).toBe('[1,2]');
+      expect(stripTrailingCommas("[1,2,]")).toBe("[1,2]");
     });
     it("removes multiple trailing commas nested", () => {
       expect(stripTrailingCommas('{"a":[1,],}')).toBe('{"a":[1]}');

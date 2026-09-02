@@ -21,9 +21,12 @@ describe("profile", () => {
     const config: RouterConfig = {
       profiles: { balanced: { medium: { models: ["openai/a"] } } },
     };
-    it("requested exists -> returns", () => expect(resolveProfileName(config, "balanced")).toBe("balanced"));
-    it("requested not exists -> undefined", () => expect(resolveProfileName(config, "missing")).toBeUndefined());
-    it("undefined -> undefined", () => expect(resolveProfileName(config, undefined)).toBeUndefined());
+    it("requested exists -> returns", () =>
+      expect(resolveProfileName(config, "balanced")).toBe("balanced"));
+    it("requested not exists -> undefined", () =>
+      expect(resolveProfileName(config, "missing")).toBeUndefined());
+    it("undefined -> undefined", () =>
+      expect(resolveProfileName(config, undefined)).toBeUndefined());
     it("empty string -> undefined", () => expect(resolveProfileName(config, "")).toBeUndefined());
     it("profile exists but requested different -> undefined", () =>
       expect(resolveProfileName(config, "other")).toBeUndefined());

@@ -10,10 +10,15 @@ import {
 } from "../../src/context/history";
 import type { Context, Message } from "@earendil-works/pi-ai";
 
-const msg = (role: string, content: string): Message =>
-  ({ role, content } as unknown as Message);
+const msg = (role: string, content: string): Message => ({ role, content }) as unknown as Message;
 const toolResult = (content: string): Message =>
-  ({ role: "toolResult", content, toolCallId: "1", toolName: "t", isError: false } as unknown as Message);
+  ({
+    role: "toolResult",
+    content,
+    toolCallId: "1",
+    toolName: "t",
+    isError: false,
+  }) as unknown as Message;
 
 describe("history", () => {
   describe("collectUserIndices", () => {
@@ -30,14 +35,11 @@ describe("history", () => {
     it("empty", () => expect(resolveHistoryUserIndices([], 2)).toEqual([]));
     it("single user -> empty (excludes last)", () =>
       expect(resolveHistoryUserIndices([0], 1)).toEqual([]));
-    it("pairCount 1", () =>
-      expect(resolveHistoryUserIndices([0, 1, 2], 1)).toEqual([1]));
-    it("pairCount 2", () =>
-      expect(resolveHistoryUserIndices([0, 1, 2], 2)).toEqual([0, 1]));
+    it("pairCount 1", () => expect(resolveHistoryUserIndices([0, 1, 2], 1)).toEqual([1]));
+    it("pairCount 2", () => expect(resolveHistoryUserIndices([0, 1, 2], 2)).toEqual([0, 1]));
     it("pairCount larger than available", () =>
       expect(resolveHistoryUserIndices([0, 1, 2], 10)).toEqual([0, 1]));
-    it("pairCount exact", () =>
-      expect(resolveHistoryUserIndices([0, 1, 2, 3], 2)).toEqual([1, 2]));
+    it("pairCount exact", () => expect(resolveHistoryUserIndices([0, 1, 2, 3], 2)).toEqual([1, 2]));
   });
 
   describe("isAssistantOrToolResult", () => {
@@ -80,7 +82,12 @@ describe("history", () => {
       expect(findFinalTextBetween(messages, 0, 3)).toBe("t1");
     });
     it("skips empty", () => {
-      const messages = [msg("user", "u"), msg("assistant", "   "), msg("assistant", "a"), msg("user", "n")];
+      const messages = [
+        msg("user", "u"),
+        msg("assistant", "   "),
+        msg("assistant", "a"),
+        msg("user", "n"),
+      ];
       expect(findFinalTextBetween(messages, 0, 3)).toBe("a");
     });
     it("no assistant/toolResult -> empty", () => {
@@ -120,9 +127,13 @@ describe("history", () => {
 
   describe("getHistoryPairsText", () => {
     it("pairCount 0 -> empty", () =>
-      expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, 0)).toBe(""));
+      expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, 0)).toBe(
+        "",
+      ));
     it("pairCount negative -> empty", () =>
-      expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, -1)).toBe(""));
+      expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, -1)).toBe(
+        "",
+      ));
     it("no history (single user) -> empty", () =>
       expect(
         getHistoryPairsText({ messages: [msg("user", "hello")] } as unknown as Context, 1),

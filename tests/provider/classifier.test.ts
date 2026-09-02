@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { applyClassifierIfNeeded } from "../../src/provider/classifier";
-import { CLASSIFIER_CHAIN_KEY } from "../../src/failureMemory";
 
 vi.mock("../../src/provider/classifierBranch", () => ({
   runClassifierBranch: vi.fn(),
@@ -33,7 +32,7 @@ describe("provider/classifier", () => {
     vi.clearAllMocks();
     (resolveAvailableTier as unknown as ReturnType<typeof vi.fn>).mockImplementation((_, t) => t);
     (buildRoutingDecision as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      (modelId, profile, tier, reasoning) => ({ profile: modelId, tier, reasoning } as any),
+      (modelId, profile, tier, reasoning) => ({ profile: modelId, tier, reasoning }) as any,
     );
     (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
@@ -99,7 +98,19 @@ describe("provider/classifier", () => {
 
   it("uses historySize 0 when undefined", async () => {
     const state = makeState(undefined);
-    await applyClassifierIfNeeded(mockProfile, mockDecision, "modelId", {} as any, state as any, {} as any, undefined, false, false, "off" as any, "source");
+    await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "modelId",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
     expect(runClassifierBranch).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -114,20 +125,74 @@ describe("provider/classifier", () => {
 
   it("uses historySize when defined", async () => {
     const state = makeState(5);
-    await applyClassifierIfNeeded(mockProfile, mockDecision, "modelId", {} as any, state as any, {} as any, undefined, false, false, "off" as any, "source");
-    expect(runClassifierBranch).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.anything(), undefined, 5, expect.any(Set), "source");
+    await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "modelId",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
+    expect(runClassifierBranch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      5,
+      expect.any(Set),
+      "source",
+    );
   });
 
   it("uses failedSet from map", async () => {
     const set = new Set(["a"]);
     const state = makeState(0, set);
-    await applyClassifierIfNeeded(mockProfile, mockDecision, "modelId", {} as any, state as any, {} as any, undefined, false, false, "off" as any, "source");
-    expect(runClassifierBranch).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.anything(), undefined, 0, set, "source");
+    await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "modelId",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
+    expect(runClassifierBranch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      0,
+      set,
+      "source",
+    );
   });
 
   it("creates new Set when not in map", async () => {
     const state = makeState(0, undefined);
-    await applyClassifierIfNeeded(mockProfile, mockDecision, "modelId", {} as any, state as any, {} as any, undefined, false, false, "off" as any, "source");
+    await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "modelId",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
     const calledSet = (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][6];
     expect(calledSet).toBeInstanceOf(Set);
     expect(calledSet.size).toBe(0);
@@ -139,8 +204,26 @@ describe("provider/classifier", () => {
       result: { tier: "high", reasoning: "r" },
     } as any);
     const state = makeState();
-    const result = await applyClassifierIfNeeded(mockProfile, mockDecision, "myModel", {} as any, state as any, {} as any, undefined, false, false, "off" as any, "source");
-    expect(buildRoutingDecision).toHaveBeenCalledWith("myModel", mockProfile, "high", "Classifier: r", true);
+    const result = await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "myModel",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
+    expect(buildRoutingDecision).toHaveBeenCalledWith(
+      "myModel",
+      mockProfile,
+      "high",
+      "Classifier: r",
+      true,
+    );
     expect(result.tier).toBe("high");
   });
 
@@ -150,7 +233,19 @@ describe("provider/classifier", () => {
       result: { tier: "high", reasoning: "r" },
     } as any);
     const state = makeState();
-    const result = await applyClassifierIfNeeded(mockProfile, mockDecision, "myModel", {} as any, state as any, {} as any, undefined, false, false, "off" as any, "source");
+    const result = await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "myModel",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
     expect(result.reasoning).toContain("Resolved from high to medium");
     expect(buildRoutingDecision).toHaveBeenCalledWith(
       "myModel",

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   applySavedState,
   delay,
@@ -6,7 +6,6 @@ import {
   restoreStateFromSession,
 } from "../../src/session/restore";
 import { createRouterState } from "../../src/state/create";
-import type { RouterState } from "../../src/state/create";
 import type { CustomSessionEntry } from "../../src/types";
 
 describe("session/restore", () => {
@@ -40,9 +39,17 @@ describe("session/restore", () => {
     it("ignores invalid persisted", () => {
       const entries = [
         { type: "custom", customType: "router-state", data: { enabled: true } }, // missing timestamp
-        { type: "custom", customType: "router-state", data: { enabled: true, selectedProfile: "a", timestamp: 1 } },
+        {
+          type: "custom",
+          customType: "router-state",
+          data: { enabled: true, selectedProfile: "a", timestamp: 1 },
+        },
       ] as unknown as CustomSessionEntry[];
-      expect(extractSavedState(entries)).toEqual({ enabled: true, selectedProfile: "a", timestamp: 1 });
+      expect(extractSavedState(entries)).toEqual({
+        enabled: true,
+        selectedProfile: "a",
+        timestamp: 1,
+      });
     });
     it("returns undefined when all invalid", () => {
       const entries = [
@@ -60,7 +67,10 @@ describe("session/restore", () => {
         enabled: true,
         selectedProfile: "balanced",
         debugEnabled: true,
-        debugHistory: Array.from({ length: 20 }, (_, i) => ({ profile: "p", tier: "high", reasoning: "r", timestamp: i } as any)),
+        debugHistory: Array.from(
+          { length: 20 },
+          (_, i) => ({ profile: "p", tier: "high", reasoning: "r", timestamp: i }) as any,
+        ),
         lastNonRouterModel: "openai/gpt-4o",
         accumulatedCost: 5,
         lastDecision: { profile: "balanced", tier: "high" } as any,
@@ -113,7 +123,9 @@ describe("session/restore", () => {
     const makeCtx = (over: any = {}): any => ({
       cwd: "/cwd",
       modelRegistry: {
-        find: vi.fn((p: string, id: string) => (p === "router" && id === "balanced" ? { provider: p, id } as any : undefined)),
+        find: vi.fn((p: string, id: string) =>
+          p === "router" && id === "balanced" ? ({ provider: p, id } as any) : undefined,
+        ),
       },
       model: { provider: "router", id: "balanced" },
       sessionManager: { getBranch: () => [] },
@@ -216,7 +228,10 @@ describe("session/restore", () => {
       const helpers = makeHelpers({ setModelInternally: vi.fn().mockResolvedValue(false) });
       await restoreStateFromSession(ctx, state, helpers, actions);
       expect(state.routerEnabled).toBe(false);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Failed to restore"), "warning");
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to restore"),
+        "warning",
+      );
     });
 
     it("handles routerModel not found", async () => {
@@ -228,7 +243,10 @@ describe("session/restore", () => {
       const actions = makeActions();
       const helpers = makeHelpers();
       await restoreStateFromSession(ctx, state, helpers, actions);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unable to restore"), "warning");
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Unable to restore"),
+        "warning",
+      );
       expect(state.routerEnabled).toBe(false);
       expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
     });

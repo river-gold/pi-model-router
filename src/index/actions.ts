@@ -17,7 +17,10 @@ export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
   const setModelInternally = createSetModelInternally(pi, state);
   const tryFallbackByRef = createTryFallbackByRef(pi, state, setModelInternally);
   const tryRestoreFallback = createTryRestoreFallback(state, tryFallbackByRef);
-  const ensureValidActiveRouterProfile = createEnsureValidActiveRouterProfile(state, tryRestoreFallback);
+  const ensureValidActiveRouterProfile = createEnsureValidActiveRouterProfile(
+    state,
+    tryRestoreFallback,
+  );
   const reloadConfig = createReloadConfig(pi, state, persistState, recordDebugDecision);
 
   const registerRouterProviderAction = (): void => {
@@ -70,7 +73,8 @@ export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
       {
         persistState,
         recordDebugDecision,
-        updateStatus: (c) => updateStatus(c, state.routerEnabled, state.selectedProfile, state.lastDecision),
+        updateStatus: (c) =>
+          updateStatus(c, state.routerEnabled, state.selectedProfile, state.lastDecision),
       },
     );
   };

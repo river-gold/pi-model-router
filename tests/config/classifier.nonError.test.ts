@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/config/modelRef", async () => {
-  const actual = await vi.importActual("../../src/config/modelRef") as any;
+  const actual = (await vi.importActual("../../src/config/modelRef")) as any;
   return {
     ...actual,
     parseCanonicalModelRef: vi.fn(() => {

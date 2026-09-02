@@ -134,10 +134,12 @@ const fetchClassifierAuth = async (
   registry: ExtensionContext["modelRegistry"],
   model: NonNullable<ReturnType<ExtensionContext["modelRegistry"]["find"]>>,
 ): Promise<
-  { apiKey: string; headers: Record<string, string>; requestModel: typeof model } | { error: string }
+  | { apiKey: string; headers: Record<string, string>; requestModel: typeof model }
+  | { error: string }
 > => {
   const auth = await registry.getApiKeyAndHeaders(model);
-  const hasKey = "apiKey" in (auth as Record<string, unknown>) && !!(auth as { apiKey: string }).apiKey;
+  const hasKey =
+    "apiKey" in (auth as Record<string, unknown>) && !!(auth as { apiKey: string }).apiKey;
   if (!auth.ok || !hasKey) {
     return { error: `auth failed: ok=${auth.ok} hasKey=${hasKey}` };
   }
@@ -185,9 +187,7 @@ const isTextDeltaEvent = (event: unknown): event is { type: string; delta: strin
   return e.type === "text_delta" && "delta" in e && typeof e.delta === "string";
 };
 
-const collectStreamText = async (
-  stream: AsyncIterable<unknown>,
-): Promise<string> => {
+const collectStreamText = async (stream: AsyncIterable<unknown>): Promise<string> => {
   let fullText = "";
   for await (const event of stream) {
     if (isTextDeltaEvent(event)) fullText += event.delta;
@@ -237,7 +237,9 @@ const runClassifierOutcome = async (
     const stream = streamDelegated(modelRegistry, model, classifierContext, {
       apiKey: authResolution.apiKey,
       headers: authResolution.headers,
-      ...(reasoningOption ? { reasoning: reasoningOption as unknown as SimpleStreamOptions["reasoning"] } : {}),
+      ...(reasoningOption
+        ? { reasoning: reasoningOption as unknown as SimpleStreamOptions["reasoning"] }
+        : {}),
       ...(signal ? { signal } : {}),
     } as SimpleStreamOptions);
 

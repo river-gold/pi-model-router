@@ -3,25 +3,20 @@ import { resolveProfileName } from "../config/profile";
 import { MAX_DEBUG_HISTORY } from "../constants";
 import { isRouterPersistedState } from "../state/guards";
 import type { RouterState } from "../state/create";
-import type { CustomSessionEntry } from "../types";
+import type { CustomSessionEntry, RouterPersistedState } from "../types";
 import { updateStatus } from "../ui";
 import { SESSION_RESTORE_DELAY_MS } from "./constants";
 
 export const delay = (ms: number): Promise<void> =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export const extractSavedState = (
-  entries: CustomSessionEntry[],
-): unknown | undefined =>
+export const extractSavedState = (entries: CustomSessionEntry[]): unknown =>
   entries
     .filter((entry) => entry.type === "custom" && entry.customType === "router-state")
     .map((entry) => entry.data)
     .findLast((data) => isRouterPersistedState(data));
 
-export const applySavedState = (
-  state: RouterState,
-  savedState: import("../types").RouterPersistedState,
-): void => {
+export const applySavedState = (state: RouterState, savedState: RouterPersistedState): void => {
   state.selectedProfile = resolveProfileName(state.currentConfig, savedState.selectedProfile);
   state.routerEnabled = savedState.enabled;
   state.debugEnabled = savedState.debugEnabled ?? state.debugEnabled;
@@ -73,11 +68,17 @@ export const restoreStateFromSession = async (
     if (routerModel) {
       const success = await helpers.setModelInternally(routerModel);
       if (!success) {
-        ctx.ui.notify(`Failed to restore router/${state.selectedProfile} after relaunch.`, "warning");
+        ctx.ui.notify(
+          `Failed to restore router/${state.selectedProfile} after relaunch.`,
+          "warning",
+        );
         state.routerEnabled = false;
       }
     } else {
-      ctx.ui.notify(`Unable to restore router/${state.selectedProfile}; model is unavailable.`, "warning");
+      ctx.ui.notify(
+        `Unable to restore router/${state.selectedProfile}; model is unavailable.`,
+        "warning",
+      );
       state.routerEnabled = false;
       ctx.ui.setHiddenThinkingLabel?.();
     }

@@ -40,7 +40,8 @@ describe("lastUser", () => {
   });
 
   describe("getLastUserText", () => {
-    it("empty -> empty", () => expect(getLastUserText({ messages: [] } as unknown as Context)).toBe(""));
+    it("empty -> empty", () =>
+      expect(getLastUserText({ messages: [] } as unknown as Context)).toBe(""));
     it("no user -> empty", () =>
       expect(
         getLastUserText({
@@ -57,7 +58,10 @@ describe("lastUser", () => {
       expect(
         getLastUserText({
           messages: [
-            { role: "user", content: [{ type: "text", text: "  t  " } as any] } as unknown as Message,
+            {
+              role: "user",
+              content: [{ type: "text", text: "  t  " } as any],
+            } as unknown as Message,
           ],
         } as unknown as Context),
       ).toBe("t"));

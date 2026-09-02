@@ -77,7 +77,11 @@ describe("classifier", () => {
     });
     it("array with mix valid/invalid", () => {
       const w: string[] = [];
-      const r = normalizeClassifierModels(["openai/gpt-4o#high", "invalid", "google/gemini#low"], w, "ctx");
+      const r = normalizeClassifierModels(
+        ["openai/gpt-4o#high", "invalid", "google/gemini#low"],
+        w,
+        "ctx",
+      );
       expect(r).toEqual([
         { model: "openai/gpt-4o", thinking: "high" },
         { model: "google/gemini", thinking: "low" },
@@ -108,19 +112,27 @@ describe("classifier", () => {
     it("profile only", () => {
       const profile = { classifierModels: [{ model: "openai/gpt-4o", thinking: "low" as const }] };
       const r = resolveEffectiveClassifier(profile, undefined);
-      expect(r.classifiers).toEqual([{ model: "openai/gpt-4o", thinking: "low", source: "profile" }]);
+      expect(r.classifiers).toEqual([
+        { model: "openai/gpt-4o", thinking: "low", source: "profile" },
+      ]);
       expect(r.source).toBe("profile");
     });
     it("global only", () => {
       const profile = {};
-      const r = resolveEffectiveClassifier(profile as any, [{ model: "openai/gpt-4o", thinking: "high" as const }]);
-      expect(r.classifiers).toEqual([{ model: "openai/gpt-4o", thinking: "high", source: "global" }]);
+      const r = resolveEffectiveClassifier(profile as any, [
+        { model: "openai/gpt-4o", thinking: "high" as const },
+      ]);
+      expect(r.classifiers).toEqual([
+        { model: "openai/gpt-4o", thinking: "high", source: "global" },
+      ]);
       expect(r.source).toBe("global");
     });
     it("low only", () => {
       const profile = { low: { models: ["google/gemini#low"] } };
       const r = resolveEffectiveClassifier(profile as any, undefined);
-      expect(r.classifiers).toEqual([{ model: "google/gemini", thinking: "low", source: "low tier" }]);
+      expect(r.classifiers).toEqual([
+        { model: "google/gemini", thinking: "low", source: "low tier" },
+      ]);
       expect(r.source).toBe("low tier");
     });
     it("profile+global+low", () => {

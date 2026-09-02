@@ -1,10 +1,12 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEnsureLogDir } from "../../src/logger/ensure";
 
 describe("logger/ensure", () => {
   it("calls mkdir with correct path and caches", async () => {
     const mkdir = vi.fn().mockResolvedValue(undefined);
-    const dirname = vi.fn().mockImplementation((p: string) => p.split("/").slice(0, -1).join("/") || "/");
+    const dirname = vi
+      .fn()
+      .mockImplementation((p: string) => p.split("/").slice(0, -1).join("/") || "/");
     const ensure = createEnsureLogDir(mkdir as any, dirname as any, "/tmp/log/file.log");
     await ensure();
     expect(mkdir).toHaveBeenCalledWith("/tmp/log", { recursive: true });

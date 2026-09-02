@@ -1,14 +1,18 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { createErrorMessage, normalizeDelegateError, pushStreamError } from "../../src/provider/error";
-import type { Model, Api, AssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createErrorMessage,
+  normalizeDelegateError,
+  pushStreamError,
+} from "../../src/provider/error";
+import type { Model, Api } from "@earendil-works/pi-ai";
 
 const makeModel = (): Model<Api> =>
-  ({ provider: "openai", id: "gpt-4o", api: "openai" as Api } as unknown as Model<Api>);
+  ({ provider: "openai", id: "gpt-4o", api: "openai" as Api }) as unknown as Model<Api>;
 
 const makeStream = () => {
   const push = vi.fn();
   const end = vi.fn();
-  return { push, end } as unknown as AssistantMessageEventStream;
+  return { push, end } as unknown as { push: (e: unknown) => void; end: () => void };
 };
 
 describe("provider/error", () => {
@@ -34,67 +38,97 @@ describe("provider/error", () => {
       expect(e.message).toBe("string error");
     });
     it("wraps number and other", () => {
-      expect(normalizeDelegateError(123).message).toBe("Failed to delegate to any model in the chain.");
-      expect(normalizeDelegateError(undefined).message).toBe("Failed to delegate to any model in the chain.");
-      expect(normalizeDelegateError(null).message).toBe("Failed to delegate to any model in the chain.");
-      expect(normalizeDelegateError({}).message).toBe("Failed to delegate to any model in the chain.");
+      expect(normalizeDelegateError(123).message).toBe(
+        "Failed to delegate to any model in the chain.",
+      );
+      expect(normalizeDelegateError(undefined).message).toBe(
+        "Failed to delegate to any model in the chain.",
+      );
+      expect(normalizeDelegateError(null).message).toBe(
+        "Failed to delegate to any model in the chain.",
+      );
+      expect(normalizeDelegateError({}).message).toBe(
+        "Failed to delegate to any model in the chain.",
+      );
     });
   });
 
   describe("pushStreamError", () => {
     it("aborted", () => {
       const s = makeStream();
+      const { push, end } = s;
       pushStreamError(s, makeModel(), new Error("aborted"));
-      expect(s.push).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "done", reason: "stop", message: expect.objectContaining({ errorMessage: "aborted" }) }),
+      expect(push).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "done",
+          reason: "stop",
+          message: expect.objectContaining({ errorMessage: "aborted" }),
+        }),
       );
-      expect(s.end).toHaveBeenCalled();
+      expect(end).toHaveBeenCalled();
     });
 
     it("stale", () => {
       const s = makeStream();
+      const { push, end } = s;
       pushStreamError(s, makeModel(), new Error("stale context"));
-      expect(s.push).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "done", reason: "stop", message: expect.objectContaining({ errorMessage: "" }) }),
+      expect(push).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "done",
+          reason: "stop",
+          message: expect.objectContaining({ errorMessage: "" }),
+        }),
       );
-      expect(s.end).toHaveBeenCalled();
+      expect(end).toHaveBeenCalled();
     });
 
     it("stale includes", () => {
       const s = makeStream();
+      const { push } = s;
       pushStreamError(s, makeModel(), new Error("something stale inside"));
-      expect(s.push).toHaveBeenCalledWith(expect.objectContaining({ type: "done" }));
+      expect(push).toHaveBeenCalledWith(expect.objectContaining({ type: "done" }));
     });
 
     it("other Error", () => {
       const s = makeStream();
+      const { push, end } = s;
       pushStreamError(s, makeModel(), new Error("other fail"));
-      expect(s.push).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "error", reason: "error", error: expect.objectContaining({ errorMessage: "other fail" }) }),
+      expect(push).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          reason: "error",
+          error: expect.objectContaining({ errorMessage: "other fail" }),
+        }),
       );
-      expect(s.end).toHaveBeenCalled();
+      expect(end).toHaveBeenCalled();
     });
 
     it("non-Error string", () => {
       const s = makeStream();
+      const { push } = s;
       pushStreamError(s, makeModel(), "string error");
-      expect(s.push).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "error", error: expect.objectContaining({ errorMessage: "string error" }) }),
+      expect(push).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          error: expect.objectContaining({ errorMessage: "string error" }),
+        }),
       );
     });
 
     it("non-Error number", () => {
       const s = makeStream();
+      const { push } = s;
       pushStreamError(s, makeModel(), 123);
-      expect(s.push).toHaveBeenCalledWith(
+      expect(push).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.objectContaining({ errorMessage: "123" }) }),
       );
     });
 
     it("non-Error undefined", () => {
       const s = makeStream();
+      const { push } = s;
       pushStreamError(s, makeModel(), undefined);
-      expect(s.push).toHaveBeenCalledWith(
+      expect(push).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.objectContaining({ errorMessage: "undefined" }) }),
       );
     });

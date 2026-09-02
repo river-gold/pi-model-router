@@ -1,7 +1,6 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerCommands } from "../commands";
 import { createRouterState } from "../state";
-import type { RouterState } from "../state";
 import { updateStatus } from "../ui";
 import { createRouterActions } from "./actions";
 import { handleModelSelect, handleSessionStart, handleTurnEnd, handleTurnStart } from "./handlers";
@@ -65,7 +64,8 @@ const routerExtension = (pi: ExtensionAPI): void => {
     },
     {
       persistState: actions.persistState,
-      updateStatus: (ctx) => updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision),
+      updateStatus: (ctx) =>
+        updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision),
       reloadConfig: actions.reloadConfig,
       ensureValidActiveRouterProfile: actions.ensureValidActiveRouterProfile,
     },

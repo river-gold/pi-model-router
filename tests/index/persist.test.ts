@@ -1,13 +1,15 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createPersistState, createRecordDebugDecision } from "../../src/index/persist";
 import { createRouterState } from "../../src/state/create";
-import type { RouterState } from "../../src/state/create";
 
 describe("index/persist", () => {
   describe("createRecordDebugDecision", () => {
     it("appends and slices to MAX_DEBUG_HISTORY", () => {
       const state = createRouterState();
-      state.debugHistory = Array.from({ length: 20 }, (_, i) => ({ profile: "p", tier: "high", reasoning: "r", timestamp: i } as any));
+      state.debugHistory = Array.from(
+        { length: 20 },
+        (_, i) => ({ profile: "p", tier: "high", reasoning: "r", timestamp: i }) as any,
+      );
       const fn = createRecordDebugDecision(state);
       fn({ profile: "p", tier: "high", reasoning: "new", timestamp: 999 } as any);
       expect(state.debugHistory.length).toBe(12);
@@ -31,7 +33,10 @@ describe("index/persist", () => {
       const pi = { appendEntry: vi.fn() } as any;
       const fn = createPersistState(pi, state);
       fn();
-      expect(pi.appendEntry).toHaveBeenCalledWith("router-state", expect.objectContaining({ enabled: true }));
+      expect(pi.appendEntry).toHaveBeenCalledWith(
+        "router-state",
+        expect.objectContaining({ enabled: true }),
+      );
       expect(state.lastPersistedSnapshot).toBeDefined();
     });
 
@@ -47,14 +52,26 @@ describe("index/persist", () => {
 
     it("handles appendEntry throw", () => {
       const state = createRouterState();
-      const pi = { appendEntry: vi.fn().mockImplementation(() => { throw new Error("fail"); }) } as any;
+      const pi = {
+        appendEntry: vi.fn().mockImplementation(() => {
+          throw new Error("fail");
+        }),
+      } as any;
       const fn = createPersistState(pi, state);
       expect(() => fn()).not.toThrow();
     });
 
     it("handles lastDecision and debugHistory with timestamp 0", () => {
       const state = createRouterState();
-      const decision = { profile: "balanced", tier: "high", reasoning: "r", timestamp: 123, targetProvider: "openai", targetModelId: "gpt", targetLabel: "openai/gpt" } as any;
+      const decision = {
+        profile: "balanced",
+        tier: "high",
+        reasoning: "r",
+        timestamp: 123,
+        targetProvider: "openai",
+        targetModelId: "gpt",
+        targetLabel: "openai/gpt",
+      } as any;
       state.lastDecision = decision;
       state.debugHistory = [decision];
       const pi = { appendEntry: vi.fn() } as any;

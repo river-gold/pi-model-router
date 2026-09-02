@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPersistState, createSessionHelpers, createSetModelInternally } from "../../src/session/helpers";
+import {
+  createPersistState,
+  createSessionHelpers,
+  createSetModelInternally,
+} from "../../src/session/helpers";
 import { createRouterState } from "../../src/state/create";
 import type { RouterState } from "../../src/state/create";
 
@@ -40,7 +44,10 @@ describe("session/helpers", () => {
       const pi = { appendEntry: vi.fn() } as any;
       const fn = createPersistState(pi, state);
       fn();
-      expect(pi.appendEntry).toHaveBeenCalledWith("router-state", expect.objectContaining({ enabled: true }));
+      expect(pi.appendEntry).toHaveBeenCalledWith(
+        "router-state",
+        expect.objectContaining({ enabled: true }),
+      );
       expect(state.lastPersistedSnapshot).toBeDefined();
     });
 
@@ -79,7 +86,11 @@ describe("session/helpers", () => {
 
     it("handles appendEntry throw", () => {
       const state = createRouterState();
-      const pi = { appendEntry: vi.fn().mockImplementation(() => { throw new Error("fail"); }) } as any;
+      const pi = {
+        appendEntry: vi.fn().mockImplementation(() => {
+          throw new Error("fail");
+        }),
+      } as any;
       const fn = createPersistState(pi, state);
       // should not throw
       expect(() => fn()).not.toThrow();
