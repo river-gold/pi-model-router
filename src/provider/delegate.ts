@@ -43,19 +43,18 @@ export const getInitialModelsToTry = (
   decision: RoutingDecision,
 ): string[] => {
   const tierModels = profile[decision.tier]?.models;
-  if (tierModels && tierModels.length > 0) return [...new Set(tierModels)];
-  return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
+  if (!tierModels?.length) return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
+  return [...new Set(tierModels)];
 };
 
 export const filterByFailureMemory = (
   modelsToTry: string[],
   failedSet: Set<string> | undefined,
 ): { filtered: string[]; skipped: string[]; allFiltered: boolean } => {
-  if (!failedSet || failedSet.size === 0) return { filtered: modelsToTry, skipped: [], allFiltered: false };
+  if (!failedSet?.size) return { filtered: modelsToTry, skipped: [], allFiltered: false };
   const skipped: string[] = [];
   const filtered = modelsToTry.filter((ref) => {
-    const norm = normalizeFailedRef(ref);
-    if (failedSet.has(norm)) {
+    if (failedSet.has(normalizeFailedRef(ref))) {
       skipped.push(ref);
       return false;
     }
@@ -67,16 +66,10 @@ export const filterByFailureMemory = (
 export const createRecordFailure = (
   state: DelegateParams["state"],
   routeChainKey: string,
-) => {
-  return (ref: string): void => {
-    const norm = normalizeFailedRef(ref);
-    let s = state.failedByChain.get(routeChainKey);
-    if (!s) {
-      s = new Set<string>();
-      state.failedByChain.set(routeChainKey, s);
-    }
-    s.add(norm);
-  };
+) => (ref: string): void => {
+  const s = state.failedByChain.get(routeChainKey) ?? new Set<string>();
+  if (!state.failedByChain.has(routeChainKey)) state.failedByChain.set(routeChainKey, s);
+  s.add(normalizeFailedRef(ref));
 };
 
 export const resolveTargetLimit = (
@@ -89,8 +82,7 @@ export const resolveTargetLimit = (
 ): number => {
   for (const t of ROUTER_TIERS) {
     const tc = profile[t];
-    if (!tc) continue;
-    if (tc.models!.includes(modelRef)) return resolveContextWindow(t, profile, registry);
+    if (tc?.models?.includes(modelRef)) return resolveContextWindow(t, profile, registry);
   }
   const found = registry.find(targetProvider, targetModelId);
   return found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
@@ -100,16 +92,10 @@ export const buildEffectiveContext = (
   context: Context,
   targetLimit: number,
   routerModel: Model<Api>,
-): Context => {
-  if (targetLimit < routerModel.contextWindow!) return truncateContext(context, targetLimit);
-  return context;
-};
+): Context => (targetLimit < (routerModel.contextWindow ?? Infinity) ? truncateContext(context, targetLimit) : context);
 
 export const isContentEvent = (type: string): boolean =>
-  type === "text_delta" ||
-  type === "thinking_delta" ||
-  type === "toolcall_delta" ||
-  type === "toolcall_end";
+  type === "text_delta" || type === "thinking_delta" || type === "toolcall_delta" || type === "toolcall_end";
 
 export const collectBufferedResult = (
   bufferedEvents: unknown[],
@@ -129,21 +115,12 @@ export const collectBufferedResult = (
     const type = (event as { type: string }).type;
     if (type === "done") {
       gotDone = true;
-      const cost =
+      pendingCostDelta =
         (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost?.total ?? 0;
-      pendingCostDelta = cost;
-    }
-    if (type === "error") {
+    } else if (type === "error") {
       gotError = true;
-      const errObj = (event as { error?: unknown }).error;
-      if (
-        errObj &&
-        typeof errObj === "object" &&
-        "errorMessage" in errObj &&
-        typeof (errObj as { errorMessage?: unknown }).errorMessage === "string"
-      ) {
-        bufferedErrorMessage = (errObj as { errorMessage: string }).errorMessage;
-      }
+      const errObj = (event as { error?: unknown }).error as { errorMessage?: unknown } | undefined;
+      if (typeof errObj?.errorMessage === "string") bufferedErrorMessage = errObj.errorMessage;
     }
     if (isContentEvent(type)) contentReceived = true;
   }
@@ -154,30 +131,28 @@ export const resolveAuthError = (
   auth: { ok: boolean; apiKey?: string; error?: string },
   targetProvider: string,
   targetModelId: string,
-): Error => {
-  if (!auth.ok) return new Error(`Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`);
-  return new Error(`No API key for routed model: ${targetProvider}/${targetModelId}`);
-};
+): Error =>
+  !auth.ok
+    ? new Error(`Auth failed for routed model: ${targetProvider}/${targetModelId}: ${auth.error}`)
+    : new Error(`No API key for routed model: ${targetProvider}/${targetModelId}`);
 
 export const shouldSkipRouterModel = (provider: string): boolean => provider === "router";
 
-export const buildFallbackDecision = (
-  decision: RoutingDecision,
-  modelRef: string,
-): void => {
-  const { provider: fp, modelId: fid, thinking: ft } = parseCanonicalModelRef(modelRef);
-  decision.isFallback = true;
-  decision.targetProvider = fp;
-  decision.targetModelId = fid;
-  decision.targetLabel = formatModelRef(fp, fid);
-  decision.thinking = ft ?? decision.thinking;
+export const buildFallbackDecision = (decision: RoutingDecision, modelRef: string): void => {
+  const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
+  Object.assign(decision, {
+    isFallback: true,
+    targetProvider: provider,
+    targetModelId: modelId,
+    targetLabel: formatModelRef(provider, modelId),
+    thinking: thinking ?? decision.thinking,
+  });
 };
 
 type AttemptResult = {
   status: "success" | "retry" | "nonRetryable" | "skip";
   costDelta?: number;
   error?: Error;
-  isFallback?: boolean;
 };
 
 export const attemptSingleModel = async (
@@ -186,49 +161,37 @@ export const attemptSingleModel = async (
   params: DelegateParams,
   recordRouteFailure: (ref: string) => void,
 ): Promise<AttemptResult> => {
-  const { registry, profile, decision, routerModel, context, options, state, withCommitMutex, stream, recordDebugDecision } =
-    params;
-  const { provider: targetProvider, modelId: targetModelId, thinking: refThinking } =
-    parseCanonicalModelRef(modelRef);
-  const tryThinking = refThinking ?? decision.thinking;
+  const { registry, profile, decision, routerModel, context, options, state, withCommitMutex, stream, recordDebugDecision } = params;
+  const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
+  const tryThinking = thinking ?? decision.thinking;
+  if (shouldSkipRouterModel(provider)) return { status: "skip" };
 
-  if (shouldSkipRouterModel(targetProvider)) return { status: "skip" };
-
-  const targetModel = registry.find(targetProvider, targetModelId);
+  const targetModel = registry.find(provider, modelId);
   if (!targetModel) {
-    const err = new Error(`Routed model not found: ${targetProvider}/${targetModelId}`);
+    const err = new Error(`Routed model not found: ${provider}/${modelId}`);
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
     return { status: "retry", error: err };
   }
 
   const auth = await registry.getApiKeyAndHeaders(targetModel);
   if (!auth.ok || !auth.apiKey) {
-    const err = resolveAuthError(auth as { ok: boolean; apiKey?: string; error?: string }, targetProvider, targetModelId);
+    const err = resolveAuthError(auth as { ok: boolean; apiKey?: string; error?: string }, provider, modelId);
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
     return { status: "retry", error: err };
   }
 
   if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
 
-  const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, targetProvider, targetModelId);
+  const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, provider, modelId);
   const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
-  const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
-    | SimpleStreamOptions["reasoning"]
-    | undefined;
+  const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as SimpleStreamOptions["reasoning"] | undefined;
 
+  // best-effort UI, ignore stale
   try {
-    if (state.lastExtensionContext) {
-      if (delegatedReasoning) {
-        state.lastExtensionContext.ui.setHiddenThinkingLabel?.(
-          `Thinking (${targetProvider}/${targetModelId})...`,
-        );
-      } else {
-        state.lastExtensionContext.ui.setHiddenThinkingLabel?.();
-      }
-    }
-  } catch {
-    // stale - extension context invalidated after session teardown, ignore
-  }
+    const label = `Thinking (${provider}/${modelId})...`;
+    if (delegatedReasoning) state.lastExtensionContext?.ui.setHiddenThinkingLabel?.(label);
+    else state.lastExtensionContext?.ui.setHiddenThinkingLabel?.();
+  } catch {}
 
   const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
   const delegatedStream = streamDelegated(registry, modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }), effectiveContext, {
@@ -246,7 +209,6 @@ export const attemptSingleModel = async (
 
   const bufferedEvents: unknown[] = [];
   let contentReceivedForTry = false;
-
   for await (const event of delegatedStream) {
     if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
     bufferedEvents.push(event);
@@ -258,10 +220,9 @@ export const attemptSingleModel = async (
 
   if (collected.gotDone) {
     for (const ev of bufferedEvents) stream.push(ev as never);
-    const costDelta = collected.pendingCostDelta;
-    if (costDelta) {
+    if (collected.pendingCostDelta) {
       await withCommitMutex(async () => {
-        state.accumulatedCost += costDelta;
+        state.accumulatedCost += collected.pendingCostDelta;
       });
     }
     if (index > 0) {
@@ -273,16 +234,13 @@ export const attemptSingleModel = async (
       });
       recordDebugDecision(decision);
     }
-    return { status: "success", costDelta, isFallback: index > 0 };
+    return { status: "success", costDelta: collected.pendingCostDelta };
   }
 
   if (collected.gotError) {
     if (contentReceivedForTry) {
       for (const ev of bufferedEvents) stream.push(ev as never);
-      return {
-        status: "nonRetryable",
-        error: new Error(`NON_RETRYABLE: ${collected.bufferedErrorMessage || "Model failed after sending content."}`),
-      };
+      return { status: "nonRetryable", error: new Error(`NON_RETRYABLE: ${collected.bufferedErrorMessage || "Model failed after sending content."}`) };
     }
     const err = new Error(collected.bufferedErrorMessage || "Model failed before sending content.");
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
@@ -299,10 +257,9 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
   const initialModels = getInitialModelsToTry(profile, decision);
   const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
   const recordRouteFailure = createRecordFailure(state, routeChainKey);
-  const routeFailedSet = state.failedByChain.get(routeChainKey);
   const { filtered: modelsToTry, allFiltered, skipped: skippedDueToMemory } = filterByFailureMemory(
     initialModels,
-    routeFailedSet,
+    state.failedByChain.get(routeChainKey),
   );
   if (allFiltered) {
     throw new Error(
@@ -323,15 +280,11 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
       break;
     }
     if (result.status === "nonRetryable") {
-      lastError =
-        result.error?.message.startsWith("NON_RETRYABLE:") ?
-          new Error(result.error.message.slice("NON_RETRYABLE: ".length))
-        : result.error;
+      const msg = result.error?.message ?? "";
+      lastError = msg.startsWith("NON_RETRYABLE:") ? new Error(msg.slice("NON_RETRYABLE: ".length)) : result.error;
       break;
     }
-    // retry
     lastError = result.error;
-    if (result.error && isRecordablePreStreamError(result.error)) recordRouteFailure(modelsToTry[i]);
   }
 
   return { success, costDelta, fallbackDecision: decision, lastError };
