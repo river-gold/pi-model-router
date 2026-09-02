@@ -27,6 +27,13 @@ describe("ui.ts", () => {
       );
     });
 
+    it("should fallback to auto when thinking is undefined", () => {
+      const withoutThinking: RoutingDecision = { ...decision, thinking: undefined };
+      expect(formatDecision(withoutThinking)).toBe(
+        "balanced: high -> google/gemini-2.5-pro [auto] (Exploratory prompts)",
+      );
+    });
+
     it("should format model references", () => {
       expect(formatModelRef("openai/gpt-4o")).toBe("openai/gpt-4o");
       expect(formatModelRef(undefined)).toBe("none");
@@ -62,6 +69,16 @@ describe("ui.ts", () => {
         profile: "other-profile",
       });
       expect(ctx.ui.setStatus).toHaveBeenCalledWith("router", "🚥 router:balanced -> waiting");
+    });
+
+    it("should fallback to auto when lastDecision thinking is undefined", () => {
+      const ctx = buildMockCtx() as unknown as ExtensionContext;
+      const withoutThinking: RoutingDecision = { ...decision, thinking: undefined };
+      updateStatus(ctx, true, "balanced", withoutThinking);
+      expect(ctx.ui.setStatus).toHaveBeenCalledWith(
+        "router",
+        "🚥 router:balanced -> high -> google/gemini-2.5-pro (auto)",
+      );
     });
   });
 });

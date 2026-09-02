@@ -159,14 +159,16 @@ export const registerCommands = (
       }
 
       if (parts.length === 1 && !hasTrailingSpace) {
-        return getSubcommandCompletions(parts[0]);
+        // For "debug" alone we want to show debug sub-options, not just subcommand completions
+        if (parts[0] === "debug") {
+          // fall through to debug switch with empty subArgs to cover ?? "" branch
+        } else {
+          return getSubcommandCompletions(parts[0]);
+        }
       }
 
       const subcommand = parts[0];
       const subArgs = parts.slice(1);
-      if (hasTrailingSpace && parts.length === 1) {
-        subArgs.push("");
-      }
 
       switch (subcommand) {
         case "debug": {

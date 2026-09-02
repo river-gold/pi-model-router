@@ -45,6 +45,35 @@ describe("routing.ts", () => {
         resolveAvailableTier({ low: { models: ["a"] }, medium: { models: ["b"] } }, "minimal"),
       ).toBe("low");
     });
+
+    it("should return preferred when profile is empty (fallback covers final return)", () => {
+      expect(resolveAvailableTier({} as RouterProfile, "medium")).toBe("medium");
+    });
+
+    it("should return preferred when empty profile and preferred is max (covers both loops without match)", () => {
+      expect(resolveAvailableTier({} as RouterProfile, "max")).toBe("max");
+    });
+
+    it("should return preferred when empty profile and preferred is minimal", () => {
+      expect(resolveAvailableTier({} as RouterProfile, "minimal")).toBe("minimal");
+    });
+
+    it("should handle startIdx -1 by falling up through entire order", () => {
+      const profile: RouterProfile = {
+        medium: { models: ["openai/gpt-4o"] },
+      };
+      expect(resolveAvailableTier(profile, "unknown" as RouterTier)).toBe("medium");
+    });
+
+    it("should handle startIdx -1 with empty profile (covers both loops empty)", () => {
+      expect(resolveAvailableTier({} as RouterProfile, "unknown" as RouterTier)).toBe(
+        "unknown" as RouterTier,
+      );
+    });
+
+    it("should fall down to minimal when only minimal is available", () => {
+      expect(resolveAvailableTier({ minimal: { models: ["a"] } }, "max")).toBe("minimal");
+    });
   });
 
   describe("buildRoutingDecision", () => {
@@ -91,6 +120,30 @@ describe("routing.ts", () => {
       const prev = buildRoutingDecision("p", profile, "high", "prev");
       const d = decideRouting(ctx, "p", profile, prev);
       expect(d.tier).toBe("medium");
+    });
+
+    it("should fallback when medium tier is missing (covers resolvedTier !== tier branch)", () => {
+      const fallbackProfile: RouterProfile = {
+        low: { models: ["openai/gpt-4o-micro"] },
+      };
+      const ctx: Context = {
+        messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
+      };
+      const d = decideRouting(ctx, "p", fallbackProfile, undefined);
+      expect(d.tier).toBe("low");
+      expect(d.reasoning).toContain("Resolved from medium to low");
+    });
+
+    it("should fallback upward when only high is available", () => {
+      const highOnly: RouterProfile = {
+        high: { models: ["openai/gpt-4o"] },
+      };
+      const ctx: Context = {
+        messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
+      };
+      const d = decideRouting(ctx, "p", highOnly, undefined);
+      expect(d.tier).toBe("high");
+      expect(d.reasoning).toContain("Resolved from medium to high");
     });
   });
 });

@@ -97,7 +97,8 @@ export const runClassifierWithFallbacksDetailed = async (
     attempts.push({
       model: entry.model,
       thinking: entry.thinking,
-      error: outcome.error ?? "no tier parsed or model/auth/stream failed",
+      // outcome.error is always defined when result is missing (see runClassifierOutcome)
+      error: outcome.error as string,
     });
     // Auth/stream/not-found skip the model for the rest of the session.
     // Parse-only failures are retried next turn (models often ignore format once then recover).
@@ -116,11 +117,11 @@ const runClassifierOutcome = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext["modelRegistry"],
   context: Context,
-  historySize?: number,
+  historySize: number = 0,
   thinking?: ThinkingLevel,
   signal?: AbortSignal,
 ): Promise<ClassifierOutcome> => {
-  const effectiveHistorySize = historySize ?? 0;
+  const effectiveHistorySize = historySize;
   try {
     const { provider, modelId } = parseCanonicalModelRef(classifierModelRef);
     const model = modelRegistry.find(provider, modelId);
