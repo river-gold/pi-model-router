@@ -31,10 +31,10 @@ For every request sent to a `router/*` model, the following logic is executed:
 
 The extension is modularized for maintainability:
 
-- `index.ts`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together.
+- `src/index.ts`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together (re-exported via `index.ts` and `src/extension.ts` shim).
 - `src/provider.ts`: Implements the `router` provider and the delegation/retry loop.
 - `src/routing.ts`: Core decision logic (tier resolution) and routing helpers.
-- `src/config.ts`: Loads, merges, and normalizes the JSON configuration.
+- `src/config/`: Loads, merges, and normalizes the JSON configuration (modularized from `src/config.ts`).
 - `src/commands.ts`: Registers all `/router` subcommands and their autocompletions.
 - `src/ui.ts`: Manages the router status line.
 - `src/state.ts`: Handles session-persisted state and snapshots.

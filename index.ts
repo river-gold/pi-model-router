@@ -1,2 +1,2 @@
-export { default } from "./src/extension";
-export * from "./src/extension";
+export { default } from "./src/index";
+export * from "./src/index";
