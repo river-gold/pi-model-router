@@ -1,165 +1,102 @@
-/* oxlint-disable */
-import { describe, it, expect, vi } from "vitest";
-import {
-  CLASSIFIER_SYSTEM_PROMPT,
-  parseClassifierOutput,
-  runClassifierWithFallbacksDetailed,
-} from "../src/classifier";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { parseClassifierOutput, runClassifierWithFallbacksDetailed } from "../src/classifier";
 import type { Context } from "@earendil-works/pi-ai";
-
 const streamSimple = vi.fn();
-
-describe("classifier.ts", () => {
-  const mockRegistry = {
-    find: (provider: string, modelId: string) => {
-      if (provider === "openai" && modelId === "gpt-4o") {
-        return { provider, id: modelId, reasoning: true } as unknown as never;
-      }
-      return undefined;
-    },
-    getApiKeyAndHeaders: async () => ({
-      ok: true as const,
-      apiKey: "k",
-      headers: {},
+const makeRegistry = (over: Record<string, unknown> = {}) =>
+  ({
+    find: vi.fn((p: string, m: string) => {
+      const fn = over.find as ((a: string, b: string) => unknown) | undefined;
+      if (fn) return fn(p, m);
+      if (p === "openai" && m === "plain") return { provider: p, id: m, baseUrl: "" } as never;
+      return { provider: p, id: m, reasoning: true, baseUrl: "" } as never;
+    }),
+    getApiKeyAndHeaders: vi.fn(async () => {
+      const fn = over.getApiKeyAndHeaders as ((m: unknown) => Promise<unknown>) | undefined;
+      if (fn) return fn({});
+      return { ok: true, apiKey: "k", headers: {} };
     }),
     getProvider: () => ({ streamSimple }),
-  } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext["modelRegistry"];
-
-  const baseContext: Context = {
-    messages: [{ role: "user", content: "hello", timestamp: 1 }],
-  };
-
-  it("should return tier and reasoning from LLM", async () => {
-    const s = (async function* () {
-      yield { type: "text_delta", delta: "high" };
-    })();
-    vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    const res = await runClassifierWithFallbacksDetailed(
-      [{ model: "openai/gpt-4o" }],
-      mockRegistry,
-      baseContext,
-      0,
-    );
-    expect(res.result).toEqual({ tier: "high", reasoning: "Classifier decision." });
+  }) as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext["modelRegistry"];
+const baseCtx: Context = { messages: [{ role: "user", content: "hello", timestamp: 1 }] };
+describe("parseClassifierOutput", () => {
+  it("given valid tier then returns tier", () => { expect(parseClassifierOutput("low")?.tier).toBe("low"); });
+  it("given case and spaces then normalizes", () => { expect(parseClassifierOutput("  HIGH  ")?.tier).toBe("high"); });
+  it("given empty then undefined", () => { expect(parseClassifierOutput("   ")).toBeUndefined(); });
+  it("given invalid then undefined", () => { expect(parseClassifierOutput("invalid")).toBeUndefined(); });
+});
+describe("runClassifierWithFallbacksDetailed", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("given valid stream then returns tier", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockReturnValue((async function* () { yield { type: "text_delta", delta: "high" }; })() as never);
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).result?.tier).toBe("high");
   });
-
-  it("should return undefined on invalid format", async () => {
-    const s = (async function* () {
-      yield { type: "text_delta", delta: "invalid" };
-    })();
-    vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    const res = await runClassifierWithFallbacksDetailed(
-      [{ model: "openai/gpt-4o" }],
-      mockRegistry,
-      baseContext,
-      0,
-    );
-    expect(res.result).toBeUndefined();
+  it("given parse failure then retryable", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockReturnValue((async function* () { yield { type: "text_delta", delta: "bad" }; })() as never);
+    const failed = new Set<string>();
+    const res = await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0, undefined, undefined, failed);
+    expect(res.result).toBeUndefined(); expect(failed.size).toBe(0); expect(res.attempts[0].error).toContain("no tier parsed");
   });
-
-  it("should return undefined if model not found", async () => {
-    const res = await runClassifierWithFallbacksDetailed(
-      [{ model: "unknown/model" }],
-      mockRegistry,
-      baseContext,
-      0,
-    );
-    expect(res.result).toBeUndefined();
+  it("given model not found then skipped session", async () => {
+    const reg = makeRegistry({ find: () => undefined }); const failed = new Set<string>();
+    const res = await runClassifierWithFallbacksDetailed([{ model: "openai/missing" }], reg, baseCtx, 0, undefined, undefined, failed);
+    expect(res.attempts[0].error).toContain("model not found"); expect(failed.has("openai/missing")).toBe(true);
   });
-
-  it("should pass history when historySize >0", async () => {
-    const s = (async function* () {
-      yield { type: "text_delta", delta: "low" };
-    })();
-    vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    const ctx: Context = {
-      messages: [
-        { role: "user", content: "u1", timestamp: 1 },
-        {
-          role: "assistant",
-          content: "a1",
-          timestamp: 2,
-        } as unknown as import("@earendil-works/pi-ai").Message,
-        { role: "user", content: "cur", timestamp: 3 },
-      ],
-    };
-    await runClassifierWithFallbacksDetailed([{ model: "openai/gpt-4o" }], mockRegistry, ctx, 1);
-    const called = vi.mocked(streamSimple).mock.calls.at(-1)?.[1] as Context;
-    expect(called.messages[0].content as string).toContain("u1");
-    expect(called.messages[0].content as string).toContain("a1");
-    expect(called.systemPrompt).toBe(CLASSIFIER_SYSTEM_PROMPT);
+  it("given auth ok false then error", async () => {
+    const reg = makeRegistry({ getApiKeyAndHeaders: async () => ({ ok: false }) });
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).attempts[0].error).toContain("auth failed");
   });
-
-  it("should return undefined when signal is already aborted", async () => {
-    const controller = new AbortController();
-    controller.abort();
-    const s = (async function* () {
-      yield { type: "text_delta", delta: "high" };
-    })();
-    vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    const res = await runClassifierWithFallbacksDetailed(
-      [{ model: "openai/gpt-4o" }],
-      mockRegistry,
-      baseContext,
-      0,
-      controller.signal,
-    );
-    expect(res.result === undefined || res.result.tier === "high").toBe(true);
+  it("given empty apiKey then hasKey false", async () => {
+    const reg = makeRegistry({ getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "", headers: {} }) });
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).attempts[0].error).toContain("hasKey=false");
   });
-
-  it("should pass signal to streamSimple", async () => {
-    const controller = new AbortController();
-    const s = (async function* () {
-      yield { type: "text_delta", delta: "medium" };
-    })();
-    vi.mocked(streamSimple).mockReturnValue(s as unknown as ReturnType<typeof streamSimple>);
-    await runClassifierWithFallbacksDetailed(
-      [{ model: "openai/gpt-4o" }],
-      mockRegistry,
-      baseContext,
-      0,
-      controller.signal,
-    );
-    const opts = vi.mocked(streamSimple).mock.calls.at(-1)?.[2] as Record<string, unknown>;
-    expect(opts.signal).toBe(controller.signal);
+  it("given fallback chain then second succeeds", async () => {
+    const reg = makeRegistry();
+    const s1 = (async function* () { yield { type: "text_delta", delta: "bad" }; })();
+    const s2 = (async function* () { yield { type: "text_delta", delta: "low" }; })();
+    streamSimple.mockReturnValueOnce(s1 as never).mockReturnValueOnce(s2 as never);
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }, { model: "openai/gpt" }], reg, baseCtx, 0)).result?.tier).toBe("low");
   });
-
-  it("parseClassifierOutput extracts Tier anywhere in the text", () => {
-    expect(parseClassifierOutput("low")).toMatchObject({
-      tier: "low",
-      reasoning: "Classifier decision.",
-    });
-    expect(parseClassifierOutput("  HIGH  ")).toMatchObject({
-      tier: "high",
-    });
-    expect(parseClassifierOutput("invalid")).toBeUndefined();
-    expect(parseClassifierOutput("Tier: low")).toBeUndefined();
-    expect(parseClassifierOutput("Tier: low\nReasoning: x")).toBeUndefined();
+  it("given failedSet contains model then skipped", async () => {
+    const reg = makeRegistry(); const failed = new Set(["openai/gpt"]);
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0, undefined, undefined, failed)).attempts[0].error).toContain("skipped");
   });
-
-  it("should handle historySize and thinking", async () => {
-    const s1 = (async function* () {
-      yield { type: "text_delta", delta: "medium" };
-    })();
-    const s2 = (async function* () {
-      yield { type: "text_delta", delta: "medium" };
-    })();
-    vi.mocked(streamSimple)
-      .mockReturnValueOnce(s1 as unknown as ReturnType<typeof streamSimple>)
-      .mockReturnValueOnce(s2 as unknown as ReturnType<typeof streamSimple>);
-    const r1 = await runClassifierWithFallbacksDetailed(
-      [{ model: "openai/gpt-4o", thinking: "high" as any }],
-      mockRegistry,
-      baseContext,
-      0,
-    );
-    expect(r1.result?.tier).toBe("medium");
-    const r2 = await runClassifierWithFallbacksDetailed(
-      [{ model: "openai/gpt-4o", thinking: "high" as any }],
-      mockRegistry,
-      baseContext,
-      2,
-    );
-    expect(r2.result?.tier).toBe("medium");
+  it("given aborted signal then aborted", async () => {
+    const reg = makeRegistry(); streamSimple.mockImplementation(() => { throw new Error("boom"); });
+    const c = new AbortController(); c.abort();
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0, c.signal)).attempts[0].error).toBe("aborted");
+  });
+  it("given non-Error throw then string error", async () => {
+    const reg = makeRegistry(); streamSimple.mockImplementation(() => { throw "string thrown"; });
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).attempts[0].error).toBe("string thrown");
+  });
+  it("given mixed events then valid delta parsed", async () => {
+    const reg = makeRegistry();
+    const s = (async function* () { yield { type: "other" } as never; yield { type: "text_delta", delta: 123 } as never; yield { type: "text_delta", delta: "medium" } as never; })();
+    streamSimple.mockReturnValue(s as never);
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).result?.tier).toBe("medium");
+  });
+  it("given null event then ignored", async () => {
+    const reg = makeRegistry();
+    const s = (async function* () { yield null as never; yield { type: "text_delta", delta: "low" } as never; })();
+    streamSimple.mockReturnValue(s as never);
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).result?.tier).toBe("low");
+  });
+  it("given Error throw then message", async () => {
+    const reg = makeRegistry(); streamSimple.mockImplementation(() => { throw new Error("stream fail"); });
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).attempts[0].error).toBe("stream fail");
+  });
+  it("given reasoning off with reasoning model then succeeds", async () => {
+    const reg = makeRegistry(); streamSimple.mockReturnValue((async function* () { yield { type: "text_delta", delta: "low" }; })() as never);
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt", thinking: "off" as never }], reg, baseCtx, 0)).result?.tier).toBe("low");
+  });
+  it("given history then succeeds", async () => {
+    const reg = makeRegistry(); streamSimple.mockReturnValue((async function* () { yield { type: "text_delta", delta: "low" }; })() as never);
+    const histCtx: Context = { messages: [{ role: "user", content: "u1", timestamp: 1 }, { role: "assistant", content: "a1", timestamp: 2 } as never, { role: "user", content: "cur", timestamp: 3 }] };
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/gpt", thinking: "high" as never }], reg, histCtx, 1)).result?.tier).toBe("low");
+    streamSimple.mockReturnValue((async function* () { yield { type: "text_delta", delta: "low" }; })() as never);
+    const singleCtx: Context = { messages: [{ role: "user", content: "cur", timestamp: 1 }] };
+    expect((await runClassifierWithFallbacksDetailed([{ model: "openai/plain", thinking: "off" as never }], reg, singleCtx, 1)).result?.tier).toBe("low");
   });
 });

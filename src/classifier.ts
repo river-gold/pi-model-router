@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import type { Context } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -24,6 +23,14 @@ Return ONLY one word: minimal|low|medium|high|xhigh|max. No other text.`;
 const OUTPUT_CONSTRAINT =
   "Classify the latest user message. Output ONLY one word: minimal|low|medium|high|xhigh|max. No other text.";
 
+const PARSE_ERROR = "no tier parsed or isRouterTier false";
+const ABORT_ERROR = "aborted";
+
+export const ClassifierSkip = {
+  SKIP: true,
+  RETRY: false,
+} as const;
+
 export const parseClassifierOutput = (
   fullText: string,
 ):
@@ -44,9 +51,6 @@ export const parseClassifierOutput = (
   };
 };
 
-// Simplified overload: historySizeOrThinking accepts number (historySize) or
-// ThinkingLevel (thinking only, historySize=0). New optional signal param allows
-// caller (provider) to propagate AbortSignal for cancellation/timeout.
 export type ClassifierAttempt = {
   model: string;
   thinking?: ThinkingLevel;
@@ -61,7 +65,7 @@ export const runClassifierWithFallbacksDetailed = async (
   }[],
   modelRegistry: ExtensionContext["modelRegistry"],
   context: Context,
-  historySize: number,
+  historySize = 0,
   signal?: AbortSignal,
   onAttempt?: (entry: { model: string; thinking?: ThinkingLevel; source?: string }) => void,
   failedSet?: Set<string>,
@@ -89,106 +93,155 @@ export const runClassifierWithFallbacksDetailed = async (
       entry.thinking,
       signal,
     );
-    if (outcome.result)
+    if (outcome.result) {
       return {
         result: outcome.result,
         attempts: [...attempts, { model: entry.model, thinking: entry.thinking }],
       };
+    }
     attempts.push({
       model: entry.model,
       thinking: entry.thinking,
-      // outcome.error is always defined when result is missing (see runClassifierOutcome)
-      error: outcome.error as string,
+      error: outcome.error,
     });
-    // Auth/stream/not-found skip the model for the rest of the session.
-    // Parse-only failures are retried next turn (models often ignore format once then recover).
     if (outcome.skipSession) failedSet?.add(normalizedRef);
   }
   return { attempts };
 };
 
-type ClassifierOutcome = {
-  result?: { tier: RouterTier; reasoning: string };
-  skipSession: boolean;
-  error?: string;
+type ClassifierOutcome =
+  | {
+      result: { tier: RouterTier; reasoning: string };
+      skipSession: boolean;
+    }
+  | {
+      result?: undefined;
+      skipSession: boolean;
+      error: string;
+    };
+
+const resolveClassifierModel = (
+  registry: ExtensionContext["modelRegistry"],
+  ref: string,
+): { model: ReturnType<ExtensionContext["modelRegistry"]["find"]> } | { error: string } => {
+  const { provider, modelId } = parseCanonicalModelRef(ref);
+  const model = registry.find(provider, modelId);
+  if (!model) return { error: `model not found: ${provider}/${modelId}` };
+  return { model };
+};
+
+const fetchClassifierAuth = async (
+  registry: ExtensionContext["modelRegistry"],
+  model: NonNullable<ReturnType<ExtensionContext["modelRegistry"]["find"]>>,
+): Promise<
+  { apiKey: string; headers: Record<string, string>; requestModel: typeof model } | { error: string }
+> => {
+  const auth = await registry.getApiKeyAndHeaders(model);
+  const hasKey = "apiKey" in (auth as Record<string, unknown>) && !!(auth as { apiKey: string }).apiKey;
+  if (!auth.ok || !hasKey) {
+    return { error: `auth failed: ok=${auth.ok} hasKey=${hasKey}` };
+  }
+  const apiKey = (auth as { apiKey: string }).apiKey;
+  const headers = (auth as { headers: Record<string, string> }).headers;
+  const requestModel = modelWithAuthBaseUrl(
+    model as unknown as { baseUrl: string } & typeof model,
+    auth as { baseUrl?: string },
+  ) as typeof model;
+  return { apiKey, headers, requestModel };
+};
+
+const buildClassifierPromptBody = (context: Context, historySize: number): string => {
+  const promptText = getLastUserText(context);
+  if (historySize <= 0) return `Latest user message:\n${promptText}`.trim();
+  const historyText = getHistoryPairsText(context, historySize);
+  if (historyText)
+    return `Recent history (user+final result pairs):\n${historyText}\n\nLatest user message:\n${promptText}`.trim();
+  return `Latest user message:\n${promptText}`.trim();
+};
+
+const buildClassifierContext = (context: Context, historySize: number): Context => {
+  const body = buildClassifierPromptBody(context, historySize);
+  return {
+    ...context,
+    systemPrompt: CLASSIFIER_SYSTEM_PROMPT,
+    tools: undefined,
+    messages: [{ role: "user", content: `${OUTPUT_CONSTRAINT}\n\n${body}`, timestamp: Date.now() }],
+  };
+};
+
+const resolveReasoningOption = (
+  model: { reasoning?: unknown },
+  thinking?: ThinkingLevel,
+): ThinkingLevel | undefined => {
+  if (!model.reasoning) return undefined;
+  if (!thinking) return undefined;
+  if (thinking === "off") return undefined;
+  return thinking;
+};
+
+const isTextDeltaEvent = (event: unknown): event is { type: string; delta: string } => {
+  if (typeof event !== "object" || event === null) return false;
+  const e = event as Record<string, unknown>;
+  return e.type === "text_delta" && "delta" in e && typeof e.delta === "string";
+};
+
+const collectStreamText = async (
+  stream: AsyncIterable<unknown>,
+): Promise<string> => {
+  let fullText = "";
+  for await (const event of stream) {
+    if (isTextDeltaEvent(event)) fullText += event.delta;
+  }
+  return fullText;
 };
 
 const runClassifierOutcome = async (
   classifierModelRef: string,
   modelRegistry: ExtensionContext["modelRegistry"],
   context: Context,
-  historySize: number = 0,
+  historySize = 0,
   thinking?: ThinkingLevel,
   signal?: AbortSignal,
 ): Promise<ClassifierOutcome> => {
-  const effectiveHistorySize = historySize;
   try {
-    const { provider, modelId } = parseCanonicalModelRef(classifierModelRef);
-    const model = modelRegistry.find(provider, modelId);
-    if (!model) {
-      const error = `model not found: ${provider}/${modelId}`;
+    const modelResolution = resolveClassifierModel(modelRegistry, classifierModelRef);
+    if ("error" in modelResolution) {
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
         thinking,
         fullText: "",
         success: false,
-        error,
+        error: modelResolution.error,
       });
-      return { skipSession: true, error };
+      return { skipSession: ClassifierSkip.SKIP, error: modelResolution.error };
     }
+    const model = modelResolution.model as NonNullable<typeof modelResolution.model>;
 
-    const auth = await modelRegistry.getApiKeyAndHeaders(model);
-    if (!auth.ok || !("apiKey" in auth) || !auth.apiKey) {
-      const error = `auth failed: ok=${auth.ok} hasKey=${"apiKey" in auth ? !!auth.apiKey : false}`;
+    const authResolution = await fetchClassifierAuth(modelRegistry, model);
+    if ("error" in authResolution) {
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
         thinking,
         fullText: "",
         success: false,
-        error,
+        error: authResolution.error,
       });
-      return { skipSession: true, error };
+      return { skipSession: ClassifierSkip.SKIP, error: authResolution.error };
     }
-    const apiKey = (auth as { apiKey: string }).apiKey;
-    const headers = auth.headers;
-    const requestModel = modelWithAuthBaseUrl(model, auth as { baseUrl?: string });
 
-    const promptText = getLastUserText(context);
-    let body: string;
-    if (effectiveHistorySize > 0) {
-      const historyText = getHistoryPairsText(context, effectiveHistorySize);
-      body = historyText
-        ? `Recent history (user+final result pairs):\n${historyText}\n\nLatest user message:\n${promptText}`.trim()
-        : `Latest user message:\n${promptText}`.trim();
-    } else {
-      body = `Latest user message:\n${promptText}`.trim();
-    }
-    const classifierUserPrompt = `${OUTPUT_CONSTRAINT}\n\n${body}`;
+    const classifierContext = buildClassifierContext(context, historySize);
+    const reasoningOption = resolveReasoningOption(model as { reasoning?: unknown }, thinking);
 
-    const classifierContext: Context = {
-      ...context,
-      systemPrompt: CLASSIFIER_SYSTEM_PROMPT,
-      tools: undefined,
-      messages: [{ role: "user", content: classifierUserPrompt, timestamp: Date.now() }],
-    };
-
-    const reasoningOption =
-      model.reasoning && thinking && thinking !== "off" ? thinking : undefined;
-
-    const stream = streamDelegated(modelRegistry, requestModel, classifierContext, {
-      apiKey,
-      headers,
+    const stream = streamDelegated(modelRegistry, model, classifierContext, {
+      apiKey: authResolution.apiKey,
+      headers: authResolution.headers,
       ...(reasoningOption ? { reasoning: reasoningOption } : {}),
       ...(signal ? { signal } : {}),
     });
-    let fullText = "";
-    for await (const event of stream) {
-      if (event.type === "text_delta" && "delta" in event && typeof event.delta === "string") {
-        fullText += event.delta;
-      }
-    }
+
+    const fullText = await collectStreamText(stream);
 
     const parsed = parseClassifierOutput(fullText);
     if (parsed) {
@@ -204,19 +257,19 @@ const runClassifierOutcome = async (
       });
       return {
         result: { tier: parsed.tier, reasoning: parsed.reasoning },
-        skipSession: false,
+        skipSession: ClassifierSkip.RETRY,
       };
     }
-    const parseError = "no tier parsed or isRouterTier false";
+
     logClassifierSync({
       timestamp: new Date().toISOString(),
       model: classifierModelRef,
       thinking,
       fullText,
       success: false,
-      error: parseError,
+      error: PARSE_ERROR,
     });
-    return { skipSession: false, error: parseError };
+    return { skipSession: ClassifierSkip.RETRY, error: PARSE_ERROR };
   } catch (e) {
     if (signal?.aborted) {
       logClassifierSync({
@@ -225,9 +278,9 @@ const runClassifierOutcome = async (
         thinking,
         fullText: "",
         success: false,
-        error: "aborted",
+        error: ABORT_ERROR,
       });
-      return { skipSession: false, error: "aborted" };
+      return { skipSession: ClassifierSkip.RETRY, error: ABORT_ERROR };
     }
     const error = e instanceof Error ? e.message : String(e);
     logClassifierSync({
@@ -238,6 +291,6 @@ const runClassifierOutcome = async (
       success: false,
       error,
     });
-    return { skipSession: true, error };
+    return { skipSession: ClassifierSkip.SKIP, error };
   }
 };

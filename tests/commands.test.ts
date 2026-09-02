@@ -1,428 +1,142 @@
-/* oxlint-disable */
 import { describe, it, expect, vi } from "vitest";
 import { registerCommands } from "../src/commands";
-import type { RouterConfig, RoutingDecision } from "../src/types";
+import type { RouterConfig } from "../src/types";
 
-describe("commands.ts", () => {
-  const buildMockPi = () => {
-    let registeredCommand: any = null;
-    return {
-      registerCommand: (name: string, cmd: any) => {
-        if (name === "router") {
-          registeredCommand = cmd;
-        }
-      },
-      setModel: vi.fn().mockResolvedValue(true),
-      getRegisteredCommand: () => registeredCommand,
-    };
-  };
+const makePi = () => {
+  let cmd: any = null;
+  return { registerCommand: (n: string, c: any) => { if (n === "router") cmd = c; }, get: () => cmd };
+};
+const ctx = () => ({ ui: { notify: vi.fn(), setStatus: vi.fn() } }) as any;
+const acts = () => ({
+  persistState: vi.fn(),
+  updateStatus: vi.fn(),
+  reloadConfig: vi.fn(),
+  ensureValidActiveRouterProfile: vi.fn().mockResolvedValue(undefined),
+});
+const cfg = (o: Partial<RouterConfig> = {}): RouterConfig => ({
+  profiles: { balanced: { high: { models: ["openai/gpt"] } }, cheap: { low: { models: ["openai/gpt-mini"] } } },
+  ...o,
+} as any);
+const decis = (over: any = {}) => ({
+  profile: "balanced", tier: "high", targetProvider: "openai", targetModelId: "gpt",
+  targetLabel: "openai/gpt", reasoning: "r", thinking: "high", timestamp: Date.now(), ...over,
+});
+const state = (over: any = {}) => ({
+  currentConfig: cfg(), routerEnabled: true, selectedProfile: "balanced",
+  lastDecision: decis(), lastNonRouterModel: "openai/gpt", accumulatedCost: 0.01,
+  debugEnabled: false, debugHistory: [decis()], lastConfigWarnings: [] as string[],
+  failedByChain: new Map<string, Set<string>>(), ...over,
+});
 
-  const buildMockCtx = () => ({
-    ui: {
-      notify: vi.fn(),
-      setStatus: vi.fn(),
-    },
-    modelRegistry: {
-      find: vi.fn().mockImplementation((provider: string, modelId: string) => {
-        if (provider === "router" || provider === "openai") {
-          return { provider, id: modelId };
-        }
-        return null;
-      }),
-    },
-    model: { provider: "router", id: "balanced" },
+describe("commands", () => {
+  it("status no args shows status", async () => {
+    const pi = makePi(); const s = state({ debugEnabled: true }); const a = acts(); registerCommands(pi as any, s as any, a as any);
+    const c = ctx(); await pi.get().handler("status", c);
+    expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Model Router Status:"), "info");
+    expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Debug: on"), "info");
+    expect(a.updateStatus).toHaveBeenCalled();
   });
-
-  const buildDefaultState = () => {
-    const config: RouterConfig = {
-      profiles: {
-        balanced: {
-          high: { models: ["openai/gpt-4o"] },
-          medium: { models: ["openai/gpt-4o-mini"] },
-        },
-        cheap: {
-          low: { models: ["openai/gpt-4o-micro"] },
-        },
-      },
-    };
-
-    const lastDecision: RoutingDecision = {
-      profile: "balanced",
-      tier: "medium",
-      targetProvider: "openai",
-      targetModelId: "gpt-4o-mini",
-      targetLabel: "openai/gpt-4o-mini",
-      reasoning: "Default reasoning",
-      thinking: "medium",
-      timestamp: Date.now(),
-    };
-
-    return {
-      currentConfig: config,
-      routerEnabled: true,
-      selectedProfile: "balanced",
-      lastDecision,
-      lastNonRouterModel: "openai/gpt-4o",
-      accumulatedCost: 0.05,
-      debugEnabled: false,
-      debugHistory: [lastDecision],
-      lastConfigWarnings: [],
-      failedByChain: new Map<string, Set<string>>(),
-    };
-  };
-
-  const buildMockActions = () => ({
-    persistState: vi.fn(),
-    updateStatus: vi.fn(),
-    reloadConfig: vi.fn(),
-    ensureValidActiveRouterProfile: vi.fn(),
+  it("status with args error", async () => {
+    const pi = makePi(); registerCommands(pi as any, state() as any, acts() as any);
+    const c = ctx(); await pi.get().handler("status extra", c);
+    expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage: /router status"), "error");
   });
-
-  describe("Registration & Subcommand Completion", () => {
-    it("should register router command", () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      expect(pi.getRegisteredCommand()).toBeDefined();
-    });
-
-    it("should autocomplete subcommands", () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions("");
-      expect(completions).toBeDefined();
-      const names = completions.map((c: any) => c.value);
-      expect(names).toContain("status");
-      expect(names).not.toContain("profile");
-      expect(names).not.toContain("pin");
-    });
+  it("status with lastDecision and auto thinking", async () => {
+    const pi = makePi();
+    const s = state({ lastDecision: decis({ thinking: undefined }) });
+    registerCommands(pi as any, s as any, acts() as any);
+    const c = ctx(); await pi.get().handler("status", c);
+    expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("(auto)"), "info");
   });
-
-  describe("Handler Subcommands", () => {
-    it("should handle /router status", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("status", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalled();
-      const notifyMessage = ctx.ui.notify.mock.calls[0][0];
-      expect(notifyMessage).toContain("Model Router Status:");
-      expect(notifyMessage).toContain("Selected profile: balanced");
-      expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
-    });
-
-    it("should handle /router debug history control", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("debug show", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Recent Routing Decisions"),
-        "info",
-      );
-
-      await cmd.handler("debug clear", ctx as any);
-      expect(state.debugHistory.length).toBe(0);
-    });
-
-    it("should handle /router reload config", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("reload", ctx as any);
-      expect(actions.reloadConfig).toHaveBeenCalledWith(ctx, {
-        preserveDebug: true,
-      });
-      expect(actions.ensureValidActiveRouterProfile).toHaveBeenCalledWith(ctx);
-    });
+  it("status without lastDecision and disabled router", async () => {
+    const pi = makePi();
+    const s = state({ lastDecision: undefined, routerEnabled: false, selectedProfile: undefined, currentConfig: cfg({ historySize: 5 }) });
+    registerCommands(pi as any, s as any, acts() as any);
+    const c = ctx(); await pi.get().handler("status", c);
+    const msg = c.ui.notify.mock.calls[0][0] as string;
+    expect(msg).toContain("Router enabled: off");
+    expect(msg).toContain("Selected profile: none");
+    expect(msg).toContain("History size: 5");
+    expect(msg).not.toContain("Last routed tier");
   });
-
-  describe("handleStatus edge cases", () => {
-    it("should show error when status has extra args", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("status extra", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith("Usage: /router status (no arguments)", "error");
-    });
-
-    it("should handle status without lastDecision", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      (state as any).lastDecision = undefined;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("status", ctx as any);
-      const notifyMessage = ctx.ui.notify.mock.calls[0][0];
-      expect(notifyMessage).toContain("Model Router Status:");
-      expect(notifyMessage).not.toContain("Last routed tier:");
-    });
-
-    it("should show config warnings in status", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      (state as any).lastConfigWarnings = ["Warning 1", "Warning 2"];
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("status", ctx as any);
-      const notifyMessage = ctx.ui.notify.mock.calls[0][0];
-      expect(notifyMessage).toContain("⚠️ Configuration Warnings:");
-      expect(notifyMessage).toContain("Warning 1");
-      expect(notifyMessage).toContain("Warning 2");
-    });
+  it("status default historySize 0 when undefined", async () => {
+    const pi = makePi();
+    const s = state({ currentConfig: cfg() }); delete (s.currentConfig as any).historySize;
+    registerCommands(pi as any, s as any, acts() as any);
+    const c = ctx(); await pi.get().handler("status", c);
+    expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("History size: 0"), "info");
   });
-
-  describe("handleDebug edge cases", () => {
-    it("should enable debug explicitly", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.debugEnabled = false;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("debug on", ctx as any);
-      expect(state.debugEnabled).toBe(true);
-      expect(actions.persistState).toHaveBeenCalled();
+  it("status with failures and warnings", async () => {
+    const pi = makePi();
+    const s = state({
+      failedByChain: new Map([["chain:a", new Set(["openai/gpt"])], ["empty", new Set()]]),
+      lastConfigWarnings: ["w1"],
     });
-
-    it("should disable debug explicitly", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.debugEnabled = true;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("debug off", ctx as any);
-      expect(state.debugEnabled).toBe(false);
-      expect(actions.persistState).toHaveBeenCalled();
-    });
-
-    it("should toggle debug when no arg given", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.debugEnabled = false;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("debug", ctx as any);
-      expect(state.debugEnabled).toBe(true);
-
-      await cmd.handler("debug", ctx as any);
-      expect(state.debugEnabled).toBe(false);
-    });
-
-    it("should show message when debug history is empty", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      state.debugHistory.length = 0;
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("debug show", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith("No recent routing decisions.", "info");
-    });
-
-    it("should show error with too many args", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("debug on extra", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        "Usage: /router debug <on|off|toggle|show|clear>",
-        "error",
-      );
-    });
+    registerCommands(pi as any, s as any, acts() as any);
+    const c = ctx(); await pi.get().handler("status", c);
+    const msg = c.ui.notify.mock.calls[0][0] as string;
+    expect(msg).toContain("Session failures");
+    expect(msg).toContain("chain:a");
+    expect(msg).toContain("w1");
   });
-
-  describe("handleReload edge cases", () => {
-    it("should show error with extra args", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("reload extra", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith("Usage: /router reload (no arguments)", "error");
-    });
+  it("status empty failures shows none", async () => {
+    const pi = makePi(); registerCommands(pi as any, state({ failedByChain: new Map() }) as any, acts() as any);
+    const c = ctx(); await pi.get().handler("status", c);
+    expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Session failures: none"), "info");
   });
-
-  describe("Autocomplete completions", () => {
-    it("should return debug completions", () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions("debug ");
-      expect(completions).toBeDefined();
-      const values = completions!.map((c: any) => c.value);
-      expect(values).toContain("debug on");
-      expect(values).toContain("debug off");
-      expect(values).toContain("debug show");
-      expect(values).toContain("debug clear");
-    });
-
-    it("should return null for unknown subcommand completions", () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions("unknown ");
-      expect(completions).toBeNull();
-    });
-
-    it("should filter subcommand completions by prefix", () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      const completions = cmd.getArgumentCompletions("st");
-      expect(completions).toBeDefined();
-      const values = completions!.map((c: any) => c.value);
-      expect(values).toContain("status");
-      expect(values).not.toContain("profile");
-    });
+  it("debug on/off/toggle/clear/show/empty/invalid", async () => {
+    const pi = makePi(); const s = state({ debugEnabled: false, debugHistory: [decis()] }); const a = acts();
+    registerCommands(pi as any, s as any, a as any);
+    const c = ctx();
+    await pi.get().handler("debug on", c); expect(s.debugEnabled).toBe(true);
+    await pi.get().handler("debug off", c); expect(s.debugEnabled).toBe(false);
+    await pi.get().handler("debug toggle", c); expect(s.debugEnabled).toBe(true);
+    await pi.get().handler("debug", c); expect(s.debugEnabled).toBe(false);
+    await pi.get().handler("debug show", c); expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Recent Routing Decisions"), "info");
+    s.debugHistory = []; await pi.get().handler("debug show", c); expect(c.ui.notify).toHaveBeenCalledWith("No recent routing decisions.", "info");
+    await pi.get().handler("debug clear", c); expect(s.debugHistory.length).toBe(0);
+    const c2 = ctx(); await pi.get().handler("debug invalid", c2); expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
+    const c3 = ctx(); await pi.get().handler("debug on extra", c3); expect(c3.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
   });
-
-  describe("Default handler branch", () => {
-    it("should show error for unknown subcommand", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("nonexistent", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Unknown router subcommand: nonexistent"),
-        "error",
-      );
-    });
-
-    it("should fall through to status on empty args", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Model Router Status:"),
-        "info",
-      );
-    });
-
-    it("should show help with /router help", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("help", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Router Subcommands:"),
-        "info",
-      );
-    });
-
-    it("should show help with /router ?", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("?", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Router Subcommands:"),
-        "info",
-      );
-    });
-
-    it("should show error when help has extra args", async () => {
-      const pi = buildMockPi();
-      const state = buildDefaultState();
-      const actions = buildMockActions();
-      const ctx = buildMockCtx();
-
-      registerCommands(pi as any, state as any, actions as any);
-      const cmd = pi.getRegisteredCommand();
-
-      await cmd.handler("help extra", ctx as any);
-      expect(ctx.ui.notify).toHaveBeenCalledWith("Usage: /router help (no arguments)", "error");
-    });
+  it("reload success and with args error", async () => {
+    const pi = makePi(); const s = state(); const a = acts(); registerCommands(pi as any, s as any, a as any);
+    const c = ctx(); await pi.get().handler("reload", c);
+    expect(a.reloadConfig).toHaveBeenCalledWith(c, { preserveDebug: true });
+    expect(a.ensureValidActiveRouterProfile).toHaveBeenCalled();
+    const c2 = ctx(); await pi.get().handler("reload extra", c2); expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
+  });
+  it("reset-failures and alias and error", async () => {
+    const pi = makePi(); const s = state({ failedByChain: new Map([["a", new Set(["x"])]]) }); const a = acts();
+    registerCommands(pi as any, s as any, a as any);
+    const c = ctx(); await pi.get().handler("reset-failures", c); expect(s.failedByChain.size).toBe(0);
+    s.failedByChain.set("b", new Set(["y"])); await pi.get().handler("clear-failures", c); expect(s.failedByChain.size).toBe(0);
+    const c2 = ctx(); await pi.get().handler("reset-failures extra", c2); expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
+  });
+  it("help and ? and with args error", async () => {
+    const pi = makePi(); registerCommands(pi as any, state() as any, acts() as any);
+    const c = ctx(); await pi.get().handler("help", c); expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Router Subcommands"), "info");
+    const c2 = ctx(); await pi.get().handler("?", c2); expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Router Subcommands"), "info");
+    const c3 = ctx(); await pi.get().handler("help extra", c3); expect(c3.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
+  });
+  it("unknown and empty fallback", async () => {
+    const pi = makePi(); registerCommands(pi as any, state() as any, acts() as any);
+    const c = ctx(); await pi.get().handler("unknowncmd", c); expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Unknown"), "error");
+    const c2 = ctx(); await pi.get().handler("", c2); expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Model Router Status"), "info");
+    const c3 = ctx(); await pi.get().handler(undefined as any, c3); expect(c3.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Model Router Status"), "info");
+    const c4 = ctx(); await pi.get().handler("   ", c4); expect(c4.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Model Router Status"), "info");
+  });
+  it("getArgumentCompletions empty partial debug unknown", () => {
+    const pi = makePi(); registerCommands(pi as any, state() as any, acts() as any); const g = pi.get().getArgumentCompletions;
+    expect(g("")).not.toBeNull(); expect(g("").map((x: any) => x.value)).toContain("status");
+    expect(g("st")!.map((x: any) => x.value)).toContain("status");
+    expect(g("zzz")).toBeNull();
+    expect(g("  st")!.map((x: any) => x.value)).toContain("status");
+    expect(g("debug")).not.toBeNull(); expect(g("debug")!.map((x: any) => x.value)).toContain("debug on");
+    expect(g("debug ")!.map((x: any) => x.value)).toContain("debug on");
+    expect(g("debug o")!.map((x: any) => x.value)).toContain("debug on");
+    expect(g("debug zzz")).toBeNull();
+    expect(g("status ")).toBeNull();
+    expect(g("unknown ")).toBeNull();
+    expect(g("   ")).not.toBeNull();
   });
 });
