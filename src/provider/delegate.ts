@@ -119,7 +119,11 @@ export const buildFallbackDecision = (decision: RoutingDecision, modelRef: strin
   });
 };
 
-type AttemptResult = { status: "success" | "retry" | "nonRetryable" | "skip"; costDelta?: number; error?: Error };
+type AttemptResult =
+  | { status: "success"; costDelta: number }
+  | { status: "retry"; error: Error }
+  | { status: "nonRetryable"; error: Error }
+  | { status: "skip" };
 
 export const attemptSingleModel = async (
   modelRef: string,
@@ -214,11 +218,11 @@ export const delegateToTierModels = async (params: DelegateParams): Promise<Dele
     if (result.status === "skip") continue;
     if (result.status === "success") {
       success = true;
-      costDelta = result.costDelta ?? 0;
+      costDelta = result.costDelta;
       break;
     }
     if (result.status === "nonRetryable") {
-      const msg = result.error?.message ?? "";
+      const msg = result.error.message;
       lastError = msg.startsWith("NON_RETRYABLE:") ? new Error(msg.slice("NON_RETRYABLE: ".length)) : result.error;
       break;
     }
