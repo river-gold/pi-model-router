@@ -227,6 +227,67 @@ describe("provider/classifier", () => {
     expect(result.tier).toBe("high");
   });
 
+  it("returns incoming decision when classifier branch rejects", async () => {
+    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("Classifier failed to determine a tier."),
+    );
+    const state = makeState();
+    const result = await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "myModel",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
+    expect(result).toBe(mockDecision);
+  });
+  it("returns incoming decision when classifier result undefined", async () => {
+    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      result: undefined,
+    } as any);
+    const state = makeState();
+    const result = await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "myModel",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+    );
+    expect(result).toBe(mockDecision);
+  });
+  it("rethrows abort instead of falling back", async () => {
+    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("aborted"),
+    );
+    const state = makeState();
+    await expect(
+      applyClassifierIfNeeded(
+        mockProfile,
+        mockDecision,
+        "myModel",
+        {} as any,
+        state as any,
+        {} as any,
+        undefined,
+        false,
+        false,
+        "off" as any,
+        "source",
+      ),
+    ).rejects.toThrow("aborted");
+  });
   it("resolves when tier differs", async () => {
     (resolveAvailableTier as unknown as ReturnType<typeof vi.fn>).mockReturnValue("medium");
     (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({

@@ -14,6 +14,8 @@ import {
   attemptSingleModel,
   delegateToTierModels,
   extractEscalation,
+  isIgnoredEscalationEvent,
+  hasIgnoredEscalationCall,
   applySelfEscalation,
   toDelegateResult,
   stripEscalationTool,
@@ -550,6 +552,50 @@ describe("attemptSingleModel", () => {
     expect(r.status).toBe("success");
     expect(s.lastDecision).toEqual({ profile: "other" });
   });
+  it("streamDelegated throw retries with failure recorded", async () => {
+    vi.mocked(streamDelegated).mockImplementation(() => {
+      throw new Error("No delegated stream provider registered for openai");
+    });
+    const rec = vi.fn();
+    const r = await attemptSingleModel("openai/gpt-high", 0, base() as any, rec);
+    expect(r.status).toBe("retry");
+    expect((r as { error: Error }).error.message).toContain("No delegated stream");
+    expect(rec).toHaveBeenCalledWith("openai/gpt-high");
+  });
+  it("streamDelegated non-recordable throw retries without record", async () => {
+    vi.mocked(streamDelegated).mockImplementation(() => {
+      throw new Error("boom");
+    });
+    const rec = vi.fn();
+    const r = await attemptSingleModel("openai/gpt-high", 0, base() as any, rec);
+    expect(r.status).toBe("retry");
+    expect((r as { error: Error }).error.message).toBe("boom");
+    expect(rec).not.toHaveBeenCalled();
+  });
+  it("ignored escalation call consumed as retry", async () => {
+    vi.mocked(streamDelegated).mockImplementation(
+      () =>
+        (async function* () {
+          yield {
+            type: "toolcall_end",
+            toolCall: {
+              name: "router_set_reasoning_effort",
+              arguments: { level: "high" },
+            },
+          };
+          yield { type: "done", message: { usage: { cost: { total: 0 } } } };
+        })() as any,
+    );
+    const push = vi.fn();
+    const r = await attemptSingleModel(
+      "openai/gpt-high",
+      0,
+      base({ stream: { push } } as any) as any,
+      vi.fn(),
+    );
+    expect(r.status).toBe("retry");
+    expect(push).not.toHaveBeenCalled();
+  });
 });
 
 describe("delegateToTierModels", () => {
@@ -745,7 +791,10 @@ describe("escalation helpers", () => {
       extractEscalation(
         {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "high", reason: "need" } },
+          toolCall: {
+            name: "router_set_reasoning_effort",
+            arguments: { level: "high", reason: "need" },
+          },
         },
         p,
         d,
@@ -755,14 +804,15 @@ describe("escalation helpers", () => {
   it("applySelfEscalation without reason and without notify", () => {
     const params: any = {
       profile: p,
-      context: { messages: [], tools: [{ name: "set_reasoning_effort" }] },
+      context: { messages: [], tools: [{ name: "router_set_reasoning_effort" }] },
       state: { lastDecision: undefined, lastExtensionContext: undefined },
       recordDebugDecision: vi.fn(),
     };
     const out = applySelfEscalation(params, d, { escalationTier: "high" });
     expect(out.decision.tier).toBe("high");
     expect(
-      stripEscalationTool({ messages: [], tools: [{ name: "set_reasoning_effort" }] } as any).tools,
+      stripEscalationTool({ messages: [], tools: [{ name: "router_set_reasoning_effort" }] } as any)
+        .tools,
     ).toEqual([]);
   });
   it("applySelfEscalation notifies when ui exists", () => {
@@ -775,6 +825,29 @@ describe("escalation helpers", () => {
     };
     applySelfEscalation(params, d, { escalationTier: "high", escalationReason: "need more" });
     expect(notify).toHaveBeenCalled();
+  });
+  it("isIgnoredEscalationEvent branches", () => {
+    expect(isIgnoredEscalationEvent({ type: "text_delta" })).toBe(false);
+    expect(isIgnoredEscalationEvent({ type: "toolcall_end" })).toBe(false);
+    expect(isIgnoredEscalationEvent({ type: "toolcall_end", toolCall: {} })).toBe(false);
+    expect(isIgnoredEscalationEvent({ type: "toolcall_end", toolCall: { name: "other" } })).toBe(
+      false,
+    );
+    expect(
+      isIgnoredEscalationEvent({
+        type: "toolcall_end",
+        toolCall: { name: "router_set_reasoning_effort" },
+      }),
+    ).toBe(true);
+  });
+  it("hasIgnoredEscalationCall detects same-tier call", () => {
+    const sameTier = {
+      type: "toolcall_end",
+      toolCall: { name: "router_set_reasoning_effort", arguments: { level: "medium" } },
+    };
+    expect(hasIgnoredEscalationCall([sameTier], p, d)).toBe(true);
+    expect(hasIgnoredEscalationCall([], p, d)).toBe(false);
+    expect(hasIgnoredEscalationCall([{ type: "text_delta" }], p, d)).toBe(false);
   });
   it("toDelegateResult maps success and failure", () => {
     expect(toDelegateResult({ success: true, costDelta: 1 }, d).success).toBe(true);

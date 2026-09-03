@@ -30,7 +30,7 @@ describe("stream.ts", () => {
     } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext["modelRegistry"];
     const model = { provider: "missing", id: "m" } as unknown as Model<Api>;
     expect(() => streamDelegated(registry, model, { messages: [] }, {})).toThrow(
-      "No stream provider registered for missing",
+      "No delegated stream provider registered for missing",
     );
   });
 

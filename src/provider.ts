@@ -121,7 +121,10 @@ export const registerRouterProvider = (
           const isMultiTier = ROUTER_TIERS.filter((t) => (profile as RouterProfile)[t]).length > 1;
           const shouldInject = pi.getThinkingLevel() === "off" && isMultiTier;
           let effectiveContext = context;
-          if (shouldInject)
+          if (
+            shouldInject &&
+            !(context.tools ?? []).some((t: { name: string }) => t.name === ESCALATION_TOOL.name)
+          )
             effectiveContext = {
               ...context,
               tools: [...(context.tools ?? []), ESCALATION_TOOL as never],

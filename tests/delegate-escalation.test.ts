@@ -10,7 +10,7 @@ describe("delegate escalation", () => {
     const stream = (async function* () {
       yield {
         type: "toolcall_end",
-        toolCall: { name: "set_reasoning_effort", arguments: { level: "high" } },
+        toolCall: { name: "router_set_reasoning_effort", arguments: { level: "high" } },
       };
       yield { type: "done", message: { usage: { cost: { total: 0 } } } };
     })() as unknown as AsyncIterable<unknown>;
@@ -60,7 +60,7 @@ describe("delegate escalation", () => {
       extractEscalation(
         {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "invalid" } },
+          toolCall: { name: "router_set_reasoning_effort", arguments: { level: "invalid" } },
         },
         profile,
         decision,
@@ -70,7 +70,7 @@ describe("delegate escalation", () => {
       extractEscalation(
         {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "medium" } },
+          toolCall: { name: "router_set_reasoning_effort", arguments: { level: "medium" } },
         },
         profile,
         decision,
@@ -80,7 +80,7 @@ describe("delegate escalation", () => {
       extractEscalation(
         {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "high" } },
+          toolCall: { name: "router_set_reasoning_effort", arguments: { level: "high" } },
         },
         profile,
         decision,
@@ -90,7 +90,10 @@ describe("delegate escalation", () => {
       extractEscalation(
         {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "high", reason: 123 } },
+          toolCall: {
+            name: "router_set_reasoning_effort",
+            arguments: { level: "high", reason: 123 },
+          },
         },
         profile,
         decision,
@@ -99,7 +102,7 @@ describe("delegate escalation", () => {
     expect(
       stripEscalationTool({
         messages: [],
-        tools: [{ name: "set_reasoning_effort" }, { name: "other" }],
+        tools: [{ name: "router_set_reasoning_effort" }, { name: "other" }],
       } as never).tools?.length,
     ).toBe(1);
     expect(stripEscalationTool({ messages: [] } as never).tools?.length ?? 0).toBe(0);
@@ -126,7 +129,7 @@ describe("delegate escalation", () => {
         return (async function* () {
           yield {
             type: "toolcall_end",
-            toolCall: { name: "set_reasoning_effort", arguments: { level: "high" } },
+            toolCall: { name: "router_set_reasoning_effort", arguments: { level: "high" } },
           };
           yield { type: "done", message: { usage: { cost: { total: 0 } } } };
         })() as unknown as never;
@@ -152,7 +155,7 @@ describe("delegate escalation", () => {
       routerModel: { contextWindow: 100000 } as never,
       context: {
         messages: [{ role: "user", content: "hi" }],
-        tools: [{ name: "set_reasoning_effort" }],
+        tools: [{ name: "router_set_reasoning_effort" }],
       } as never,
       options: {},
       state: {
@@ -168,12 +171,12 @@ describe("delegate escalation", () => {
     const res = await delegateToTierModels(params2);
     expect(res.success).toBe(true);
   });
-  it("same tier escalation no retry", async () => {
+  it("same tier escalation consumed without leak", async () => {
     vi.mocked(streamDelegated).mockReturnValue(
       (async function* () {
         yield {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "medium" } },
+          toolCall: { name: "router_set_reasoning_effort", arguments: { level: "medium" } },
         };
         yield { type: "done", message: { usage: { cost: { total: 0 } } } };
       })() as unknown as never,
@@ -206,14 +209,19 @@ describe("delegate escalation", () => {
       recordDebugDecision: vi.fn(),
     } as never;
     const res = await delegateToTierModels(params2);
-    expect(res.success).toBe(true);
+    expect(res.success).toBe(false);
+    expect((res.lastError as Error).message).toContain("same tier or invalid level");
+    const pushed = (params2.stream as unknown as { push: ReturnType<typeof vi.fn> }).push;
+    for (const call of pushed.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain("router_set_reasoning_effort");
+    }
   });
   it("invalid escalation level ignored", async () => {
     vi.mocked(streamDelegated).mockReturnValue(
       (async function* () {
         yield {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "invalid" } },
+          toolCall: { name: "router_set_reasoning_effort", arguments: { level: "invalid" } },
         };
         yield { type: "done", message: { usage: { cost: { total: 0 } } } };
       })() as unknown as never,
@@ -246,7 +254,8 @@ describe("delegate escalation", () => {
       recordDebugDecision: vi.fn(),
     } as never;
     const res = await attemptSingleModel("openai/a", 0, params2, () => {});
-    expect(res.status).toBe("success");
+    expect(res.status).toBe("retry");
+    expect((res as { error: Error }).error.message).toContain("same tier or invalid level");
   });
   it("toolcall_end without toolCall ignored", async () => {
     vi.mocked(streamDelegated).mockReturnValue(
@@ -293,7 +302,7 @@ describe("delegate escalation", () => {
         return (async function* () {
           yield {
             type: "toolcall_end",
-            toolCall: { name: "set_reasoning_effort", arguments: { level: "high" } },
+            toolCall: { name: "router_set_reasoning_effort", arguments: { level: "high" } },
           };
           yield { type: "done", message: { usage: { cost: { total: 0 } } } };
         })() as unknown as never;
@@ -318,7 +327,7 @@ describe("delegate escalation", () => {
       routerModel: { contextWindow: 100000 } as never,
       context: {
         messages: [{ role: "user", content: "hi" }],
-        tools: [{ name: "set_reasoning_effort" }],
+        tools: [{ name: "router_set_reasoning_effort" }],
       } as never,
       options: {},
       state: {
@@ -389,21 +398,6 @@ describe("delegate escalation", () => {
     expect(r.gotDone).toBe(true);
   });
 
-  it("covers remaining branches", async () => {
-    const { resolveTargetLimit, collectBufferedResult } = await import("../src/provider/delegate");
-    // line 117: found undefined
-    const profile = {} as never;
-    const decision = { tier: "medium", targetProvider: "x", targetModelId: "y" } as never;
-    const reg = { find: () => undefined } as never;
-    expect(resolveTargetLimit(profile, decision, "x/y", reg, "x", "y")).toBeDefined();
-    // line 123: isContentEvent false
-    const r = collectBufferedResult([
-      { type: "done", message: { usage: { cost: { total: 0 } } } },
-      { type: "error", error: {} },
-    ]);
-    expect(r.gotDone).toBe(true);
-  });
-
   it("resolveTargetLimit no contextWindow", async () => {
     const { resolveTargetLimit } = await import("../src/provider/delegate");
     const profile = {} as never;
@@ -420,7 +414,7 @@ describe("delegate escalation", () => {
       extractEscalation(
         {
           type: "toolcall_end",
-          toolCall: { name: "set_reasoning_effort", arguments: { level: "high" } },
+          toolCall: { name: "router_set_reasoning_effort", arguments: { level: "high" } },
         },
         profile,
         decision,

@@ -1,11 +1,11 @@
-import { Type } from "typebox";
+import { Type } from "@earendil-works/pi-ai";
 import { isRouterTier } from "./config";
 import type { RouterTier } from "./types";
 
 export const TIER_HINT =
   "minimal: format/typo, low: summary/lookup, medium: spec implement, high: design/tradeoff, xhigh: migration/security, max: greenfield/audit";
 
-export const ESCALATION_TOOL_NAME = "set_reasoning_effort";
+export const ESCALATION_TOOL_NAME = "router_set_reasoning_effort";
 
 export const ESCALATION_TOOL = {
   name: ESCALATION_TOOL_NAME,

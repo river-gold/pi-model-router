@@ -37,7 +37,7 @@ export const streamDelegated = (
 ): AssistantMessageEventStream => {
   const provider = (registry as StreamableRegistry).getProvider?.(model.provider);
   if (!provider?.streamSimple) {
-    throw new Error(`No stream provider registered for ${model.provider}`);
+    throw new Error(`No delegated stream provider registered for ${model.provider}`);
   }
   return provider.streamSimple(model, context, options);
 };

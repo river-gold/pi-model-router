@@ -167,6 +167,22 @@ export const extractEscalation = (
   return { tier: t, reason: typeof r === "string" ? r : "" };
 };
 
+export const isIgnoredEscalationEvent = (event: unknown): boolean => {
+  if ((event as { type: string }).type !== "toolcall_end") return false;
+  const tc = (event as { toolCall?: { name?: string } }).toolCall;
+  if (!tc || !isEscalationCall(tc.name ?? "")) return false;
+  return true;
+};
+
+export const hasIgnoredEscalationCall = (
+  bufferedEvents: unknown[],
+  profile: RouterProfile,
+  decision: RoutingDecision,
+): boolean =>
+  bufferedEvents.some(
+    (event) => isIgnoredEscalationEvent(event) && !extractEscalation(event, profile, decision),
+  );
+
 export const collectEscalation = async (
   stream: AsyncIterable<unknown>,
   profile: RouterProfile,
@@ -259,17 +275,24 @@ export const attemptSingleModel = async (
     else state.lastExtensionContext?.ui.setHiddenThinkingLabel?.();
   } catch {}
   const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
-  const delegatedStream = streamDelegated(
-    registry,
-    modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }),
-    effectiveContext,
-    {
-      ...delegationOptions,
-      apiKey: auth.apiKey,
-      headers: auth.headers,
-      ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
-    },
-  );
+  let delegatedStream: AsyncIterable<unknown>;
+  try {
+    delegatedStream = streamDelegated(
+      registry,
+      modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }),
+      effectiveContext,
+      {
+        ...delegationOptions,
+        apiKey: auth.apiKey,
+        headers: auth.headers,
+        ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
+      },
+    );
+  } catch (e) {
+    const err = e as Error;
+    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    return { status: "retry", error: err };
+  }
   if (!delegatedStream) {
     const err = new Error("No delegated stream available");
     if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
@@ -301,6 +324,13 @@ export const attemptSingleModel = async (
         escalationTier: escalation.tier,
         escalationReason: escalation.reason,
       }),
+    };
+  if (hasIgnoredEscalationCall(bufferedEvents, profile, decision))
+    return {
+      status: "retry",
+      error: new Error(
+        "Router escalation request ignored (same tier or invalid level); trying next model.",
+      ),
     };
   const collected = collectBufferedResult(bufferedEvents);
   contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
