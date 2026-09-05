@@ -11,7 +11,7 @@ import {
   isContentEvent,
 } from "../src/provider/delegate";
 import { createCommitMutex } from "../src/provider/state";
-import { ESCALATION_TOOL_NAME } from "../src/escalation";
+import { isRecordablePreStreamError } from "../src/failureMemory";
 import type { Api, Model, Context } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterConfig } from "../src/types";
@@ -206,25 +206,6 @@ describe("provider integration", () => {
     opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
     await wait();
     expect(state.lastDecision?.tier).toBe("high");
-  });
-  it("skips escalation injection on name collision", async () => {
-    (pi.getThinkingLevel as unknown as ReturnType<typeof vi.fn>).mockReturnValue("off");
-    registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
-    streamSimpleMock.mockReturnValue(
-      (async function* () {
-        yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-      })() as unknown,
-    );
-    opts.streamSimple(mdl("balanced"), {
-      messages: [{ role: "user", content: "hi" }],
-      tools: [{ name: ESCALATION_TOOL_NAME }],
-    } as unknown as Context);
-    await wait();
-    const seen = streamSimpleMock.mock.calls[0][1] as Context;
-    expect(seen.tools?.length).toBe(1);
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(false);
   });
   it("single tier and tool loop preserve", async () => {
     const prev = {

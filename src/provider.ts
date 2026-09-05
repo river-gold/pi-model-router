@@ -20,7 +20,6 @@ import { applyClassifierIfNeeded } from "./provider/classifier";
 import { buildModelDefinitions, buildModelsKey } from "./provider/models";
 import { streamDelegated, modelWithAuthBaseUrl } from "./stream";
 import { chainKeyForRoute, isRecordablePreStreamError } from "./failureMemory";
-import { ESCALATION_TOOL } from "./escalation";
 
 export {
   streamDelegated,
@@ -118,23 +117,12 @@ export const registerRouterProvider = (
           });
           actions.recordDebugDecision(decision);
           safeUpdateStatus(state, actions);
-          const isMultiTier = ROUTER_TIERS.filter((t) => (profile as RouterProfile)[t]).length > 1;
-          const shouldInject = pi.getThinkingLevel() === "off" && isMultiTier;
-          let effectiveContext = context;
-          if (
-            shouldInject &&
-            !(context.tools ?? []).some((t: { name: string }) => t.name === ESCALATION_TOOL.name)
-          )
-            effectiveContext = {
-              ...context,
-              tools: [...(context.tools ?? []), ESCALATION_TOOL as never],
-            };
           const res = await delegateToTierModels({
             registry: registry as ExtensionContext["modelRegistry"],
             profile: profile as RouterProfile,
             decision,
             routerModel: model,
-            context: effectiveContext,
+            context,
             options,
             state,
             withCommitMutex,
