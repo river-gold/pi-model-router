@@ -37,6 +37,8 @@ export interface RouterConfig {
 export interface RoutingDecision {
   profile: string;
   tier: RouterTier;
+  /** Tier of the turn before a cheap tool-loop downgrade; used to revert after non-cheap tools. */
+  baseTier?: RouterTier;
   targetProvider: string;
   targetModelId: string;
   targetLabel: string;

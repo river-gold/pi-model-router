@@ -2,11 +2,96 @@
 import { describe, it, expect } from "vitest";
 import { resolveRoutingDecision } from "../../src/provider/routingDecision";
 import type { RouterProfile } from "../../src/types";
+import type { Context, ToolResultMessage } from "@earendil-works/pi-ai";
 
 const baseContext = { messages: [{ role: "user", content: "hi", timestamp: 1 }] } as any;
 
+const toolResultMsg = (toolName: string): ToolResultMessage => ({
+  role: "toolResult",
+  toolCallId: "t1",
+  toolName,
+  content: [],
+  isError: false,
+  timestamp: 1,
+});
+
 describe("resolveRoutingDecision", () => {
-  it("preserves tool loop tier", () => {
+  it("downgrades to lowest tier for read/bash tool loop", () => {
+    const profile: RouterProfile = {
+      high: { models: ["openai/gpt"] },
+      low: { models: ["openai/gpt-cheap"] },
+    } as any;
+    const snap: any = { tier: "high", profile: "balanced" };
+    const context = {
+      messages: [{ role: "user", content: "hi", timestamp: 1 }, toolResultMsg("read")],
+    } as unknown as Context;
+    const d = resolveRoutingDecision({
+      profileName: "balanced",
+      profile,
+      context,
+      snapshotLastDecision: snap,
+      thinkingLevel: "high" as any,
+      isToolLoop: true,
+      singleTier: undefined,
+      validTierCount: 2,
+    });
+    expect(d.tier).toBe("low");
+    expect(d.reasoning).toContain("Cheap tool loop");
+    expect(d.baseTier).toBe("high");
+  });
+
+  it("keeps cheap override with mixed read/bash trailing results", () => {
+    const profile: RouterProfile = {
+      medium: { models: ["openai/gpt"] },
+      minimal: { models: ["openai/gpt-cheap"] },
+    } as any;
+    const snap: any = { tier: "medium", profile: "balanced" };
+    const context = {
+      messages: [
+        { role: "user", content: "hi", timestamp: 1 },
+        toolResultMsg("bash"),
+        toolResultMsg("read"),
+      ],
+    } as unknown as Context;
+    const d = resolveRoutingDecision({
+      profileName: "balanced",
+      profile,
+      context,
+      snapshotLastDecision: snap,
+      thinkingLevel: "off" as any,
+      isToolLoop: true,
+      singleTier: undefined,
+      validTierCount: 2,
+    });
+    expect(d.tier).toBe("minimal");
+    expect(d.baseTier).toBe("medium");
+  });
+
+  it("reverts to base tier after non-cheap tool result", () => {
+    const profile: RouterProfile = {
+      high: { models: ["openai/gpt"] },
+      low: { models: ["openai/gpt-cheap"] },
+    } as any;
+    const snap: any = { tier: "low", profile: "balanced", baseTier: "high" };
+    const context = {
+      messages: [{ role: "user", content: "hi", timestamp: 1 }, toolResultMsg("edit")],
+    } as unknown as Context;
+    const d = resolveRoutingDecision({
+      profileName: "balanced",
+      profile,
+      context,
+      snapshotLastDecision: snap,
+      thinkingLevel: "high" as any,
+      isToolLoop: true,
+      singleTier: undefined,
+      validTierCount: 2,
+    });
+    expect(d.tier).toBe("high");
+    expect(d.reasoning).toContain("Reverted to base high");
+    expect(d.baseTier).toBeUndefined();
+  });
+
+  it("preserves tool loop tier without cheap tools and no baseTier", () => {
     const profile: RouterProfile = { high: { models: ["openai/gpt"] } as any };
     const snap: any = { tier: "high", profile: "balanced" };
     const d = resolveRoutingDecision({

@@ -23,9 +23,11 @@ The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. 
 
 For every request sent to a `router/*` model, the following logic is executed:
 
-1. **Manual Effort Override**: If `pi.getThinkingLevel() !== 'off'`, map `minimal`→`minimal`, `low`→`low`, `medium`→`medium`, `high`→`high`, `xhigh`→`xhigh`, `max`→`max`, then `resolveAvailableTier()` to nearest configured tier.
-2. **LLM Classifier (Optional)**: If `thinkingLevel === 'off'` and `classifierModels` (or `low` tier fallback) is available, classify to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
-3. **Default**: If no classifier is configured or it fails, defaults to `medium` (with `resolveAvailableTier()` fallback).
+1. **Cheap Tool-Loop Downgrade**: If the trailing toolResult messages are all `read` or `bash`, the request is routed to the lowest configured tier of the profile (regardless of manual effort). The pre-downgrade tier is kept as `baseTier` and restored when a non-cheap tool result is processed.
+2. **Preserve During Tool Loop**: For other tool loops, the previous tier is preserved. With no previous decision, the default below applies.
+3. **Manual Effort Override**: If `pi.getThinkingLevel() !== 'off'`, map `minimal`→`minimal`, `low`→`low`, `medium`→`medium`, `high`→`high`, `xhigh`→`xhigh`, `max`→`max`, then `resolveAvailableTier()` to nearest configured tier.
+4. **LLM Classifier (Optional)**: If `thinkingLevel === 'off'` and `classifierModels` (or `low` tier fallback) is available, classify to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
+5. **Default**: If no classifier is configured or it fails, defaults to `medium` (with `resolveAvailableTier()` fallback).
 
 ## Module Architecture
 
