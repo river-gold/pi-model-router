@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildRoutingDecision,
   decideRouting,
-  isCheapToolLoop,
   resolveAvailableTier,
   thinkingToTier,
 } from "../src/routing";
@@ -145,37 +144,6 @@ describe("routing.ts", () => {
       const d = decideRouting(ctx, "p", highOnly, undefined);
       expect(d.tier).toBe("high");
       expect(d.reasoning).toContain("Resolved from medium to high");
-    });
-  });
-
-  describe("isCheapToolLoop", () => {
-    const tr = (toolName: string) => ({
-      role: "toolResult",
-      toolCallId: "t1",
-      toolName,
-      content: [],
-      isError: false,
-      timestamp: 1,
-    });
-    const user = { role: "user", content: "hi", timestamp: 1 };
-
-    it("returns true when trailing toolResults are read/bash", () => {
-      expect(isCheapToolLoop({ messages: [user, tr("read")] } as Context)).toBe(true);
-      expect(isCheapToolLoop({ messages: [user, tr("bash"), tr("read")] } as Context)).toBe(true);
-    });
-
-    it("returns false when any trailing toolResult is not cheap", () => {
-      expect(isCheapToolLoop({ messages: [user, tr("edit")] } as Context)).toBe(false);
-      expect(isCheapToolLoop({ messages: [user, tr("read"), tr("edit")] } as Context)).toBe(false);
-    });
-
-    it("returns false when there is no trailing toolResult", () => {
-      expect(isCheapToolLoop({ messages: [user] } as Context)).toBe(false);
-      expect(
-        isCheapToolLoop({
-          messages: [user, { role: "assistant", content: [], timestamp: 1 }],
-        } as Context),
-      ).toBe(false);
     });
   });
 });

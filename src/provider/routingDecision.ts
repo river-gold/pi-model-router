@@ -4,9 +4,7 @@ import type { RouterProfile, RoutingDecision, RouterTier } from "../types";
 import {
   buildRoutingDecision,
   decideRouting,
-  isCheapToolLoop,
   resolveAvailableTier,
-  resolveLowestTier,
   thinkingToTier,
 } from "../routing";
 
@@ -43,35 +41,13 @@ export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): Ro
   );
   const isSingleTier = validTierCount === 1 && singleTier !== undefined;
   if (isToolLoop && snapshotLastDecision) {
-    if (isCheapToolLoop(context)) {
-      const cheapTier = resolveLowestTier(profile);
-      const baseTier = snapshotLastDecision.baseTier ?? snapshotLastDecision.tier;
-      decision = buildRoutingDecision(
-        profileName,
-        profile,
-        cheapTier,
-        `Cheap tool loop (read/bash results) — downgraded to ${cheapTier} tier.`,
-        false,
-      );
-      decision.baseTier = baseTier;
-    } else if (snapshotLastDecision.baseTier) {
-      const baseTier = resolveAvailableTier(profile, snapshotLastDecision.baseTier);
-      decision = buildRoutingDecision(
-        profileName,
-        profile,
-        baseTier,
-        `Reverted to base ${baseTier} tier after non-cheap tool result.`,
-        false,
-      );
-    } else {
-      decision = buildRoutingDecision(
-        profileName,
-        profile,
-        snapshotLastDecision.tier,
-        `Preserved ${snapshotLastDecision.tier} tier during toolResult loop`,
-        false,
-      );
-    }
+    decision = buildRoutingDecision(
+      profileName,
+      profile,
+      snapshotLastDecision.tier,
+      `Preserved ${snapshotLastDecision.tier} tier during toolResult loop`,
+      false,
+    );
   }
   if (isSingleTier && !isToolLoop) {
     decision = buildRoutingDecision(

@@ -1,29 +1,7 @@
-import type { Context, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RouterTier, RouterProfile, RoutingDecision } from "./types";
 import { parseCanonicalModelRef, formatModelRef } from "./config";
-
-/** Tools whose results are processed by the lowest available tier. */
-export const CHEAP_TOOL_LOOP_TOOLS: ReadonlySet<string> = new Set(["read", "bash"]);
-
-export const resolveLowestTier = (profile: RouterProfile): RouterTier =>
-  resolveAvailableTier(profile, "minimal");
-
-/**
- * True when every trailing toolResult message (i.e. all tools of the last
- * assistant message) is a cheap tool (read/bash).
- */
-export const isCheapToolLoop = (context: Context): boolean => {
-  const messages = context.messages;
-  let hasToolResult = false;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i];
-    if (message.role !== "toolResult") break;
-    if (!CHEAP_TOOL_LOOP_TOOLS.has((message as ToolResultMessage).toolName)) return false;
-    hasToolResult = true;
-  }
-  return hasToolResult;
-};
 
 export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
   if (thinking === "max") return "max";
