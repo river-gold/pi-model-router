@@ -42,17 +42,11 @@ describe("failureMemory/isRecordable", () => {
         ["Routed model not found", true],
         ["No API key", true],
         ["Auth failed", true],
-        ["429", true],
-        ["rate limit exceeded", true],
-        ["RateLimit", true],
-        ["quota exceeded", true],
-        ["500 server error", true],
-        ["502 Bad Gateway", true],
-        ["server error occurred", true],
-        ["Model failed before sending content", true],
-        ["No delegated stream", true],
-        ["overloaded", true],
-        ["unavailable", true],
+        ["429", false],
+        ["rate limit exceeded", false],
+        ["503 overloaded", false],
+        ["Model failed before sending content", false],
+        ["No delegated stream", false],
         ["some random error", false],
         ["", false],
       ];
@@ -62,7 +56,7 @@ describe("failureMemory/isRecordable", () => {
     });
 
     it("covers all RECORDABLE_PATTERNS", () => {
-      expect(RECORDABLE_PATTERNS.length).toBe(12);
+      expect(RECORDABLE_PATTERNS.length).toBe(3);
       for (const p of RECORDABLE_PATTERNS) {
         // ensure pattern is RegExp
         expect(p instanceof RegExp).toBe(true);
@@ -94,18 +88,8 @@ describe("failureMemory/isRecordable", () => {
       expect(isRecordablePreStreamError(new Error("Routed model not found: x"))).toBe(true);
       expect(isRecordablePreStreamError(new Error("No API key for x"))).toBe(true);
       expect(isRecordablePreStreamError(new Error("Auth failed"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("429"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("rate limit"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("quota"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("500 Internal Server Error"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("503"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("server error"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("Model failed before sending content"))).toBe(
-        true,
-      );
-      expect(isRecordablePreStreamError(new Error("No delegated stream"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("overloaded"))).toBe(true);
-      expect(isRecordablePreStreamError(new Error("unavailable"))).toBe(true);
+      expect(isRecordablePreStreamError(new Error("429"))).toBe(false);
+      expect(isRecordablePreStreamError(new Error("503 overloaded"))).toBe(false);
     });
     it("false for non-recordable Error", () => {
       expect(isRecordablePreStreamError(new Error("some random error"))).toBe(false);

@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import type { RouterConfig, RoutingDecision } from "./types";
 import { profileNames } from "./config";
+import { clearRateLimitCooldowns } from "./failureMemory";
 import { formatModelRef, formatDecision } from "./ui";
 
 export const SUBCOMMAND_DETAILS = [
@@ -184,6 +185,7 @@ export const registerCommands = (
       return;
     }
     state.failedByChain.clear();
+    clearRateLimitCooldowns();
     ctx.ui.notify("Router session failures cleared (in-memory, chain-local).", "info");
   };
 

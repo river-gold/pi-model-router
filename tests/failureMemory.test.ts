@@ -15,7 +15,7 @@ describe("failureMemory", () => {
     expect(chainKeyForRoute("balanced", "high")).toBe("route:balanced:high");
     expect(CLASSIFIER_CHAIN_KEY).toBe("classifier");
   });
-  it("isRecordable true for 429/5xx/auth/notfound", () => {
+  it("isRecordable true for auth/notfound only", () => {
     expect(isRecordablePreStreamError(new Error("Routed model not found: openai/gpt-4"))).toBe(
       true,
     );
@@ -25,12 +25,12 @@ describe("failureMemory", () => {
     expect(
       isRecordablePreStreamError(new Error("Auth failed for routed model: openai/gpt-4: 401")),
     ).toBe(true);
-    expect(isRecordablePreStreamError(new Error("429 rate limit exceeded"))).toBe(true);
-    expect(isRecordablePreStreamError(new Error("503 Server error"))).toBe(true);
+    expect(isRecordablePreStreamError(new Error("429 rate limit exceeded"))).toBe(false);
+    expect(isRecordablePreStreamError(new Error("503 Server error"))).toBe(false);
     expect(isRecordablePreStreamError(new Error("Model failed before sending content."))).toBe(
-      true,
+      false,
     );
-    expect(isRecordablePreStreamError(new Error("No delegated stream available"))).toBe(true);
+    expect(isRecordablePreStreamError(new Error("No delegated stream available"))).toBe(false);
   });
   it("isRecordable false for aborted/stale/NON_RETRYABLE", () => {
     expect(isRecordablePreStreamError(new Error("aborted"))).toBe(false);

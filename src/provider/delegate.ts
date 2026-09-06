@@ -10,7 +10,12 @@ import {
 } from "../config";
 import { truncateContext } from "../context";
 import { modelWithAuthBaseUrl, streamDelegated } from "../stream";
-import { chainKeyForRoute, normalizeFailedRef, isRecordablePreStreamError } from "../failureMemory";
+import {
+  chainKeyForRoute,
+  failedRefsForChain,
+  normalizeFailedRef,
+  rememberPreStreamFailure,
+} from "../failureMemory";
 import type { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 export type DelegateParams = {
@@ -182,11 +187,15 @@ export const attemptSingleModel = async (
   } = params;
   const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
   const tryThinking = thinking ?? decision.thinking;
+  const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
+  const remember = (err: unknown): void => {
+    rememberPreStreamFailure(err, modelRef, recordRouteFailure, routeChainKey);
+  };
   if (shouldSkipRouterModel(provider)) return { status: "skip" };
   const targetModel = registry.find(provider, modelId);
   if (!targetModel) {
     const err = new Error(`Routed model not found: ${provider}/${modelId}`);
-    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    remember(err);
     return { status: "retry", error: err };
   }
   const auth = await registry.getApiKeyAndHeaders(targetModel);
@@ -196,7 +205,7 @@ export const attemptSingleModel = async (
       provider,
       modelId,
     );
-    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    remember(err);
     return { status: "retry", error: err };
   }
   if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
@@ -226,12 +235,12 @@ export const attemptSingleModel = async (
     );
   } catch (e) {
     const err = e as Error;
-    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    remember(err);
     return { status: "retry", error: err };
   }
   if (!delegatedStream) {
     const err = new Error("No delegated stream available");
-    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    remember(err);
     return { status: "retry", error: err };
   }
   const bufferedEvents: unknown[] = [];
@@ -276,11 +285,11 @@ export const attemptSingleModel = async (
       };
     }
     const err = new Error(collected.bufferedErrorMessage || "Model failed before sending content.");
-    if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+    remember(err);
     return { status: "retry", error: err };
   }
   const err = new Error("Model stream ended without terminal event.");
-  if (isRecordablePreStreamError(err)) recordRouteFailure(modelRef);
+  remember(err);
   return { status: "retry", error: err };
 };
 
@@ -296,7 +305,10 @@ export const runDelegateAttempt = async (
     filtered: modelsToTry,
     allFiltered,
     skipped: skippedDueToMemory,
-  } = filterByFailureMemory(initialModels, state.failedByChain.get(routeChainKey));
+  } = filterByFailureMemory(
+    initialModels,
+    failedRefsForChain(state.failedByChain.get(routeChainKey), routeChainKey),
+  );
   if (allFiltered) {
     throw new Error(
       `All models in ${curDecision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`,

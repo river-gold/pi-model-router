@@ -1,5 +1,5 @@
 /* oxlint-disable */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getInitialModelsToTry,
   filterByFailureMemory,
@@ -17,15 +17,11 @@ import {
 } from "../../src/provider/delegate";
 import type { RouterProfile, RoutingDecision } from "../../src/types";
 import { streamDelegated } from "../../src/stream";
-import { isRecordablePreStreamError } from "../../src/failureMemory";
+import { clearRateLimitCooldowns, liveRateLimitedRefs } from "../../src/failureMemory";
 
 vi.mock("../../src/stream", async () => {
   const actual = (await vi.importActual("../../src/stream")) as any;
   return { ...actual, streamDelegated: vi.fn(), modelWithAuthBaseUrl: actual.modelWithAuthBaseUrl };
-});
-vi.mock("../../src/failureMemory", async () => {
-  const actual = (await vi.importActual("../../src/failureMemory")) as any;
-  return { ...actual, isRecordablePreStreamError: vi.fn(actual.isRecordablePreStreamError) };
 });
 
 const profile = (over: Partial<RouterProfile> = {}): RouterProfile => ({
@@ -215,6 +211,7 @@ describe("delegate pure helpers", () => {
 
 describe("attemptSingleModel", () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => clearRateLimitCooldowns());
   const base = (over: any = {}) => ({
     registry: {
       find: vi.fn(() => ({ provider: "openai", id: "gpt-high", reasoning: false }) as any),
@@ -415,8 +412,7 @@ describe("attemptSingleModel", () => {
       "retry",
     );
   });
-  it("model not found not recordable", async () => {
-    vi.mocked(isRecordablePreStreamError).mockReturnValueOnce(false);
+  it("model not found records session failure", async () => {
     const rec = vi.fn();
     expect(
       (
@@ -428,7 +424,7 @@ describe("attemptSingleModel", () => {
         )
       ).status,
     ).toBe("retry");
-    expect(rec).not.toHaveBeenCalled();
+    expect(rec).toHaveBeenCalled();
   });
   it("auth ok without apiKey", async () => {
     const rec = vi.fn();
@@ -441,8 +437,7 @@ describe("attemptSingleModel", () => {
     expect((await attemptSingleModel("openai/gpt-high", 0, p as any, rec)).status).toBe("retry");
     expect(rec).toHaveBeenCalled();
   });
-  it("auth failure not recordable", async () => {
-    vi.mocked(isRecordablePreStreamError).mockReturnValueOnce(false);
+  it("auth failure records session failure", async () => {
     const rec = vi.fn();
     const p = base({
       registry: {
@@ -451,11 +446,10 @@ describe("attemptSingleModel", () => {
       } as any,
     });
     expect((await attemptSingleModel("openai/gpt-high", 0, p as any, rec)).status).toBe("retry");
-    expect(rec).not.toHaveBeenCalled();
+    expect(rec).toHaveBeenCalled();
   });
-  it("no delegated stream not recordable", async () => {
+  it("no delegated stream does not record session failure", async () => {
     vi.mocked(streamDelegated).mockImplementation(() => null as any);
-    vi.mocked(isRecordablePreStreamError).mockReturnValueOnce(false);
     const rec = vi.fn();
     expect((await attemptSingleModel("openai/gpt-high", 0, base() as any, rec)).status).toBe(
       "retry",
@@ -474,7 +468,26 @@ describe("attemptSingleModel", () => {
     expect(r.status).toBe("nonRetryable");
     expect(r.error?.message).toContain("Model failed after sending content.");
   });
-  it("gotError without content without message records", async () => {
+  it("gotError 429 cools down that model only", async () => {
+    vi.mocked(streamDelegated).mockImplementation(
+      () =>
+        (async function* () {
+          yield {
+            type: "error",
+            error: {
+              errorMessage:
+                '429: {"message":"limit resets at 2099-01-01T00:00:00.000Z.","type":"rate_limit_error","code":"RATE_LIMITED"}',
+            },
+          };
+        })() as any,
+    );
+    const rec = vi.fn();
+    const r = await attemptSingleModel("commandcode/m", 0, base() as any, rec);
+    expect(r.status).toBe("retry");
+    expect(rec).not.toHaveBeenCalled();
+    expect(liveRateLimitedRefs("route:balanced:high").has("commandcode/m")).toBe(true);
+  });
+  it("gotError without content without message does not record", async () => {
     vi.mocked(streamDelegated).mockImplementation(
       () =>
         (async function* () {
@@ -485,21 +498,20 @@ describe("attemptSingleModel", () => {
     const r = await attemptSingleModel("openai/gpt-high", 0, base() as any, rec);
     expect(r.status).toBe("retry");
     expect(r.error?.message).toBe("Model failed before sending content.");
-    expect(rec).toHaveBeenCalled();
+    expect(rec).not.toHaveBeenCalled();
   });
-  it("no terminal event recordable", async () => {
+  it("no terminal event does not record session failure", async () => {
     vi.mocked(streamDelegated).mockImplementation(
       () =>
         (async function* () {
           yield { type: "text_delta" };
         })() as any,
     );
-    vi.mocked(isRecordablePreStreamError).mockReturnValueOnce(true);
     const rec = vi.fn();
     expect((await attemptSingleModel("openai/gpt-high", 0, base() as any, rec)).status).toBe(
       "retry",
     );
-    expect(rec).toHaveBeenCalled();
+    expect(rec).not.toHaveBeenCalled();
   });
   it("fallback lastDecision same object", async () => {
     vi.mocked(streamDelegated).mockImplementation(
@@ -547,7 +559,7 @@ describe("attemptSingleModel", () => {
     expect(r.status).toBe("success");
     expect(s.lastDecision).toEqual({ profile: "other" });
   });
-  it("streamDelegated throw retries with failure recorded", async () => {
+  it("streamDelegated throw retries without recording transient errors", async () => {
     vi.mocked(streamDelegated).mockImplementation(() => {
       throw new Error("No delegated stream provider registered for openai");
     });
@@ -555,7 +567,7 @@ describe("attemptSingleModel", () => {
     const r = await attemptSingleModel("openai/gpt-high", 0, base() as any, rec);
     expect(r.status).toBe("retry");
     expect((r as { error: Error }).error.message).toContain("No delegated stream");
-    expect(rec).toHaveBeenCalledWith("openai/gpt-high");
+    expect(rec).not.toHaveBeenCalled();
   });
   it("streamDelegated non-recordable throw retries without record", async () => {
     vi.mocked(streamDelegated).mockImplementation(() => {
