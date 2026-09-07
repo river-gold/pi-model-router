@@ -10,7 +10,6 @@ export const SUBCOMMAND_DETAILS = [
   { name: "debug", desc: "Toggle or clear router debug history" },
   { name: "reload", desc: "Reload the model router configuration" },
   { name: "reset-failures", desc: "Clear session failure memory (chain-local, in-memory)" },
-  { name: "clear-failures", desc: "Alias for reset-failures" },
   { name: "help", desc: "Show usage help for subcommands" },
 ] as const;
 
@@ -25,7 +24,7 @@ const HELP_LINES = [
   "  status                           Show current status, profile, cost, and last decision.",
   "  debug <on|off|toggle|show|clear> Control routing debug logging to notifications and history.",
   "  reload                           Hot-reload the configuration JSON from .pi/model-router.json.",
-  "  reset-failures, clear-failures   Clear session failure memory (in-memory, chain-local).",
+  "  reset-failures                 Clear session failure memory (in-memory, chain-local).",
   "  help, ?                          Show this help message.",
 ];
 
@@ -218,7 +217,6 @@ export const registerCommands = (
           await handleStatus(subArgs, ctx);
           break;
         case "reset-failures":
-        case "clear-failures":
           await handleResetFailures(subArgs, ctx);
           break;
         case "help":

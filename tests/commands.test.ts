@@ -181,16 +181,13 @@ describe("commands", () => {
     await pi.get().handler("reload extra", c2);
     expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
   });
-  it("reset-failures and alias and error", async () => {
+  it("reset-failures and error", async () => {
     const pi = makePi();
     const s = state({ failedByChain: new Map([["a", new Set(["x"])]]) });
     const a = acts();
     registerCommands(pi as any, s as any, a as any);
     const c = ctx();
     await pi.get().handler("reset-failures", c);
-    expect(s.failedByChain.size).toBe(0);
-    s.failedByChain.set("b", new Set(["y"]));
-    await pi.get().handler("clear-failures", c);
     expect(s.failedByChain.size).toBe(0);
     const c2 = ctx();
     await pi.get().handler("reset-failures extra", c2);
