@@ -1,6 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterProfile, ClassifierConfig, RouterTier } from "../types";
+import type { RouterProfile, ClassifierConfig, RouterTier, TierGuides } from "../types";
 import { resolveEffectiveClassifier } from "../config";
 import { runClassifierWithFallbacksDetailed, type ClassifierAttempt } from "../classifier";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
@@ -10,7 +10,11 @@ export const runClassifierBranch = async (
   registry: ExtensionContext["modelRegistry"],
   profile: RouterProfile,
   state: {
-    currentConfig: { classifierModels?: ClassifierConfig[]; historySize?: number };
+    currentConfig: {
+      classifierModels?: ClassifierConfig[];
+      historySize?: number;
+      tierGuides?: TierGuides;
+    };
     failedByChain: Map<string, Set<string>>;
     lastExtensionContext: ExtensionContext | undefined;
   },
@@ -49,6 +53,7 @@ export const runClassifierBranch = async (
       }
     },
     failedSet,
+    state.currentConfig.tierGuides,
   );
   if (failedSet.size > 0) state.failedByChain.set(CLASSIFIER_CHAIN_KEY, failedSet);
   try {

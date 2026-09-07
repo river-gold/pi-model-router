@@ -3,22 +3,13 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterTier } from "./types";
 import { parseCanonicalModelRef, isRouterTier } from "./config";
+import { buildClassifierSystemPrompt } from "./config/tierGuides";
+import type { TierGuides } from "./types";
 import { getLastUserText, getHistoryPairsText } from "./context";
 import { logClassifierSync } from "./logger";
 import { modelWithAuthBaseUrl, streamDelegated } from "./stream";
 
-export const CLASSIFIER_SYSTEM_PROMPT = `You are a model router classifier. Your job is to categorize the user's latest request into one of six tiers: "minimal", "low", "medium", "high", "xhigh", or "max".
-
-Tiers:
-- minimal: Mechanical transforms with no judgment: format, typo, rename, indent, template fill, quote-from-context.
-- low: Cheap language/lookup work: summaries, changelogs, commit messages, quick explanations, small bounded transforms, simple read-only lookup.
-- medium: Execute a known plan: spec-following implementation, multi-file edits, focused debugging with known cause, tests/fixes, routine wiring.
-- high: Local design under uncertainty: module architecture, planning, tradeoff analysis, broad debugging, large refactors, codebase research.
-- xhigh: Cross-cutting or high-blast-radius work: migrations, ambiguous RCA, security-sensitive changes, multi-repo/system design, risky refactors.
-- max: Novel or irreversible work: greenfield strategy, adversarial audit, long-horizon research with conflicting sources, eval/algorithm invention.
-
-Do not answer the user's request. Do not use tools.
-Return ONLY one word: minimal|low|medium|high|xhigh|max. No other text.`;
+export const CLASSIFIER_SYSTEM_PROMPT = buildClassifierSystemPrompt();
 
 const OUTPUT_CONSTRAINT =
   "Classify the latest user message. Output ONLY one word: minimal|low|medium|high|xhigh|max. No other text.";
@@ -69,6 +60,7 @@ export const runClassifierWithFallbacksDetailed = async (
   signal?: AbortSignal,
   onAttempt?: (entry: { model: string; thinking?: ThinkingLevel; source?: string }) => void,
   failedSet?: Set<string>,
+  tierGuides?: TierGuides,
 ): Promise<{
   result?: { tier: RouterTier; reasoning: string };
   attempts: ClassifierAttempt[];
@@ -92,6 +84,7 @@ export const runClassifierWithFallbacksDetailed = async (
       historySize,
       entry.thinking,
       signal,
+      tierGuides,
     );
     if (outcome.result) {
       return {
@@ -161,11 +154,15 @@ const buildClassifierPromptBody = (context: Context, historySize: number): strin
   return `Latest user message:\n${promptText}`.trim();
 };
 
-const buildClassifierContext = (context: Context, historySize: number): Context => {
+const buildClassifierContext = (
+  context: Context,
+  historySize: number,
+  tierGuides?: TierGuides,
+): Context => {
   const body = buildClassifierPromptBody(context, historySize);
   return {
     ...context,
-    systemPrompt: CLASSIFIER_SYSTEM_PROMPT,
+    systemPrompt: buildClassifierSystemPrompt(tierGuides),
     tools: undefined,
     messages: [{ role: "user", content: `${OUTPUT_CONSTRAINT}\n\n${body}`, timestamp: Date.now() }],
   };
@@ -202,6 +199,7 @@ const runClassifierOutcome = async (
   historySize = 0,
   thinking?: ThinkingLevel,
   signal?: AbortSignal,
+  tierGuides?: TierGuides,
 ): Promise<ClassifierOutcome> => {
   try {
     const modelResolution = resolveClassifierModel(modelRegistry, classifierModelRef);
@@ -231,7 +229,7 @@ const runClassifierOutcome = async (
       return { skipSession: ClassifierSkip.SKIP, error: authResolution.error };
     }
 
-    const classifierContext = buildClassifierContext(context, historySize);
+    const classifierContext = buildClassifierContext(context, historySize, tierGuides);
     const reasoningOption = resolveReasoningOption(model as { reasoning?: unknown }, thinking);
 
     const stream = streamDelegated(modelRegistry, model, classifierContext, {

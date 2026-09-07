@@ -50,6 +50,10 @@ Copy the example config to one of:
 ```json
 {
   "classifierModels": ["google/gemini-flash-latest#high"],
+  "tierGuides": {
+    "low": "Quick, cheap answers: one-paragraph summaries, commit messages, tiny edits.",
+    "high": "Needs real design judgment: tradeoffs, planning, risky refactors in this repo."
+  },
   "profiles": {
     "auto": {
       "high": { "models": ["openai/gpt-5.4-pro#high"] },
@@ -83,12 +87,13 @@ Copy the example config to one of:
 
 ### Configuration Fields
 
-| Field                                                                   | Description                                                                                                                                                                                                                          |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `classifierModels` / `classifierModel`                                  | (Optional) Model(s) used to categorize intent (`provider/model#thinking`). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. |
-| `profiles`                                                              | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required).                                                                                               |
-| `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning.                                                                                          |
-| `historySize`                                                           | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0).                                                                                                                                                                                  |
+| Field                                                                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `classifierModels` / `classifierModel`                                  | (Optional) Model(s) used to categorize intent (`provider/model#thinking`). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto.                                                                                                                                                                                              |
+| `profiles`                                                              | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required).                                                                                                                                                                                                                                                                                            |
+| `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning.                                                                                                                                                                                                                                                                                       |
+| `tierGuides`                                                            | (Optional) Top-level map of tier name → classifier description (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`). Injected into the classifier system prompt in place of the built-in tier lines. Partial overrides keep built-in defaults; values are trimmed. Invalid tierGuides (non-object, unknown tier keys, non-string or empty/whitespace-only values) fail config load with an error. Hot-reloadable via `/router reload`. |
+| `historySize`                                                           | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0).                                                                                                                                                                                                                                                                                                                                                                               |
 
 ## Commands
 

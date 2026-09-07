@@ -3,12 +3,19 @@ import { DEFAULT_HISTORY_SIZE, MAX_HISTORY_SIZE } from "./constants";
 import { isObjectRecord } from "./guards";
 import { normalizeClassifierModels } from "./classifier";
 import { normalizeTierConfig } from "./tier";
+import { normalizeTierGuides } from "./tierGuides";
 
 export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   const warnings: string[] = [];
 
   {
-    const allowedKeys = new Set(["debug", "classifierModels", "historySize", "profiles"]);
+    const allowedKeys = new Set([
+      "debug",
+      "classifierModels",
+      "historySize",
+      "tierGuides",
+      "profiles",
+    ]);
     for (const key of Object.keys(raw as unknown as Record<string, unknown>)) {
       if (!allowedKeys.has(key)) {
         warnings.push(`Unknown config field "${key}" ignored.`);
@@ -79,11 +86,14 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     }
   }
 
+  const tierGuides = normalizeTierGuides((raw as unknown as Record<string, unknown>).tierGuides);
+
   return {
     config: {
       debug: typeof raw.debug === "boolean" ? raw.debug : false,
       classifierModels,
       historySize: historySize ?? DEFAULT_HISTORY_SIZE,
+      ...(tierGuides ? { tierGuides } : {}),
       profiles: normalizedProfiles,
     },
     warnings,

@@ -259,4 +259,26 @@ describe("runClassifierWithFallbacksDetailed", () => {
       ).result?.tier,
     ).toBe("low");
   });
+  it("given custom tierGuides then systemPrompt reflects override", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockReturnValue(
+      (async function* () {
+        yield { type: "text_delta", delta: "low" };
+      })() as never,
+    );
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "openai/gpt" }],
+      reg,
+      baseCtx,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      { low: "custom low guide" },
+    );
+    expect(res.result?.tier).toBe("low");
+    const sentContext = streamSimple.mock.calls[0][1] as Context;
+    expect(sentContext.systemPrompt).toContain("- low: custom low guide");
+    expect(sentContext.systemPrompt).toContain("- high: Local design under uncertainty");
+  });
 });

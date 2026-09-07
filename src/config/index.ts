@@ -9,6 +9,13 @@ export { stripJsonc, stripComments, stripTrailingCommas } from "./jsonc";
 export { parseCanonicalModelRef, formatModelRef } from "./modelRef";
 export { mergeTier, normalizeTierConfig } from "./tier";
 export {
+  TIER_GUIDE_ORDER,
+  DEFAULT_TIER_GUIDES,
+  normalizeTierGuides,
+  mergeTierGuides,
+  buildClassifierSystemPrompt,
+} from "./tierGuides";
+export {
   normalizeClassifierConfig,
   normalizeClassifierModels,
   resolveEffectiveClassifier,

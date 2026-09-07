@@ -1,6 +1,7 @@
 import type { RouterConfig, RouterProfile } from "../types";
 import { isObjectRecord } from "./guards";
 import { mergeTier } from "./tier";
+import { mergeTierGuides } from "./tierGuides";
 import type { ClassifierConfig } from "../types";
 
 export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>): RouterConfig => {
@@ -34,6 +35,7 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
       rawOverride.historySize !== undefined
         ? (rawOverride.historySize as number)
         : (rawBase.historySize as number),
+    tierGuides: mergeTierGuides(base.tierGuides, override.tierGuides),
     profiles: mergedProfiles,
   };
 };

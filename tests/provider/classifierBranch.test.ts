@@ -228,6 +228,31 @@ describe("runClassifierBranch", () => {
     expect(state.failedByChain.has(CLASSIFIER_CHAIN_KEY)).toBe(false);
   });
 
+  it("forwards tierGuides from currentConfig", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [{ model: "openai/gpt" }],
+      source: "global",
+    } as any);
+    vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
+      result: { tier: "low", reasoning: "r" },
+      attempts: [],
+    } as any);
+    const guides = { low: "custom low guide" };
+    const state: any = makeState({ currentConfig: { tierGuides: guides } });
+    await runClassifierBranch(
+      mockRegistry,
+      baseProfile,
+      state,
+      ctx,
+      undefined,
+      0,
+      new Set(),
+      "src",
+    );
+    const call = vi.mocked(runClassifierWithFallbacksDetailed).mock.calls[0];
+    expect(call[7]).toBe(guides);
+  });
+
   it("handles undefined lastExtensionContext", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],

@@ -27,10 +27,13 @@ export interface RouterProfile {
   classifierModels?: ClassifierConfig[];
 }
 
+export type TierGuides = Partial<Record<RouterTier, string>>;
+
 export interface RouterConfig {
   debug?: boolean;
   classifierModels?: ClassifierConfig[];
   historySize?: number;
+  tierGuides?: TierGuides;
   profiles: Record<string, RouterProfile>;
 }
 

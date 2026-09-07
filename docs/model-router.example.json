@@ -2,6 +2,10 @@
   "debug": false,
   "historySize": 0,
   "classifierModels": ["google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
+  "tierGuides": {
+    "low": "Quick, cheap answers: one-paragraph summaries, commit messages, tiny edits.",
+    "high": "Needs real design judgment: tradeoffs, planning, risky refactors in this repo."
+  },
   "profiles": {
     "auto": {
       "high": {

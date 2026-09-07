@@ -15,6 +15,8 @@ The router is organized into **Profiles** (e.g., `balanced`, `cheap`, `deep`, `g
 - **xhigh**: Cross-cutting or high-blast-radius work: migrations, ambiguous RCA, security-sensitive changes, multi-repo/system design, risky refactors. Classifier `xhigh` or manual `xhigh`.
 - **max**: Novel or irreversible work: greenfield strategy, adversarial audit, long-horizon research with conflicting sources, eval/algorithm invention. Classifier `max` or manual `max`.
 
+The built-in tier descriptions above are the classifier defaults; they can be overridden per tier via the top-level `tierGuides` config map (partial overrides keep the remaining defaults; invalid `tierGuides` fail config load with an error).
+
 ### 2. Custom Provider Implementation
 
 The extension uses `pi.registerProvider` to hook into the `pi` model lifecycle. This ensures that the selected model in the `pi` footer remains stable (e.g., `router/balanced`) while the underlying model changes transparently turn-by-turn via the `streamSimple` interception.
