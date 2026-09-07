@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildLogLine } from "../../src/logger/build";
 import type { ClassifierLogEntry } from "../../src/logger/types";
 
-describe("logger/build", () => {
+describe("logger/build 로그 라인 생성", () => {
   const base: ClassifierLogEntry = {
     timestamp: "2024-01-01T00:00:00Z",
     model: "openai/gpt-4o",
@@ -15,7 +15,7 @@ describe("logger/build", () => {
     error: "some error",
   };
 
-  it("builds with all fields", () => {
+  it("모든 필드로 로그 라인을 생성한다", () => {
     const line = buildLogLine(base);
     expect(line).toContain("model=openai/gpt-4o");
     expect(line).toContain("thinking=high");
@@ -26,7 +26,7 @@ describe("logger/build", () => {
     expect(line).toContain('fullText="hello world"');
   });
 
-  it("uses defaults for undefined optional fields", () => {
+  it("undefined 선택 필드는 기본값을 사용한다", () => {
     const entry: ClassifierLogEntry = {
       timestamp: "2024-01-01T00:00:00Z",
       model: "openai/gpt-4o",
@@ -42,7 +42,7 @@ describe("logger/build", () => {
     expect(line).toContain("success=false");
   });
 
-  it("handles empty strings vs undefined", () => {
+  it("빈 문자열과 undefined를 구분해 처리한다", () => {
     const entry: ClassifierLogEntry = {
       timestamp: "2024-01-01T00:00:00Z",
       model: "m",
@@ -61,7 +61,7 @@ describe("logger/build", () => {
     expect(line).toContain("error=");
   });
 
-  it("truncates fullText to 4000", () => {
+  it("fullText를 4000자로 자른다", () => {
     const long = "a".repeat(5000);
     const entry: ClassifierLogEntry = {
       timestamp: "t",
@@ -75,7 +75,7 @@ describe("logger/build", () => {
     expect(line).not.toContain("a".repeat(4001));
   });
 
-  it("exactly 4000 not truncated", () => {
+  it("정확히 4000자는 자르지 않는다", () => {
     const exact = "a".repeat(4000);
     const entry: ClassifierLogEntry = {
       timestamp: "t",
@@ -86,7 +86,7 @@ describe("logger/build", () => {
     expect(buildLogLine(entry)).toContain(exact);
   });
 
-  it("handles special characters in JSON", () => {
+  it("JSON의 특수 문자를 처리한다", () => {
     const entry: ClassifierLogEntry = {
       timestamp: "t",
       model: "m",

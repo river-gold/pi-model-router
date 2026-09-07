@@ -3,7 +3,7 @@ import { createReloadConfig } from "../../src/index/reload";
 import { createRouterState } from "../../src/state/create";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-describe("index/reload", () => {
+describe("index/reload 모듈", () => {
   const makeState = () => {
     const s = createRouterState();
     s.currentCwd = "/cwd";
@@ -26,7 +26,7 @@ describe("index/reload", () => {
     ...over,
   });
 
-  it("loads config and updates state", () => {
+  it("config를 로드하고 state를 업데이트한다", () => {
     const state = makeState();
     const pi = makePi();
     const deps = makeDeps();
@@ -65,7 +65,7 @@ describe("index/reload", () => {
     expect(() => updateStatusMock(ctx)).not.toThrow();
   });
 
-  it("preserveDebug true does not overwrite debugEnabled", () => {
+  it("preserveDebug가 true이면 debugEnabled를 덮어쓰지 않는다", () => {
     const state = makeState();
     state.debugEnabled = false;
     const pi = makePi();
@@ -79,7 +79,7 @@ describe("index/reload", () => {
     expect(state.debugEnabled).toBe(false);
   });
 
-  it("preserveDebug false overwrites", () => {
+  it("preserveDebug가 false이면 덮어쓴다", () => {
     const state = makeState();
     state.debugEnabled = false;
     const pi = makePi();
@@ -93,7 +93,7 @@ describe("index/reload", () => {
     expect(state.debugEnabled).toBe(true);
   });
 
-  it("with ctx calls updateStatus and notify warnings", () => {
+  it("ctx가 있으면 updateStatus를 호출하고 경고를 알림한다", () => {
     const state = makeState();
     const pi = makePi();
     const deps = makeDeps({
@@ -107,7 +107,7 @@ describe("index/reload", () => {
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("warn1"), "warning");
   });
 
-  it("with ctx no warnings does not notify", () => {
+  it("ctx가 있어도 경고가 없으면 알림하지 않는다", () => {
     const state = makeState();
     const pi = makePi();
     const deps = makeDeps({
@@ -120,7 +120,7 @@ describe("index/reload", () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it("without ctx does not call updateStatus", () => {
+  it("ctx가 없으면 updateStatus를 호출하지 않는다", () => {
     const state = makeState();
     const pi = makePi();
     const deps = makeDeps();
@@ -129,7 +129,7 @@ describe("index/reload", () => {
     expect(deps.updateStatus).not.toHaveBeenCalled();
   });
 
-  it("uses default deps when not provided", () => {
+  it("미지정 시 기본 deps를 사용한다", () => {
     const state = makeState();
     const pi = makePi();
     // This will call real loadRouterConfig which tries to read files, but we mock it via not providing deps? Actually default deps uses real functions, but we can just test that it doesn't throw

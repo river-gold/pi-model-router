@@ -7,23 +7,23 @@ import {
 } from "../../src/index/fallback";
 import { createRouterState } from "../../src/state/create";
 
-describe("index/fallback", () => {
-  describe("createSetModelInternally", () => {
-    it("success", async () => {
+describe("index/fallback 모듈", () => {
+  describe("createSetModelInternally 함수", () => {
+    it("성공한다", async () => {
       const state = createRouterState();
       const pi = { setModel: vi.fn().mockResolvedValue(true) } as any;
       const fn = createSetModelInternally(pi, state);
       expect(await fn({ provider: "openai", id: "gpt" } as any)).toBe(true);
       expect(state.isInternalModelSwitch).toBe(0);
     });
-    it("catch returns false", async () => {
+    it("예외 발생 시 false를 반환한다", async () => {
       const state = createRouterState();
       const pi = { setModel: vi.fn().mockRejectedValue(new Error("fail")) } as any;
       const fn = createSetModelInternally(pi, state);
       expect(await fn({} as any)).toBe(false);
       expect(state.isInternalModelSwitch).toBe(0);
     });
-    it("increments and decrements", async () => {
+    it("증가 후 감소한다", async () => {
       const state = createRouterState();
       let during = -1;
       const pi = {
@@ -39,15 +39,15 @@ describe("index/fallback", () => {
     });
   });
 
-  describe("createTryFallbackByRef", () => {
-    it("returns false for no slash", async () => {
+  describe("createTryFallbackByRef 함수", () => {
+    it("slash가 없으면 false를 반환한다", async () => {
       const state = createRouterState();
       const pi = { setModel: vi.fn() } as any;
       const setModel = vi.fn();
       const fn = createTryFallbackByRef(pi, state, setModel as any);
       expect(await fn({} as any, "noslash")).toBe(false);
     });
-    it("finds and sets", async () => {
+    it("찾아서 설정한다", async () => {
       const state = createRouterState();
       const pi = {} as any;
       const setModel = vi.fn().mockResolvedValue(true);
@@ -58,7 +58,7 @@ describe("index/fallback", () => {
       expect(await fn(ctx, "openai/gpt-4o")).toBe(true);
       expect(setModel).toHaveBeenCalled();
     });
-    it("find returns undefined -> false", async () => {
+    it("find가 undefined를 반환하면 false이다", async () => {
       const state = createRouterState();
       const pi = {} as any;
       const setModel = vi.fn();
@@ -66,7 +66,7 @@ describe("index/fallback", () => {
       const fn = createTryFallbackByRef(pi, state, setModel as any);
       expect(await fn(ctx, "openai/gpt")).toBe(false);
     });
-    it("find throws -> false", async () => {
+    it("find가 예외를 던지면 false이다", async () => {
       const state = createRouterState();
       const pi = {} as any;
       const setModel = vi.fn();
@@ -80,7 +80,7 @@ describe("index/fallback", () => {
       const fn = createTryFallbackByRef(pi, state, setModel as any);
       expect(await fn(ctx, "openai/gpt")).toBe(false);
     });
-    it("setModel returns false -> false", async () => {
+    it("setModel이 false를 반환하면 false이다", async () => {
       const state = createRouterState();
       const pi = {} as any;
       const setModel = vi.fn().mockResolvedValue(false);
@@ -90,8 +90,8 @@ describe("index/fallback", () => {
     });
   });
 
-  describe("createTryRestoreFallback", () => {
-    it("uses lastNonRouterModel first", async () => {
+  describe("createTryRestoreFallback 함수", () => {
+    it("lastNonRouterModel을 먼저 사용한다", async () => {
       const state = createRouterState();
       state.lastNonRouterModel = "openai/gpt";
       const tryFallbackByRef = vi.fn().mockResolvedValue(true);
@@ -99,7 +99,7 @@ describe("index/fallback", () => {
       expect(await fn({} as any)).toBe(true);
       expect(tryFallbackByRef).toHaveBeenCalledWith(expect.anything(), "openai/gpt");
     });
-    it("falls back to anyModel", async () => {
+    it("anyModel로 폴백한다", async () => {
       const state = createRouterState();
       state.lastNonRouterModel = undefined;
       const tryFallbackByRef = vi.fn().mockResolvedValue(true);
@@ -108,14 +108,14 @@ describe("index/fallback", () => {
       expect(await fn({} as any)).toBe(true);
       expect(tryFallbackByRef).toHaveBeenCalledWith(expect.anything(), "openai/gpt");
     });
-    it("anyModel returns undefined -> false", async () => {
+    it("anyModel이 undefined를 반환하면 false이다", async () => {
       const state = createRouterState();
       const tryFallbackByRef = vi.fn();
       const getAnyModel = vi.fn().mockReturnValue(undefined);
       const fn = createTryRestoreFallback(state, tryFallbackByRef as any, getAnyModel as any);
       expect(await fn({} as any)).toBe(false);
     });
-    it("tryFallbackByRef false then anyModel false", async () => {
+    it("tryFallbackByRef가 false이면 anyModel도 false이다", async () => {
       const state = createRouterState();
       state.lastNonRouterModel = "openai/gpt";
       const tryFallbackByRef = vi.fn().mockResolvedValue(false);
@@ -125,7 +125,7 @@ describe("index/fallback", () => {
       tryFallbackByRef.mockResolvedValueOnce(false).mockResolvedValueOnce(false);
       expect(await fn({} as any)).toBe(false);
     });
-    it("handles getAnyModel throw", async () => {
+    it("getAnyModel 예외를 처리한다", async () => {
       const state = createRouterState();
       const tryFallbackByRef = vi.fn();
       const getAnyModel = vi.fn().mockImplementation(() => {
@@ -136,21 +136,21 @@ describe("index/fallback", () => {
     });
   });
 
-  describe("createEnsureValidActiveRouterProfile", () => {
-    it("returns if not router provider", async () => {
+  describe("createEnsureValidActiveRouterProfile 함수", () => {
+    it("router provider가 아니면 반환한다", async () => {
       const state = createRouterState();
       const fn = createEnsureValidActiveRouterProfile(state, vi.fn() as any);
       const ctx = { model: { provider: "openai", id: "gpt" }, ui: { notify: vi.fn() } } as any;
       await fn(ctx);
       expect(ctx.ui.notify).not.toHaveBeenCalled();
     });
-    it("returns if no model", async () => {
+    it("model이 없으면 반환한다", async () => {
       const state = createRouterState();
       const fn = createEnsureValidActiveRouterProfile(state, vi.fn() as any);
       await fn({ ui: { notify: vi.fn() } } as any);
       // should return early, no notify
     });
-    it("valid profile", async () => {
+    it("유효한 profile이다", async () => {
       const state = createRouterState();
       state.currentConfig = { profiles: { balanced: {} } } as any;
       const fn = createEnsureValidActiveRouterProfile(state, vi.fn() as any);
@@ -159,7 +159,7 @@ describe("index/fallback", () => {
       expect(state.selectedProfile).toBe("balanced");
       expect(state.routerEnabled).toBe(true);
     });
-    it("invalid profile with fallback success", async () => {
+    it("유효하지 않은 profile은 폴백 성공 시 처리한다", async () => {
       const state = createRouterState();
       state.currentConfig = { profiles: {} } as any;
       const tryRestoreFallback = vi.fn().mockResolvedValue(true);
@@ -174,7 +174,7 @@ describe("index/fallback", () => {
         "warning",
       );
     });
-    it("invalid profile fallback fails", async () => {
+    it("유효하지 않은 profile은 폴백 실패 시 처리한다", async () => {
       const state = createRouterState();
       state.currentConfig = { profiles: {} } as any;
       const tryRestoreFallback = vi.fn().mockResolvedValue(false);

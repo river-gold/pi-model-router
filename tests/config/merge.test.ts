@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { mergeConfig } from "../../src/config/merge";
 import type { RouterConfig } from "../../src/types";
 
-describe("merge", () => {
-  describe("mergeConfig", () => {
-    it("merges new profile cheap", () => {
+describe("merge를 검증함", () => {
+  describe("mergeConfig 동작을 검증함", () => {
+    it("새 cheap profile을 병합함을 검증함", () => {
       const base: RouterConfig = {
         debug: false,
         profiles: { balanced: { medium: { models: ["openai/gpt-4o-mini"] } } },
@@ -18,7 +18,7 @@ describe("merge", () => {
       expect(merged.profiles.cheap.low?.models).toEqual(["openai/gpt-4o-mini"]);
       expect(merged.debug).toBe(true);
     });
-    it("merges overlapping profile tiers", () => {
+    it("겹치는 profile tier를 병합함을 검증함", () => {
       const base: RouterConfig = {
         profiles: {
           balanced: { medium: { models: ["openai/a"] }, low: { models: ["openai/low"] } },
@@ -34,7 +34,7 @@ describe("merge", () => {
       expect(merged.profiles.balanced.high?.models).toEqual(["openai/high"]);
       expect(merged.profiles.balanced.low?.models).toEqual(["openai/low"]);
     });
-    it("skips non-object profile", () => {
+    it("non-object profile을 건너뜀을 검증함", () => {
       const base: RouterConfig = { profiles: {} };
       const override = {
         profiles: { bad: "not-object" as unknown as any },
@@ -42,7 +42,7 @@ describe("merge", () => {
       const merged = mergeConfig(base, override);
       expect(merged.profiles.bad).toBeUndefined();
     });
-    it("classifierModels override", () => {
+    it("classifierModels를 override로 교체함을 검증함", () => {
       const base: RouterConfig = {
         profiles: {},
         classifierModels: [{ model: "openai/a" }],
@@ -53,7 +53,7 @@ describe("merge", () => {
       const merged = mergeConfig(base, override);
       expect(merged.classifierModels?.[0].model).toBe("openai/b");
     });
-    it("classifierModels keeps base if override undefined", () => {
+    it("override가 undefined면 classifierModels는 base를 유지함을 검증함", () => {
       const base: RouterConfig = {
         profiles: {},
         classifierModels: [{ model: "openai/a" }],
@@ -61,25 +61,25 @@ describe("merge", () => {
       const merged = mergeConfig(base, {});
       expect(merged.classifierModels?.[0].model).toBe("openai/a");
     });
-    it("historySize from override", () => {
+    it("historySize를 override에서 가져옴을 검증함", () => {
       const base: RouterConfig = { profiles: {}, historySize: 2 };
       const override = { historySize: 5 } as unknown as Partial<RouterConfig>;
       expect(mergeConfig(base, override).historySize).toBe(5);
     });
-    it("historySize keeps base if override undefined", () => {
+    it("override가 undefined면 historySize는 base를 유지함을 검증함", () => {
       const base: RouterConfig = { profiles: {}, historySize: 3 };
       expect(mergeConfig(base, {}).historySize).toBe(3);
     });
-    it("historySize override 0", () => {
+    it("historySize override 0을 처리함을 검증함", () => {
       const base: RouterConfig = { profiles: {}, historySize: 5 };
       const override = { historySize: 0 } as unknown as Partial<RouterConfig>;
       expect(mergeConfig(base, override).historySize).toBe(0);
     });
-    it("debug keeps base if override undefined", () => {
+    it("override가 undefined면 debug는 base를 유지함을 검증함", () => {
       const base: RouterConfig = { profiles: {}, debug: true };
       expect(mergeConfig(base, {}).debug).toBe(true);
     });
-    it("profile classifierModels merging", () => {
+    it("profile classifierModels를 병합함을 검증함", () => {
       const base: RouterConfig = {
         profiles: {
           p: { medium: { models: ["openai/a"] }, classifierModels: [{ model: "openai/c1" }] },
@@ -91,7 +91,7 @@ describe("merge", () => {
       const merged = mergeConfig(base, override);
       expect(merged.profiles.p.classifierModels?.[0].model).toBe("openai/c2");
     });
-    it("profile classifierModels keeps existing if next undefined", () => {
+    it("next가 undefined면 profile classifierModels는 기존 값을 유지함을 검증함", () => {
       const base: RouterConfig = {
         profiles: {
           p: { medium: { models: ["openai/a"] }, classifierModels: [{ model: "openai/c1" }] },
@@ -103,7 +103,7 @@ describe("merge", () => {
       const merged = mergeConfig(base, override);
       expect(merged.profiles.p.classifierModels?.[0].model).toBe("openai/c1");
     });
-    it("merges max, xhigh, minimal too", () => {
+    it("max, xhigh, minimal도 병합함을 검증함", () => {
       const base: RouterConfig = {
         profiles: { p: { max: { models: ["openai/max"] } } },
       };

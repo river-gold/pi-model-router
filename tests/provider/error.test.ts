@@ -15,9 +15,9 @@ const makeStream = () => {
   return { push, end } as unknown as { push: (e: unknown) => void; end: () => void };
 };
 
-describe("provider/error", () => {
-  describe("createErrorMessage", () => {
-    it("creates with message and timestamp", () => {
+describe("provider/error 에러 처리", () => {
+  describe("createErrorMessage 에러 메시지 생성", () => {
+    it("message와 timestamp로 생성", () => {
       const m = makeModel();
       const msg = createErrorMessage(m, "fail");
       expect(msg.errorMessage).toBe("fail");
@@ -28,16 +28,16 @@ describe("provider/error", () => {
     });
   });
 
-  describe("normalizeDelegateError", () => {
-    it("returns same Error", () => {
+  describe("normalizeDelegateError 위임 에러 정규화", () => {
+    it("같은 Error 반환", () => {
       const e = new Error("orig");
       expect(normalizeDelegateError(e)).toBe(e);
     });
-    it("wraps string", () => {
+    it("string 감싸기", () => {
       const e = normalizeDelegateError("string error");
       expect(e.message).toBe("string error");
     });
-    it("wraps number and other", () => {
+    it("number와 기타 값 감싸기", () => {
       expect(normalizeDelegateError(123).message).toBe(
         "Failed to delegate to any model in the chain.",
       );
@@ -53,8 +53,8 @@ describe("provider/error", () => {
     });
   });
 
-  describe("pushStreamError", () => {
-    it("aborted", () => {
+  describe("pushStreamError 스트림 에러 전송", () => {
+    it("aborted 처리", () => {
       const s = makeStream();
       const { push, end } = s;
       pushStreamError(s, makeModel(), new Error("aborted"));
@@ -68,7 +68,7 @@ describe("provider/error", () => {
       expect(end).toHaveBeenCalled();
     });
 
-    it("stale", () => {
+    it("stale 처리", () => {
       const s = makeStream();
       const { push, end } = s;
       pushStreamError(s, makeModel(), new Error("stale context"));
@@ -82,14 +82,14 @@ describe("provider/error", () => {
       expect(end).toHaveBeenCalled();
     });
 
-    it("stale includes", () => {
+    it("stale 포함 처리", () => {
       const s = makeStream();
       const { push } = s;
       pushStreamError(s, makeModel(), new Error("something stale inside"));
       expect(push).toHaveBeenCalledWith(expect.objectContaining({ type: "done" }));
     });
 
-    it("other Error", () => {
+    it("기타 Error 처리", () => {
       const s = makeStream();
       const { push, end } = s;
       pushStreamError(s, makeModel(), new Error("other fail"));
@@ -103,7 +103,7 @@ describe("provider/error", () => {
       expect(end).toHaveBeenCalled();
     });
 
-    it("non-Error string", () => {
+    it("non-Error string 처리", () => {
       const s = makeStream();
       const { push } = s;
       pushStreamError(s, makeModel(), "string error");
@@ -115,7 +115,7 @@ describe("provider/error", () => {
       );
     });
 
-    it("non-Error number", () => {
+    it("non-Error number 처리", () => {
       const s = makeStream();
       const { push } = s;
       pushStreamError(s, makeModel(), 123);
@@ -124,7 +124,7 @@ describe("provider/error", () => {
       );
     });
 
-    it("non-Error undefined", () => {
+    it("non-Error undefined 처리", () => {
       const s = makeStream();
       const { push } = s;
       pushStreamError(s, makeModel(), undefined);

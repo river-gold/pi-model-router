@@ -9,10 +9,10 @@ vi.mock("../../src/provider", async () => {
 import { createRouterActions } from "../../src/index/actions";
 import { registerRouterProvider } from "../../src/provider";
 
-describe("index/actions", () => {
+describe("index/actions 모듈", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("creates all actions and covers getters/setters via register", async () => {
+  it("register 경유로 모든 actions를 생성하고 getters/setters를 커버한다", async () => {
     const state = createRouterState();
     state.currentConfig = { profiles: { balanced: { medium: { models: ["openai/a"] } } } } as any;
     state.lastRegisteredModels = "old";
@@ -67,7 +67,7 @@ describe("index/actions", () => {
     expect(() => updateStatusMock(ctx)).not.toThrow();
   });
 
-  it("handles persistState dedup", async () => {
+  it("persistState 중복 제거를 처리한다", async () => {
     const state = createRouterState();
     const pi = { appendEntry: vi.fn(), setModel: vi.fn() } as any;
     const { createRouterActions: cr } = await import("../../src/index/actions");
@@ -78,7 +78,7 @@ describe("index/actions", () => {
     expect(pi.appendEntry.mock.calls.length).toBe(first);
   });
 
-  it("handles tryFallbackByRef and tryRestoreFallback", async () => {
+  it("tryFallbackByRef와 tryRestoreFallback을 처리한다", async () => {
     const state = createRouterState();
     const pi = { appendEntry: vi.fn(), setModel: vi.fn().mockResolvedValue(true) } as any;
     const actions = createRouterActions(pi, state);
@@ -91,7 +91,7 @@ describe("index/actions", () => {
     expect(await actions.tryRestoreFallback(ctx)).toBe(true);
   });
 
-  it("handles ensureValidActiveRouterProfile", async () => {
+  it("ensureValidActiveRouterProfile을 처리한다", async () => {
     const state = createRouterState();
     state.currentConfig = { profiles: { balanced: {} } } as any;
     const pi = { appendEntry: vi.fn(), setModel: vi.fn().mockResolvedValue(true) } as any;

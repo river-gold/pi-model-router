@@ -10,19 +10,19 @@ import {
   rememberPreStreamFailure,
 } from "../../src/failureMemory";
 
-describe("failureMemory/cooldown", () => {
+describe("failureMemory/cooldown 쿨다운 관리", () => {
   afterEach(() => {
     clearRateLimitCooldowns();
   });
 
-  it("stringifies errors", () => {
+  it("에러를 문자열로 변환한다", () => {
     expect(errorText("raw")).toBe("raw");
     expect(errorText(new Error("boom"))).toBe("boom");
     expect(errorText({ message: "obj" })).toBe('{"message":"obj"}');
     expect(errorText(7)).toBe("7");
   });
 
-  it("cools down only rate-limit errors", () => {
+  it("rate-limit 에러만 쿨다운한다", () => {
     const now = Date.parse("2026-09-06T13:00:00.000Z");
     expect(failureCooldownUntil("503 overloaded", now)).toBeNull();
     expect(failureCooldownUntil(new Error("aborted"), now)).toBeNull();
@@ -38,7 +38,7 @@ describe("failureMemory/cooldown", () => {
     ).toBeNull();
   });
 
-  it("skips only the rate-limited ref until expiry", () => {
+  it("만료까지 rate-limit된 ref만 제외한다", () => {
     const now = 1_000;
     recordRateLimitCooldown("route:p:high", " commandcode/m ", now + 10);
     recordRateLimitCooldown("route:p:high", "commandcode/m", now + 5);
@@ -47,7 +47,7 @@ describe("failureMemory/cooldown", () => {
     expect(liveRateLimitedRefs("route:p:high", now + 10).size).toBe(0);
   });
 
-  it("merges session failures with live cooldowns", () => {
+  it("세션 실패와 실시간 쿨다운을 병합한다", () => {
     expect(failedRefsForChain(undefined, "c")).toBeUndefined();
     expect(failedRefsForChain(new Set(), "c")).toBeUndefined();
     expect([...failedRefsForChain(new Set(["a"]), "none")!]).toEqual(["a"]);
@@ -56,7 +56,7 @@ describe("failureMemory/cooldown", () => {
     expect([...failedRefsForChain(new Set(["a"]), "c")!].sort()).toEqual(["a", "b"]);
   });
 
-  it("remembers 429 as cooldown and auth as session failure", () => {
+  it("429는 쿨다운으로, auth 실패는 세션 실패로 기억한다", () => {
     const rec = vi.fn();
     rememberPreStreamFailure(new Error("503 overloaded"), "opencode-go/m", rec, "c");
     expect(rec).not.toHaveBeenCalled();

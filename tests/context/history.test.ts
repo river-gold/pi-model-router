@@ -20,46 +20,46 @@ const toolResult = (content: string): Message =>
     isError: false,
   }) as unknown as Message;
 
-describe("history", () => {
-  describe("collectUserIndices", () => {
-    it("empty", () => expect(collectUserIndices([])).toEqual([]));
-    it("collects", () =>
+describe("history 히스토리 조회", () => {
+  describe("collectUserIndices user 인덱스 수집", () => {
+    it("빈 배열은 빈 배열을 반환한다", () => expect(collectUserIndices([])).toEqual([]));
+    it("user 인덱스를 수집한다", () =>
       expect(
         collectUserIndices([msg("user", "a"), msg("assistant", "b"), msg("user", "c")]),
       ).toEqual([0, 2]));
-    it("no user", () =>
+    it("user가 없으면 빈 배열을 반환한다", () =>
       expect(collectUserIndices([msg("assistant", "a"), toolResult("t")])).toEqual([]));
   });
 
-  describe("resolveHistoryUserIndices", () => {
-    it("empty", () => expect(resolveHistoryUserIndices([], 2)).toEqual([]));
-    it("single user -> empty (excludes last)", () =>
+  describe("resolveHistoryUserIndices 히스토리 user 인덱스 결정", () => {
+    it("빈 배열은 빈 배열을 반환한다", () => expect(resolveHistoryUserIndices([], 2)).toEqual([]));
+    it("user가 하나면 마지막을 제외해 빈 배열을 반환한다", () =>
       expect(resolveHistoryUserIndices([0], 1)).toEqual([]));
-    it("pairCount 1", () => expect(resolveHistoryUserIndices([0, 1, 2], 1)).toEqual([1]));
-    it("pairCount 2", () => expect(resolveHistoryUserIndices([0, 1, 2], 2)).toEqual([0, 1]));
-    it("pairCount larger than available", () =>
+    it("pairCount 1개를 반환한다", () => expect(resolveHistoryUserIndices([0, 1, 2], 1)).toEqual([1]));
+    it("pairCount 2개를 반환한다", () => expect(resolveHistoryUserIndices([0, 1, 2], 2)).toEqual([0, 1]));
+    it("pairCount가 가용 수보다 크면 전부를 반환한다", () =>
       expect(resolveHistoryUserIndices([0, 1, 2], 10)).toEqual([0, 1]));
-    it("pairCount exact", () => expect(resolveHistoryUserIndices([0, 1, 2, 3], 2)).toEqual([1, 2]));
+    it("pairCount가 정확히 맞으면 해당 구간을 반환한다", () => expect(resolveHistoryUserIndices([0, 1, 2, 3], 2)).toEqual([1, 2]));
   });
 
-  describe("isAssistantOrToolResult", () => {
-    it("assistant true", () => expect(isAssistantOrToolResult("assistant")).toBe(true));
-    it("toolResult true", () => expect(isAssistantOrToolResult("toolResult")).toBe(true));
-    it("user false", () => expect(isAssistantOrToolResult("user")).toBe(false));
-    it("system false", () => expect(isAssistantOrToolResult("system")).toBe(false));
-    it("toolCall false", () => expect(isAssistantOrToolResult("toolCall")).toBe(false));
+  describe("isAssistantOrToolResult assistant·toolResult 판별", () => {
+    it("assistant는 true를 반환한다", () => expect(isAssistantOrToolResult("assistant")).toBe(true));
+    it("toolResult는 true를 반환한다", () => expect(isAssistantOrToolResult("toolResult")).toBe(true));
+    it("user는 false를 반환한다", () => expect(isAssistantOrToolResult("user")).toBe(false));
+    it("system은 false를 반환한다", () => expect(isAssistantOrToolResult("system")).toBe(false));
+    it("toolCall은 false를 반환한다", () => expect(isAssistantOrToolResult("toolCall")).toBe(false));
   });
 
-  describe("getNextUserIdx", () => {
-    it("pos not last -> next user", () => expect(getNextUserIdx([0, 5, 10], 0, 20)).toBe(5));
-    it("pos middle -> next", () => expect(getNextUserIdx([0, 5, 10], 1, 20)).toBe(10));
-    it("pos last -> messagesLength", () => expect(getNextUserIdx([0, 5, 10], 2, 20)).toBe(20));
-    it("pos last with different length", () => expect(getNextUserIdx([0], 0, 5)).toBe(5));
+  describe("getNextUserIdx 다음 user 인덱스 조회", () => {
+    it("마지막이 아니면 다음 user를 반환한다", () => expect(getNextUserIdx([0, 5, 10], 0, 20)).toBe(5));
+    it("중간 위치에서 다음 user를 반환한다", () => expect(getNextUserIdx([0, 5, 10], 1, 20)).toBe(10));
+    it("마지막 위치면 messagesLength를 반환한다", () => expect(getNextUserIdx([0, 5, 10], 2, 20)).toBe(20));
+    it("길이가 달라도 마지막 위치면 messagesLength를 반환한다", () => expect(getNextUserIdx([0], 0, 5)).toBe(5));
   });
 
-  describe("buildUserPosMap", () => {
-    it("empty", () => expect(buildUserPosMap([]).size).toBe(0));
-    it("maps", () => {
+  describe("buildUserPosMap user 위치 맵 생성", () => {
+    it("빈 맵은 크기가 0이다", () => expect(buildUserPosMap([]).size).toBe(0));
+    it("위치를 순서대로 매핑한다", () => {
       const m = buildUserPosMap([5, 10, 15]);
       expect(m.get(5)).toBe(0);
       expect(m.get(10)).toBe(1);
@@ -67,12 +67,12 @@ describe("history", () => {
     });
   });
 
-  describe("findFinalTextBetween", () => {
-    it("finds assistant", () => {
+  describe("findFinalTextBetween 구간 최종 텍스트 조회", () => {
+    it("assistant 응답을 찾는다", () => {
       const messages = [msg("user", "u"), msg("assistant", "a"), msg("user", "next")];
       expect(findFinalTextBetween(messages, 0, 2)).toBe("a");
     });
-    it("prefers last assistant/toolResult", () => {
+    it("마지막 assistant·toolResult를 우선한다", () => {
       const messages = [
         msg("user", "u"),
         msg("assistant", "a1"),
@@ -81,7 +81,7 @@ describe("history", () => {
       ];
       expect(findFinalTextBetween(messages, 0, 3)).toBe("t1");
     });
-    it("skips empty", () => {
+    it("빈 응답을 건너뛴다", () => {
       const messages = [
         msg("user", "u"),
         msg("assistant", "   "),
@@ -90,22 +90,22 @@ describe("history", () => {
       ];
       expect(findFinalTextBetween(messages, 0, 3)).toBe("a");
     });
-    it("no assistant/toolResult -> empty", () => {
+    it("assistant·toolResult가 없으면 빈 문자열을 반환한다", () => {
       const messages = [msg("user", "u"), msg("user", "next2")];
       expect(findFinalTextBetween(messages, 0, 1)).toBe("");
     });
-    it("only user between -> empty", () => {
+    it("user만 있으면 빈 문자열을 반환한다", () => {
       expect(findFinalTextBetween([msg("user", "u"), msg("user", "n")], 0, 1)).toBe("");
     });
-    it("ignores assistant with empty text", () => {
+    it("빈 텍스트의 assistant를 무시한다", () => {
       const messages = [msg("user", "u"), msg("assistant", ""), msg("user", "n")];
       expect(findFinalTextBetween(messages, 0, 2)).toBe("");
     });
-    it("finds toolResult", () => {
+    it("toolResult를 찾는다", () => {
       const messages = [msg("user", "u"), toolResult("out"), msg("user", "n")];
       expect(findFinalTextBetween(messages, 0, 2)).toBe("out");
     });
-    it("skips non-assistant/toolResult", () => {
+    it("assistant·toolResult가 아닌 메시지를 건너뛴다", () => {
       const messages = [
         msg("user", "u"),
         msg("system", "sys") as unknown as Message,
@@ -114,7 +114,7 @@ describe("history", () => {
       ];
       expect(findFinalTextBetween(messages, 0, 3)).toBe("a");
     });
-    it("all non-assistant -> empty", () => {
+    it("assistant가 전혀 없으면 빈 문자열을 반환한다", () => {
       const messages = [
         msg("user", "u"),
         msg("system", "sys") as unknown as Message,
@@ -125,42 +125,42 @@ describe("history", () => {
     });
   });
 
-  describe("getHistoryPairsText", () => {
-    it("pairCount 0 -> empty", () =>
+  describe("getHistoryPairsText 히스토리 쌍 텍스트 조회", () => {
+    it("pairCount 0이면 빈 문자열을 반환한다", () =>
       expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, 0)).toBe(
         "",
       ));
-    it("pairCount negative -> empty", () =>
+    it("pairCount가 음수면 빈 문자열을 반환한다", () =>
       expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, -1)).toBe(
         "",
       ));
-    it("no history (single user) -> empty", () =>
+    it("히스토리가 없으면(user 1개) 빈 문자열을 반환한다", () =>
       expect(
         getHistoryPairsText({ messages: [msg("user", "hello")] } as unknown as Context, 1),
       ).toBe(""));
-    it("no user at all -> empty", () =>
+    it("user가 전혀 없으면 빈 문자열을 반환한다", () =>
       expect(
         getHistoryPairsText({ messages: [msg("assistant", "a")] } as unknown as Context, 1),
       ).toBe(""));
-    it("user+assistant pair", () => {
+    it("user·assistant 쌍을 반환한다", () => {
       const ctx = {
         messages: [msg("user", "u1"), msg("assistant", "a1"), msg("user", "current")],
       } as unknown as Context;
       expect(getHistoryPairsText(ctx, 1)).toBe("u1\na1");
     });
-    it("pair without finalText -> only user", () => {
+    it("finalText가 없으면 user만 반환한다", () => {
       const ctx = {
         messages: [msg("user", "u1"), msg("user", "current")],
       } as unknown as Context;
       expect(getHistoryPairsText(ctx, 1)).toBe("u1");
     });
-    it("skips empty userText", () => {
+    it("빈 userText를 건너뛴다", () => {
       const ctx = {
         messages: [msg("user", "   "), msg("assistant", "a1"), msg("user", "current")],
       } as unknown as Context;
       expect(getHistoryPairsText(ctx, 1)).toBe("");
     });
-    it("skips empty userText but keeps next", () => {
+    it("빈 userText를 건너뛰고 다음 쌍을 유지한다", () => {
       const ctx = {
         messages: [
           msg("user", "   "),
@@ -172,7 +172,7 @@ describe("history", () => {
       } as unknown as Context;
       expect(getHistoryPairsText(ctx, 2)).toBe("u1\na1");
     });
-    it("multiple pairs joined", () => {
+    it("여러 쌍을 구분자로 결합한다", () => {
       const ctx = {
         messages: [
           msg("user", "u1"),
@@ -184,19 +184,19 @@ describe("history", () => {
       } as unknown as Context;
       expect(getHistoryPairsText(ctx, 2)).toBe("u1\na1\n---\nu2\na2");
     });
-    it("picks toolResult as final", () => {
+    it("toolResult를 final로 선택한다", () => {
       const ctx = {
         messages: [msg("user", "u1"), toolResult("out"), msg("user", "current")],
       } as unknown as Context;
       expect(getHistoryPairsText(ctx, 1)).toBe("u1\nout");
     });
-    it("pairCount larger than history", () => {
+    it("pairCount가 히스토리보다 크면 전부를 반환한다", () => {
       const ctx = {
         messages: [msg("user", "u1"), msg("assistant", "a1"), msg("user", "current")],
       } as unknown as Context;
       expect(getHistoryPairsText(ctx, 10)).toBe("u1\na1");
     });
-    it("history with only user before current, no assistant", () => {
+    it("assistant 없이 user만 있으면 user들만 반환한다", () => {
       const ctx = {
         messages: [msg("user", "u1"), msg("user", "u2"), msg("user", "current")],
       } as unknown as Context;

@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createPersistState, createRecordDebugDecision } from "../../src/index/persist";
 import { createRouterState } from "../../src/state/create";
 
-describe("index/persist", () => {
-  describe("createRecordDebugDecision", () => {
-    it("appends and slices to MAX_DEBUG_HISTORY", () => {
+describe("index/persist 모듈", () => {
+  describe("createRecordDebugDecision 함수", () => {
+    it("추가하고 MAX_DEBUG_HISTORY까지 잘라낸다", () => {
       const state = createRouterState();
       state.debugHistory = Array.from(
         { length: 20 },
@@ -16,7 +16,7 @@ describe("index/persist", () => {
       expect(state.debugHistory[state.debugHistory.length - 1].timestamp).toBe(999);
     });
 
-    it("appends single", () => {
+    it("단일 항목을 추가한다", () => {
       const state = createRouterState();
       const fn = createRecordDebugDecision(state);
       const d = { profile: "p", tier: "high", reasoning: "r", timestamp: 1 } as any;
@@ -25,8 +25,8 @@ describe("index/persist", () => {
     });
   });
 
-  describe("createPersistState", () => {
-    it("persists and updates snapshot", () => {
+  describe("createPersistState 함수", () => {
+    it("저장하고 스냅샷을 업데이트한다", () => {
       const state = createRouterState();
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
@@ -40,7 +40,7 @@ describe("index/persist", () => {
       expect(state.lastPersistedSnapshot).toBeDefined();
     });
 
-    it("dedupes identical snapshot", () => {
+    it("동일한 스냅샷은 중복 제거한다", () => {
       const state = createRouterState();
       const pi = { appendEntry: vi.fn() } as any;
       const fn = createPersistState(pi, state);
@@ -50,7 +50,7 @@ describe("index/persist", () => {
       expect(pi.appendEntry.mock.calls.length).toBe(calls);
     });
 
-    it("handles appendEntry throw", () => {
+    it("appendEntry 예외를 처리한다", () => {
       const state = createRouterState();
       const pi = {
         appendEntry: vi.fn().mockImplementation(() => {
@@ -61,7 +61,7 @@ describe("index/persist", () => {
       expect(() => fn()).not.toThrow();
     });
 
-    it("handles lastDecision and debugHistory with timestamp 0", () => {
+    it("timestamp 0인 lastDecision과 debugHistory를 처리한다", () => {
       const state = createRouterState();
       const decision = {
         profile: "balanced",
@@ -83,7 +83,7 @@ describe("index/persist", () => {
       expect(snapshot.debugHistory[0].timestamp).toBe(0);
     });
 
-    it("handles undefined lastDecision", () => {
+    it("lastDecision이 undefined인 경우를 처리한다", () => {
       const state = createRouterState();
       state.lastDecision = undefined;
       state.debugHistory = [];

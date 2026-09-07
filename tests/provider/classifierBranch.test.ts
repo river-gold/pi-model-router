@@ -30,10 +30,10 @@ const makeState = (over: any = {}) => ({
 
 const ctx = { messages: [{ role: "user", content: "hi", timestamp: 1 }] } as any;
 
-describe("runClassifierBranch", () => {
+describe("runClassifierBranch 분류 브랜치 실행", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("throws when no effectiveClassifiers", async () => {
+  it("effectiveClassifiers가 없으면 throw", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: undefined,
       source: "none",
@@ -52,7 +52,7 @@ describe("runClassifierBranch", () => {
     ).rejects.toThrow("No classifier available");
   });
 
-  it("throws when signal aborted", async () => {
+  it("signal이 aborted면 throw", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -72,7 +72,7 @@ describe("runClassifierBranch", () => {
     ).rejects.toThrow("aborted");
   });
 
-  it("success with result and persists failedSet", async () => {
+  it("result 성공 시 failedSet 저장", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt", source: "global" }],
       source: "global",
@@ -106,7 +106,7 @@ describe("runClassifierBranch", () => {
     expect(ui.setWorkingMessage).toHaveBeenCalledWith(undefined);
   });
 
-  it("success with entry.source fallback and no thinking", async () => {
+  it("entry.source fallback으로 성공하고 thinking이 없을 때 처리", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -134,7 +134,7 @@ describe("runClassifierBranch", () => {
     expect(ui.setWorkingMessage).toHaveBeenCalledWith(expect.stringContaining("fallbackSrc"));
   });
 
-  it("stale UI catch on setWorkingMessage", async () => {
+  it("setWorkingMessage의 stale UI 예외 처리", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -167,7 +167,7 @@ describe("runClassifierBranch", () => {
     // second setWorkingMessage(undefined) also stale, should not throw
   });
 
-  it("throws when classifier fails with attempts", async () => {
+  it("attempts와 함께 classifier가 실패하면 throw", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -182,7 +182,7 @@ describe("runClassifierBranch", () => {
     ).rejects.toThrow("Classifier failed");
   });
 
-  it("throws with none when attempts empty", async () => {
+  it("attempts가 비어 있으면 none과 함께 throw", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -197,7 +197,7 @@ describe("runClassifierBranch", () => {
     ).rejects.toThrow("none");
   });
 
-  it("maps attempts without thinking", async () => {
+  it("thinking 없는 attempts 매핑", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -212,7 +212,7 @@ describe("runClassifierBranch", () => {
     ).rejects.toThrow("openai/gpt (e)");
   });
 
-  it("does not persist empty failedSet", async () => {
+  it("빈 failedSet은 저장하지 않음", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -228,7 +228,7 @@ describe("runClassifierBranch", () => {
     expect(state.failedByChain.has(CLASSIFIER_CHAIN_KEY)).toBe(false);
   });
 
-  it("forwards tierGuides from currentConfig", async () => {
+  it("currentConfig의 tierGuides 전달", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",
@@ -253,7 +253,7 @@ describe("runClassifierBranch", () => {
     expect(call[7]).toBe(guides);
   });
 
-  it("handles undefined lastExtensionContext", async () => {
+  it("lastExtensionContext가 undefined인 경우 처리", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt" }],
       source: "global",

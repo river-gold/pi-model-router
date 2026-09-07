@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEnsureLogDir } from "../../src/logger/ensure";
 
-describe("logger/ensure", () => {
-  it("calls mkdir with correct path and caches", async () => {
+describe("logger/ensure 로그 디렉터리 보장", () => {
+  it("mkdir을 올바른 경로로 호출하고 캐시한다", async () => {
     const mkdir = vi.fn().mockResolvedValue(undefined);
     const dirname = vi
       .fn()
@@ -15,7 +15,7 @@ describe("logger/ensure", () => {
     expect(mkdir).toHaveBeenCalledTimes(1); // cached
   });
 
-  it("handles mkdir failure propagates", async () => {
+  it("mkdir 실패를 그대로 전파한다", async () => {
     const mkdir = vi.fn().mockRejectedValue(new Error("fail"));
     const ensure = createEnsureLogDir(mkdir as any, undefined as any, "/tmp/log/file.log");
     await expect(ensure()).rejects.toThrow("fail");
@@ -24,7 +24,7 @@ describe("logger/ensure", () => {
     expect(mkdir).toHaveBeenCalledTimes(1);
   });
 
-  it("_reset clears cache", async () => {
+  it("_reset은 캐시를 비운다", async () => {
     const mkdir = vi.fn().mockResolvedValue(undefined);
     const ensure: any = createEnsureLogDir(mkdir as any, undefined as any, "/tmp/log/file.log");
     await ensure();
@@ -34,7 +34,7 @@ describe("logger/ensure", () => {
     expect(mkdir).toHaveBeenCalledTimes(2);
   });
 
-  it("returns same promise on concurrent calls", async () => {
+  it("동시 호출에는 같은 promise를 반환한다", async () => {
     let resolve: () => void = () => {};
     const mkdir = vi.fn().mockImplementation(() => new Promise<void>((r) => (resolve = r)));
     const ensure = createEnsureLogDir(mkdir as any, undefined as any, "/tmp/log/file.log");

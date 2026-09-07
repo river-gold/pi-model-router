@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createLogClassifierSync } from "../../src/logger/log";
 import type { ClassifierLogEntry } from "../../src/logger/types";
 
-describe("logger/log", () => {
+describe("logger/log 분류 로그 기록", () => {
   const baseEntry: ClassifierLogEntry = {
     timestamp: "2024-01-01T00:00:00Z",
     model: "openai/gpt-4o",
@@ -10,7 +10,7 @@ describe("logger/log", () => {
     success: true,
   };
 
-  it("calls ensure, build, append", async () => {
+  it("ensure·build·append를 호출한다", async () => {
     const appendFile = vi.fn().mockResolvedValue(undefined);
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const buildLogLine = vi.fn().mockReturnValue("line\n");
@@ -28,7 +28,7 @@ describe("logger/log", () => {
     expect(appendFile).toHaveBeenCalledWith("/tmp/log", "line\n", "utf-8");
   });
 
-  it("uses defaults when no deps provided", async () => {
+  it("의존성 없이 기본값으로 동작한다", async () => {
     // This test ensures the default factory works, but we mock fs to avoid actual file
     const log = createLogClassifierSync(
       vi.fn().mockResolvedValue(undefined) as any,
@@ -41,7 +41,7 @@ describe("logger/log", () => {
     // no throw
   });
 
-  it("never throws on ensure failure", async () => {
+  it("ensure 실패에도 예외를 던지지 않는다", async () => {
     const appendFile = vi.fn();
     const ensureLogDir = vi.fn().mockRejectedValue(new Error("fail"));
     const log = createLogClassifierSync(
@@ -55,7 +55,7 @@ describe("logger/log", () => {
     expect(appendFile).not.toHaveBeenCalled();
   });
 
-  it("never throws on append failure", async () => {
+  it("append 실패에도 예외를 던지지 않는다", async () => {
     const appendFile = vi.fn().mockRejectedValue(new Error("fail"));
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const log = createLogClassifierSync(
@@ -70,7 +70,7 @@ describe("logger/log", () => {
     // should not throw
   });
 
-  it("never throws on build failure", async () => {
+  it("build 실패에도 예외를 던지지 않는다", async () => {
     const appendFile = vi.fn();
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const buildLogLine = vi.fn().mockImplementation(() => {
@@ -87,7 +87,7 @@ describe("logger/log", () => {
     expect(appendFile).not.toHaveBeenCalled();
   });
 
-  it("handles all optional fields", async () => {
+  it("모든 선택 필드를 처리한다", async () => {
     const appendFile = vi.fn().mockResolvedValue(undefined);
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const log = createLogClassifierSync(

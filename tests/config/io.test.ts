@@ -7,15 +7,15 @@ import {
 } from "../../src/config/io";
 import type { RouterConfig } from "../../src/types";
 
-describe("io", () => {
-  describe("createParseConfigFile", () => {
-    it("returns empty if not exists", () => {
+describe("io를 검증함", () => {
+  describe("createParseConfigFile 동작을 검증함", () => {
+    it("파일 없으면 빈 설정을 반환함을 검증함", () => {
       const fs = { existsSync: () => false, readFileSync: vi.fn() };
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       expect(parse("/no/file")).toEqual({ config: {}, warnings: [] });
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
-    it("parses valid JSON object", () => {
+    it("유효한 JSON object를 파싱함을 검증함", () => {
       const fs = {
         existsSync: () => true,
         readFileSync: () => JSON.stringify({ debug: true, profiles: {} }),
@@ -25,7 +25,7 @@ describe("io", () => {
       expect(r.config).toEqual({ debug: true, profiles: {} });
       expect(r.warnings).toEqual([]);
     });
-    it("uses stripJsonc", () => {
+    it("stripJsonc를 사용함을 검증함", () => {
       const fs = {
         existsSync: () => true,
         readFileSync: () => '{ "a": 1, // comment\n}',
@@ -36,19 +36,19 @@ describe("io", () => {
       expect(strip).toHaveBeenCalledWith('{ "a": 1, // comment\n}');
       expect(r.config).toEqual({ a: 1 } as any);
     });
-    it("warns if not object", () => {
+    it("object가 아니면 warning 남김을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "123" };
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       const r = parse("/f");
       expect(r.config).toEqual({});
       expect(r.warnings[0]).toMatch(/expected a JSON object/);
     });
-    it("warns on array not object", () => {
+    it("배열이면 object가 아니라고 warning 남김을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "[]" };
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/expected a JSON object/);
     });
-    it("catches readFileSync error", () => {
+    it("readFileSync 에러를 포착함을 검증함", () => {
       const fs = {
         existsSync: () => true,
         readFileSync: () => {
@@ -58,12 +58,12 @@ describe("io", () => {
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/Failed to parse.*read fail/);
     });
-    it("catches JSON parse error", () => {
+    it("JSON 파싱 에러를 포착함을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "{invalid" };
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/Failed to parse/);
     });
-    it("catches non-Error throw", () => {
+    it("non-Error throw를 포착함을 검증함", () => {
       const fs = {
         existsSync: () => true,
         readFileSync: () => {
@@ -73,7 +73,7 @@ describe("io", () => {
       const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/string error/);
     });
-    it("stripJsonc throws -> caught", () => {
+    it("stripJsonc throw를 포착함을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "{}" };
       const strip = () => {
         throw new Error("strip fail");
@@ -83,8 +83,8 @@ describe("io", () => {
     });
   });
 
-  describe("resolveConfigPaths", () => {
-    it("resolves four paths", () => {
+  describe("resolveConfigPaths 동작을 검증함", () => {
+    it("네 개 경로를 해석함을 검증함", () => {
       const getAgentDir = () => "/agent";
       const join = (...parts: string[]) => parts.join("/");
       const r = resolveConfigPaths("/cwd", getAgentDir, join);
@@ -95,8 +95,8 @@ describe("io", () => {
     });
   });
 
-  describe("createLoadRouterConfig", () => {
-    it("loads and merges four files and aggregates warnings", () => {
+  describe("createLoadRouterConfig 동작을 검증함", () => {
+    it("네 개 파일을 로드·병합하고 warnings를 집계함을 검증함", () => {
       const deps = {
         fs: { existsSync: () => true, readFileSync: () => "{}" } as any,
         getAgentDir: () => "/agent",
@@ -144,7 +144,7 @@ describe("io", () => {
       expect(result.config.profiles.a).toBeDefined();
       expect(result.config.profiles.b).toBeDefined();
     });
-    it("handles empty configs", () => {
+    it("빈 설정을 처리함을 검증함", () => {
       const deps = {
         fs: { existsSync: () => true, readFileSync: () => "{}" } as any,
         getAgentDir: () => "/agent",
@@ -158,7 +158,7 @@ describe("io", () => {
       const r = load("/cwd");
       expect(r.warnings).toEqual([]);
     });
-    it("base config starts empty", () => {
+    it("기본 설정이 빈 상태로 시작함을 검증함", () => {
       let firstBase: any = null;
       const deps = {
         fs: {} as any,

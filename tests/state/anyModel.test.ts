@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { getAnyModel } from "../../src/state/anyModel";
 
-describe("state/anyModel", () => {
-  it("returns from list", () => {
+describe("state/anyModel 모듈", () => {
+  it("list에서 반환한다", () => {
     const registry = {
       list: () => [
         { provider: "openai", id: "gpt-4o" },
@@ -12,7 +12,7 @@ describe("state/anyModel", () => {
     expect(getAnyModel(registry)).toEqual({ provider: "openai", id: "gpt-4o" });
   });
 
-  it("returns from models when list empty", () => {
+  it("list가 비어 있으면 models에서 반환한다", () => {
     const registry = {
       list: () => [],
       models: [{ provider: "a", id: "b" }],
@@ -20,20 +20,20 @@ describe("state/anyModel", () => {
     expect(getAnyModel(registry)).toEqual({ provider: "a", id: "b" });
   });
 
-  it("returns from models when list undefined", () => {
+  it("list가 undefined이면 models에서 반환한다", () => {
     const registry = {
       models: [{ provider: "a", id: "b" }],
     } as any;
     expect(getAnyModel(registry)).toEqual({ provider: "a", id: "b" });
   });
 
-  it("returns undefined when both empty", () => {
+  it("둘 다 비어 있으면 undefined를 반환한다", () => {
     expect(getAnyModel({ list: () => [], models: [] } as any)).toBeUndefined();
     expect(getAnyModel({} as any)).toBeUndefined();
     expect(getAnyModel({ list: () => undefined as any } as any)).toBeUndefined();
   });
 
-  it("handles list throw", () => {
+  it("list 예외를 처리한다", () => {
     const registry = {
       list: () => {
         throw new Error("fail");
@@ -43,7 +43,7 @@ describe("state/anyModel", () => {
     expect(getAnyModel(registry)).toEqual({ provider: "a", id: "b" });
   });
 
-  it("handles models throw", () => {
+  it("models 예외를 처리한다", () => {
     const registry = {
       list: () => {
         throw new Error("fail");
@@ -55,7 +55,7 @@ describe("state/anyModel", () => {
     expect(getAnyModel(registry)).toBeUndefined();
   });
 
-  it("handles list returning undefined", () => {
+  it("list가 undefined를 반환해도 처리한다", () => {
     const registry = {
       list: () => undefined as any,
       models: [{ provider: "a", id: "b" }],
@@ -63,7 +63,7 @@ describe("state/anyModel", () => {
     expect(getAnyModel(registry)).toEqual({ provider: "a", id: "b" });
   });
 
-  it("prefers list over models", () => {
+  it("models보다 list를 우선한다", () => {
     const registry = {
       list: () => [{ provider: "list", id: "1" }],
       models: [{ provider: "models", id: "2" }],

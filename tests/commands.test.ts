@@ -51,8 +51,8 @@ const state = (over: any = {}) => ({
   ...over,
 });
 
-describe("commands", () => {
-  it("status no args shows status", async () => {
+describe("commands 명령어는", () => {
+  it("status는 인자 없이 상태를 표시한다", async () => {
     const pi = makePi();
     const s = state({ debugEnabled: true });
     const a = acts();
@@ -66,7 +66,7 @@ describe("commands", () => {
     expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Debug: on"), "info");
     expect(a.updateStatus).toHaveBeenCalled();
   });
-  it("status with args error", async () => {
+  it("status는 인자가 있으면 에러를 표시한다", async () => {
     const pi = makePi();
     registerCommands(pi as any, state() as any, acts() as any);
     const c = ctx();
@@ -76,7 +76,7 @@ describe("commands", () => {
       "error",
     );
   });
-  it("status with lastDecision and auto thinking", async () => {
+  it("status는 lastDecision과 auto thinking을 표시한다", async () => {
     const pi = makePi();
     const s = state({ lastDecision: decis({ thinking: undefined }) });
     registerCommands(pi as any, s as any, acts() as any);
@@ -84,7 +84,7 @@ describe("commands", () => {
     await pi.get().handler("status", c);
     expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("(auto)"), "info");
   });
-  it("status without lastDecision and disabled router", async () => {
+  it("status는 lastDecision이 없고 router가 비활성화된 경우를 표시한다", async () => {
     const pi = makePi();
     const s = state({
       lastDecision: undefined,
@@ -101,7 +101,7 @@ describe("commands", () => {
     expect(msg).toContain("History size: 5");
     expect(msg).not.toContain("Last routed tier");
   });
-  it("status default historySize 0 when undefined", async () => {
+  it("status는 historySize가 undefined이면 기본값 0을 표시한다", async () => {
     const pi = makePi();
     const s = state({ currentConfig: cfg() });
     delete (s.currentConfig as any).historySize;
@@ -110,7 +110,7 @@ describe("commands", () => {
     await pi.get().handler("status", c);
     expect(c.ui.notify).toHaveBeenCalledWith(expect.stringContaining("History size: 0"), "info");
   });
-  it("status with failures and warnings", async () => {
+  it("status는 failures와 warnings를 표시한다", async () => {
     const pi = makePi();
     const s = state({
       failedByChain: new Map([
@@ -127,7 +127,7 @@ describe("commands", () => {
     expect(msg).toContain("chain:a");
     expect(msg).toContain("w1");
   });
-  it("status empty failures shows none", async () => {
+  it("status는 failures가 비어 있으면 none을 표시한다", async () => {
     const pi = makePi();
     registerCommands(pi as any, state({ failedByChain: new Map() }) as any, acts() as any);
     const c = ctx();
@@ -137,7 +137,7 @@ describe("commands", () => {
       "info",
     );
   });
-  it("debug on/off/toggle/clear/show/empty/invalid", async () => {
+  it("debug는 on/off/toggle/clear/show/empty/invalid 동작을 처리한다", async () => {
     const pi = makePi();
     const s = state({ debugEnabled: false, debugHistory: [decis()] });
     const a = acts();
@@ -168,7 +168,7 @@ describe("commands", () => {
     await pi.get().handler("debug on extra", c3);
     expect(c3.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
   });
-  it("reload success and with args error", async () => {
+  it("reload는 성공과 인자 오류를 처리한다", async () => {
     const pi = makePi();
     const s = state();
     const a = acts();
@@ -181,7 +181,7 @@ describe("commands", () => {
     await pi.get().handler("reload extra", c2);
     expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
   });
-  it("reset-failures and error", async () => {
+  it("reset-failures는 초기화와 오류를 처리한다", async () => {
     const pi = makePi();
     const s = state({ failedByChain: new Map([["a", new Set(["x"])]]) });
     const a = acts();
@@ -193,7 +193,7 @@ describe("commands", () => {
     await pi.get().handler("reset-failures extra", c2);
     expect(c2.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
   });
-  it("help and ? and with args error", async () => {
+  it("help와 ?는 도움말과 인자 오류를 처리한다", async () => {
     const pi = makePi();
     registerCommands(pi as any, state() as any, acts() as any);
     const c = ctx();
@@ -209,7 +209,7 @@ describe("commands", () => {
     await pi.get().handler("help extra", c3);
     expect(c3.ui.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
   });
-  it("unknown and empty fallback", async () => {
+  it("unknown 명령어와 빈 입력은 fallback으로 처리한다", async () => {
     const pi = makePi();
     registerCommands(pi as any, state() as any, acts() as any);
     const c = ctx();
@@ -234,7 +234,7 @@ describe("commands", () => {
       "info",
     );
   });
-  it("getArgumentCompletions empty partial debug unknown", () => {
+  it("getArgumentCompletions는 empty/partial/debug/unknown 입력을 처리한다", () => {
     const pi = makePi();
     registerCommands(pi as any, state() as any, acts() as any);
     const g = pi.get().getArgumentCompletions;

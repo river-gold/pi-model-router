@@ -40,25 +40,25 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-describe("config.ts", () => {
-  describe("type guards", () => {
-    it("isObjectRecord should validate objects", () => {
+describe("config.ts 설정은", () => {
+  describe("type guards 타입 가드는", () => {
+    it("isObjectRecord는 객체를 검증한다", () => {
       expect(isObjectRecord({})).toBe(true);
       expect(isObjectRecord(null)).toBe(false);
       expect(isRouterTier("high")).toBe(true);
       expect(isRouterTier("auto")).toBe(false);
     });
   });
-  describe("parseConfigFile", () => {
-    it("should return empty config for non-existent file", () => {
+  describe("parseConfigFile 파일 파싱은", () => {
+    it("존재하지 않는 파일이면 빈 config를 반환한다", () => {
       expect(parseConfigFile("/path/does-not-exist").warnings).toEqual([]);
     });
-    it("should warn on invalid json", () => {
+    it("유효하지 않은 json이면 경고를 반환한다", () => {
       expect(parseConfigFile("/path/exists-invalid-json").warnings[0]).toContain("Failed to parse");
     });
   });
-  describe("mergeConfig", () => {
-    it("should merge profiles override", () => {
+  describe("mergeConfig 병합은", () => {
+    it("profiles override를 병합한다", () => {
       const base: RouterConfig = {
         debug: false,
         profiles: {
@@ -87,8 +87,8 @@ describe("config.ts", () => {
       expect(merged.profiles.balanced.high?.models).toEqual(["openai/gpt-4o"]);
     });
   });
-  describe("parseCanonicalModelRef", () => {
-    it("should parse correct references", () => {
+  describe("parseCanonicalModelRef 참조 파싱은", () => {
+    it("올바른 참조를 파싱한다", () => {
       expect(parseCanonicalModelRef("openai/gpt-4o")).toEqual({
         provider: "openai",
         modelId: "gpt-4o",
@@ -105,26 +105,26 @@ describe("config.ts", () => {
       });
       expect(parseCanonicalModelRef("openai/gpt-4o").thinking).toBeUndefined();
     });
-    it("should throw on missing slash", () => {
+    it("slash가 없으면 throw한다", () => {
       expect(() => parseCanonicalModelRef("gpt-4o")).toThrow();
     });
   });
-  describe("normalizeTierConfig", () => {
-    it("should return undefined if not object", () => {
+  describe("normalizeTierConfig 티어 정규화는", () => {
+    it("객체가 아니면 undefined를 반환한다", () => {
       expect(normalizeTierConfig("string", "p", "high", [])).toBeUndefined();
     });
-    it("should warn if missing models", () => {
+    it("models가 없으면 경고를 반환한다", () => {
       const w: string[] = [];
       expect(normalizeTierConfig({}, "p", "high", w)).toBeUndefined();
       expect(w[0]).toContain('missing "models"');
     });
-    it("should leave thinking undefined when omitted", () => {
+    it("생략되면 thinking을 undefined로 둔다", () => {
       const w: string[] = [];
       expect(
         normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.thinking,
       ).toBeUndefined();
     });
-    it("should resolve and normalize details", () => {
+    it("세부 정보를 resolve하고 정규화한다", () => {
       const w: string[] = [];
       const raw = {
         models: ["openai/gpt-4o#high", "google/gemini-1.5-flash#low", "invalid-fallback"],
@@ -137,8 +137,8 @@ describe("config.ts", () => {
       expect(w.some((x) => x.includes("Invalid model"))).toBe(true);
     });
   });
-  describe("normalizeConfig", () => {
-    it("should normalize", () => {
+  describe("normalizeConfig 정규화는", () => {
+    it("config를 정규화한다", () => {
       const { config, warnings } = normalizeConfig({
         debug: true,
         classifierModels: ["openai/gpt-4o#medium"],
@@ -150,8 +150,8 @@ describe("config.ts", () => {
       expect(config.classifierModels?.[0].model).toBe("openai/gpt-4o");
     });
   });
-  describe("historySize", () => {
-    it("should handle historySize", () => {
+  describe("historySize 히스토리 크기는", () => {
+    it("historySize를 처리한다", () => {
       const { config } = normalizeConfig({
         historySize: 4,
         profiles: {
@@ -163,8 +163,8 @@ describe("config.ts", () => {
       expect(config.historySize).toBe(4);
     });
   });
-  describe("classifierModels", () => {
-    it("should leave thinking undefined when omitted", () => {
+  describe("classifierModels 분류 모델은", () => {
+    it("생략되면 thinking을 undefined로 둔다", () => {
       const { config } = normalizeConfig({
         profiles: {
           balanced: {
@@ -175,7 +175,7 @@ describe("config.ts", () => {
       } as unknown as RouterConfig);
       expect(config.classifierModels?.[0].thinking).toBeUndefined();
     });
-    it("should use string array form", () => {
+    it("문자열 배열 형태를 사용한다", () => {
       const { config } = normalizeConfig({
         profiles: {
           balanced: {
@@ -187,7 +187,7 @@ describe("config.ts", () => {
       expect(config.classifierModels?.length).toBe(2);
       expect(config.classifierModels?.[0].thinking).toBe("low");
     });
-    it("should support classifierModels fallback priority", () => {
+    it("classifierModels fallback 우선순위를 지원한다", () => {
       const { config } = normalizeConfig({
         profiles: {
           balanced: {
@@ -203,8 +203,8 @@ describe("config.ts", () => {
       expect(config.classifierModels?.[1].thinking).toBe("low");
     });
   });
-  describe("resolveDelegatedReasoning", () => {
-    it("resolves", () => {
+  describe("resolveDelegatedReasoning 위임 추론은", () => {
+    it("값을 resolve한다", () => {
       expect(
         resolveDelegatedReasoning({ reasoning: true } as unknown as Model<Api>, "off"),
       ).toBeUndefined();
@@ -213,8 +213,8 @@ describe("config.ts", () => {
       );
     });
   });
-  describe("resolveEffectiveClassifier", () => {
-    it("chains profile classifier then low tier", () => {
+  describe("resolveEffectiveClassifier 유효 분류기는", () => {
+    it("profile classifier 다음 low tier를 연결한다", () => {
       const profile: RouterProfile = {
         classifierModels: [{ model: "openai/gpt-4o", thinking: "low" }],
         low: { models: ["google/gemini-flash#low"] },
@@ -226,7 +226,7 @@ describe("config.ts", () => {
       ]);
       expect(result.source).toBe("profile → low tier");
     });
-    it("falls back to low tier model as classifier (follows low tier thinking)", () => {
+    it("low tier 모델로 fallback한다 (low tier thinking을 따른다)", () => {
       const profile: RouterProfile = {
         low: { models: ["google/gemini-flash#high", "openai/gpt-4o-mini#off"] },
       };
@@ -237,7 +237,7 @@ describe("config.ts", () => {
       ]);
       expect(result.source).toBe("low tier");
     });
-    it("returns undefined when no classifier and no low tier", () => {
+    it("classifier와 low tier가 없으면 undefined를 반환한다", () => {
       const profile: RouterProfile = {
         high: { models: ["openai/gpt-4o"] },
       };

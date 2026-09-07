@@ -11,7 +11,7 @@ vi.mock("../../src/commands", async () => {
 
 import { registerCommands } from "../../src/commands";
 
-describe("index/extension", () => {
+describe("index/extension 모듈", () => {
   const makePi = () => {
     const listeners: Record<string, Function> = {};
     return {
@@ -53,7 +53,7 @@ describe("index/extension", () => {
     vi.clearAllMocks();
   });
 
-  it("registers provider and commands and hooks", () => {
+  it("provider와 commands와 hooks를 등록한다", () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     expect(pi.registerProvider).toHaveBeenCalled();
@@ -65,7 +65,7 @@ describe("index/extension", () => {
     expect(listeners["session_start"]).toBeDefined();
   });
 
-  it("handles session_start", async () => {
+  it("session_start를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -73,7 +73,7 @@ describe("index/extension", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalled();
   });
 
-  it("handles turn_start", async () => {
+  it("turn_start를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -82,7 +82,7 @@ describe("index/extension", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalled();
   });
 
-  it("handles model_select router", async () => {
+  it("router인 model_select를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -91,7 +91,7 @@ describe("index/extension", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalled();
   });
 
-  it("handles model_select non-router", async () => {
+  it("non-router인 model_select를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -100,7 +100,7 @@ describe("index/extension", () => {
     expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
   });
 
-  it("handles turn_end", async () => {
+  it("turn_end를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -110,7 +110,7 @@ describe("index/extension", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalled();
   });
 
-  it("covers registerCommands state getters/setters", async () => {
+  it("registerCommands의 state getters/setters를 커버한다", async () => {
     const { pi } = makePi();
     routerExtension(pi);
     const mockedRegisterCommands = vi.mocked(registerCommands);
@@ -148,7 +148,7 @@ describe("index/extension", () => {
     expect(typeof actionsArg.ensureValidActiveRouterProfile).toBe("function");
   });
 
-  it("handles debugEnabled notification on session_start", async () => {
+  it("session_start 시 debugEnabled 알림을 처리한다", async () => {
     const { pi, listeners } = makePi();
     // Mock loadRouterConfig to return debug true
     vi.doMock("../../src/config", async () => {
@@ -169,7 +169,7 @@ describe("index/extension", () => {
     // Since we mocked loadRouterConfig to return debug true, it should be true
   });
 
-  it("handles model_select router with same contextWindow does not call setModelInternally", async () => {
+  it("동일한 contextWindow의 router model_select는 setModelInternally를 호출하지 않는다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -208,7 +208,7 @@ describe("index/extension", () => {
     expect(pi3.setModel).not.toHaveBeenCalled();
   });
 
-  it("handles model_select router with different maxTokens", async () => {
+  it("maxTokens가 다른 router model_select를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -241,7 +241,7 @@ describe("index/extension", () => {
     expect(ctx3.ui.setStatus).toHaveBeenCalled();
   });
 
-  it("handles model_select router with no registryModel", async () => {
+  it("registryModel이 없는 router model_select를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();
@@ -254,7 +254,7 @@ describe("index/extension", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalled();
   });
 
-  it("handles turn_end with no routerModel", async () => {
+  it("routerModel이 없는 turn_end를 처리한다", async () => {
     const { pi, listeners } = makePi();
     routerExtension(pi);
     const ctx = makeCtx();

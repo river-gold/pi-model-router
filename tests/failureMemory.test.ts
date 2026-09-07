@@ -7,15 +7,15 @@ import {
   CLASSIFIER_CHAIN_KEY,
 } from "../src/failureMemory";
 
-describe("failureMemory", () => {
-  it("normalize trims", () => {
+describe("failureMemory 실패 기억은", () => {
+  it("normalize은 앞뒤 공백을 제거한다", () => {
     expect(normalizeFailedRef(" openai/gpt-4 ")).toBe("openai/gpt-4");
   });
-  it("chainKey", () => {
+  it("chainKey는 키를 생성한다", () => {
     expect(chainKeyForRoute("balanced", "high")).toBe("route:balanced:high");
     expect(CLASSIFIER_CHAIN_KEY).toBe("classifier");
   });
-  it("isRecordable true for auth/notfound only", () => {
+  it("auth/notfound 에러만 isRecordable이 true이다", () => {
     expect(isRecordablePreStreamError(new Error("Routed model not found: openai/gpt-4"))).toBe(
       true,
     );
@@ -32,14 +32,14 @@ describe("failureMemory", () => {
     );
     expect(isRecordablePreStreamError(new Error("No delegated stream available"))).toBe(false);
   });
-  it("isRecordable false for aborted/stale/NON_RETRYABLE", () => {
+  it("aborted/stale/NON_RETRYABLE은 isRecordable이 false이다", () => {
     expect(isRecordablePreStreamError(new Error("aborted"))).toBe(false);
     expect(isRecordablePreStreamError(new Error("stale context"))).toBe(false);
     expect(
       isRecordablePreStreamError(new Error("NON_RETRYABLE: Model failed after sending content.")),
     ).toBe(false);
   });
-  it("isRecordable false for non-error or generic message", () => {
+  it("non-error나 일반 메시지는 isRecordable이 false이다", () => {
     expect(isRecordablePreStreamError(new Error("some random error"))).toBe(false);
     expect(isRecordablePreStreamError("string" as unknown as Error)).toBe(false);
   });

@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import routerExtension from "../src/index";
 import rootExtension from "../index";
 
-describe("index re-export", () => {
-  it("re-exports routerExtension from src/index", () => {
+describe("index re-export는", () => {
+  it("src/index의 routerExtension을 re-export한다", () => {
     expect(rootExtension).toBe(routerExtension);
   });
 });
@@ -27,7 +27,7 @@ vi.mock("../src/config", async () => {
   };
 });
 
-describe("router extension public behavior", () => {
+describe("router extension 공개 동작은", () => {
   let pi: any;
   let listeners: Record<string, Function>;
 
@@ -66,7 +66,7 @@ describe("router extension public behavior", () => {
     };
   });
 
-  it("registers provider, commands and hooks", () => {
+  it("provider, commands, hooks를 등록한다", () => {
     routerExtension(pi);
     expect(pi.registerProvider).toHaveBeenCalledWith("router", expect.any(Object));
     expect(pi.registerCommand).toHaveBeenCalledWith("router", expect.any(Object));
@@ -75,7 +75,7 @@ describe("router extension public behavior", () => {
     expect(pi.on).toHaveBeenCalledWith("turn_end", expect.any(Function));
   });
 
-  it("enables router on session_start with router model", async () => {
+  it("session_start에서 router 모델로 router를 활성화한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -85,7 +85,7 @@ describe("router extension public behavior", () => {
     );
   });
 
-  it("selects router profile via model_select", async () => {
+  it("model_select로 router profile을 선택한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -95,7 +95,7 @@ describe("router extension public behavior", () => {
     expect(pi.appendEntry.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
-  it("disables router on non-router model_select and records fallback", async () => {
+  it("non-router model_select에서 router를 비활성화하고 fallback을 기록한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -108,7 +108,7 @@ describe("router extension public behavior", () => {
     );
   });
 
-  it("handles unknown profile with fallback restore", async () => {
+  it("unknown profile을 fallback 복원으로 처리한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -132,7 +132,7 @@ describe("router extension public behavior", () => {
     );
   });
 
-  it("warns when unknown profile has no fallback", async () => {
+  it("unknown profile에 fallback이 없으면 경고한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -153,7 +153,7 @@ describe("router extension public behavior", () => {
     );
   });
 
-  it("restores persisted state from session branch", async () => {
+  it("session branch에서 persisted state를 복원한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx({
       sessionManager: {
@@ -178,7 +178,7 @@ describe("router extension public behavior", () => {
     );
   });
 
-  it("restores router model on turn_end when enabled", async () => {
+  it("활성화된 경우 turn_end에서 router 모델을 복원한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -190,7 +190,7 @@ describe("router extension public behavior", () => {
     );
   });
 
-  it("ignores model_select before initialization", async () => {
+  it("초기화 전 model_select를 무시한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     pi.appendEntry.mockClear();
@@ -198,7 +198,7 @@ describe("router extension public behavior", () => {
     expect(pi.appendEntry).not.toHaveBeenCalled();
   });
 
-  it("deduplicates persist on identical state", async () => {
+  it("동일한 state의 persist를 중복 제거한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -210,7 +210,7 @@ describe("router extension public behavior", () => {
     expect(pi.appendEntry.mock.calls.length).toBe(afterFirst);
   });
 
-  it("handles appendEntry throw gracefully", async () => {
+  it("appendEntry throw를 안전하게 처리한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);
@@ -221,7 +221,7 @@ describe("router extension public behavior", () => {
     expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
   });
 
-  it("handles setModel failure on restore", async () => {
+  it("복원 시 setModel 실패를 처리한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx({
       sessionManager: {
@@ -242,7 +242,7 @@ describe("router extension public behavior", () => {
     );
   });
 
-  it("handles find throws in fallback", async () => {
+  it("fallback에서 find throw를 처리한다", async () => {
     routerExtension(pi);
     const ctx = makeCtx();
     await listeners["session_start"]({}, ctx);

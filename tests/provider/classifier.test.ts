@@ -18,7 +18,7 @@ vi.mock("../../src/routing", () => ({
 import { runClassifierBranch } from "../../src/provider/classifierBranch";
 import { resolveAvailableTier, buildRoutingDecision } from "../../src/routing";
 
-describe("provider/classifier", () => {
+describe("provider/classifier 분류기 적용", () => {
   const mockDecision = { tier: "medium", reasoning: "orig" } as any;
   const mockProfile = { medium: { models: ["openai/a"] } } as any;
   const makeState = (historySize?: number, failedSet?: Set<string>) => ({
@@ -39,7 +39,7 @@ describe("provider/classifier", () => {
     } as any);
   });
 
-  it("returns decision when isSingleTier", async () => {
+  it("isSingleTier일 때 기존 decision 반환", async () => {
     const state = makeState();
     const result = await applyClassifierIfNeeded(
       mockProfile,
@@ -58,7 +58,7 @@ describe("provider/classifier", () => {
     expect(runClassifierBranch).not.toHaveBeenCalled();
   });
 
-  it("returns when isToolLoopNow", async () => {
+  it("isToolLoopNow일 때 기존 decision 반환", async () => {
     const state = makeState();
     const result = await applyClassifierIfNeeded(
       mockProfile,
@@ -76,7 +76,7 @@ describe("provider/classifier", () => {
     expect(result).toBe(mockDecision);
   });
 
-  it("returns when thinkingLevel not off", async () => {
+  it("thinkingLevel이 off가 아니면 기존 decision 반환", async () => {
     const state = makeState();
     for (const lvl of ["high", "low", "medium", "max", "minimal", "xhigh"] as const) {
       const r = await applyClassifierIfNeeded(
@@ -96,7 +96,7 @@ describe("provider/classifier", () => {
     }
   });
 
-  it("uses historySize 0 when undefined", async () => {
+  it("historySize가 undefined이면 0 사용", async () => {
     const state = makeState(undefined);
     await applyClassifierIfNeeded(
       mockProfile,
@@ -123,7 +123,7 @@ describe("provider/classifier", () => {
     );
   });
 
-  it("uses historySize when defined", async () => {
+  it("historySize가 정의되어 있으면 해당 값 사용", async () => {
     const state = makeState(5);
     await applyClassifierIfNeeded(
       mockProfile,
@@ -150,7 +150,7 @@ describe("provider/classifier", () => {
     );
   });
 
-  it("uses failedSet from map", async () => {
+  it("map에 저장된 failedSet 사용", async () => {
     const set = new Set(["a"]);
     const state = makeState(0, set);
     await applyClassifierIfNeeded(
@@ -178,7 +178,7 @@ describe("provider/classifier", () => {
     );
   });
 
-  it("creates new Set when not in map", async () => {
+  it("map에 없으면 새로운 Set 생성", async () => {
     const state = makeState(0, undefined);
     await applyClassifierIfNeeded(
       mockProfile,
@@ -198,7 +198,7 @@ describe("provider/classifier", () => {
     expect(calledSet.size).toBe(0);
   });
 
-  it("builds decision when tier equals result", async () => {
+  it("tier가 result와 같으면 decision 생성", async () => {
     (resolveAvailableTier as unknown as ReturnType<typeof vi.fn>).mockReturnValue("high");
     (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       result: { tier: "high", reasoning: "r" },
@@ -227,7 +227,7 @@ describe("provider/classifier", () => {
     expect(result.tier).toBe("high");
   });
 
-  it("returns incoming decision when classifier branch rejects", async () => {
+  it("classifier branch가 reject되면 들어온 decision 반환", async () => {
     (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error("Classifier failed to determine a tier."),
     );
@@ -247,7 +247,7 @@ describe("provider/classifier", () => {
     );
     expect(result).toBe(mockDecision);
   });
-  it("returns incoming decision when classifier result undefined", async () => {
+  it("classifier result가 undefined이면 들어온 decision 반환", async () => {
     (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       result: undefined,
     } as any);
@@ -267,7 +267,7 @@ describe("provider/classifier", () => {
     );
     expect(result).toBe(mockDecision);
   });
-  it("rethrows abort instead of falling back", async () => {
+  it("abort는 fallback 없이 다시 throw", async () => {
     (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error("aborted"),
     );
@@ -288,7 +288,7 @@ describe("provider/classifier", () => {
       ),
     ).rejects.toThrow("aborted");
   });
-  it("resolves when tier differs", async () => {
+  it("tier가 다르면 resolve하여 반환", async () => {
     (resolveAvailableTier as unknown as ReturnType<typeof vi.fn>).mockReturnValue("medium");
     (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       result: { tier: "high", reasoning: "r" },

@@ -5,8 +5,8 @@ import type { RouterProfile } from "../../src/types";
 
 const baseContext = { messages: [{ role: "user", content: "hi", timestamp: 1 }] } as any;
 
-describe("resolveRoutingDecision", () => {
-  it("preserves tool loop tier", () => {
+describe("resolveRoutingDecision 라우팅 결정", () => {
+  it("tool loop tier 유지", () => {
     const profile: RouterProfile = { high: { models: ["openai/gpt"] } as any };
     const snap: any = { tier: "high", profile: "balanced" };
     const d = resolveRoutingDecision({
@@ -23,7 +23,7 @@ describe("resolveRoutingDecision", () => {
     expect(d.reasoning).toContain("Preserved");
   });
 
-  it("single tier skips classifier", () => {
+  it("single tier는 classifier 건너뜀", () => {
     const profile: RouterProfile = { low: { models: ["openai/gpt"] } as any };
     const d = resolveRoutingDecision({
       profileName: "balanced",
@@ -39,7 +39,7 @@ describe("resolveRoutingDecision", () => {
     expect(d.reasoning).toContain("Single tier");
   });
 
-  it("thinking level maps to tier when available", () => {
+  it("thinking level이 가능하면 tier에 매핑", () => {
     const profile: RouterProfile = { high: { models: ["openai/gpt"] } as any };
     const d = resolveRoutingDecision({
       profileName: "balanced",
@@ -55,7 +55,7 @@ describe("resolveRoutingDecision", () => {
     expect(d.reasoning).toContain("Thinking level high mapped to high");
   });
 
-  it("thinking level resolved to different tier when preferred not configured", () => {
+  it("선호 tier가 없으면 thinking level을 다른 tier로 resolve", () => {
     const profile: RouterProfile = { low: { models: ["openai/gpt"] } as any };
     const d = resolveRoutingDecision({
       profileName: "balanced",
@@ -88,7 +88,7 @@ describe("resolveRoutingDecision", () => {
     expect(d2.tier).not.toBe("max");
   });
 
-  it("off thinking with no single tier returns decideRouting default", () => {
+  it("off thinking이고 single tier가 없으면 decideRouting 기본값 반환", () => {
     const profile: RouterProfile = { medium: { models: ["openai/gpt"] } as any };
     const d = resolveRoutingDecision({
       profileName: "balanced",

@@ -5,9 +5,9 @@ import {
   resolveEffectiveClassifier,
 } from "../../src/config/classifier";
 
-describe("classifier", () => {
-  describe("normalizeClassifierConfig", () => {
-    it("valid string without thinking", () => {
+describe("classifier를 검증함", () => {
+  describe("normalizeClassifierConfig 동작을 검증함", () => {
+    it("thinking 없는 유효한 문자열을 처리함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("openai/gpt-4o", w, "classifierModels")).toEqual({
         model: "openai/gpt-4o",
@@ -15,41 +15,41 @@ describe("classifier", () => {
       });
       expect(w).toEqual([]);
     });
-    it("valid string with thinking", () => {
+    it("thinking 있는 유효한 문자열을 처리함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("openai/gpt-4o#high", w, "classifierModels")).toEqual({
         model: "openai/gpt-4o",
         thinking: "high",
       });
     });
-    it("trims", () => {
+    it("앞뒤 공백을 제거함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig(" openai/gpt-4o#low ", w, "ctx")).toEqual({
         model: "openai/gpt-4o",
         thinking: "low",
       });
     });
-    it("invalid ref -> warning and undefined", () => {
+    it("잘못된 ref는 warning 남기고 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("invalid", w, "classifierModels")).toBeUndefined();
       expect(w[0]).toMatch(/Invalid classifierModels/);
     });
-    it("invalid thinking -> warning", () => {
+    it("잘못된 thinking은 warning 남김을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("openai/gpt-4o#bad", w, "ctx")).toBeUndefined();
       expect(w[0]).toMatch(/Invalid ctx/);
     });
-    it("empty string -> undefined no warning", () => {
+    it("빈 문자열은 warning 없이 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("", w, "ctx")).toBeUndefined();
       expect(w).toEqual([]);
     });
-    it("whitespace only -> undefined", () => {
+    it("공백만 있는 문자열은 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("   ", w, "ctx")).toBeUndefined();
       expect(w).toEqual([]);
     });
-    it("non-string -> undefined", () => {
+    it("non-string 입력은 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig(123, w, "ctx")).toBeUndefined();
       expect(normalizeClassifierConfig(null, w, "ctx")).toBeUndefined();
@@ -58,24 +58,24 @@ describe("classifier", () => {
     });
   });
 
-  describe("normalizeClassifierModels", () => {
-    it("undefined -> undefined", () => {
+  describe("normalizeClassifierModels 동작을 검증함", () => {
+    it("undefined 입력은 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels(undefined, w, "classifierModels")).toBeUndefined();
       expect(w).toEqual([]);
     });
-    it("string valid -> array", () => {
+    it("유효한 문자열은 배열로 변환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels("openai/gpt-4o#low", w, "ctx")).toEqual([
         { model: "openai/gpt-4o", thinking: "low" },
       ]);
     });
-    it("string invalid -> undefined", () => {
+    it("잘못된 문자열은 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels("bad", w, "ctx")).toBeUndefined();
       expect(w.length).toBe(1);
     });
-    it("array with mix valid/invalid", () => {
+    it("유효/무효 혼합 배열을 처리함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeClassifierModels(
         ["openai/gpt-4o#high", "invalid", "google/gemini#low"],
@@ -88,28 +88,28 @@ describe("classifier", () => {
       ]);
       expect(w.length).toBe(1);
     });
-    it("array empty -> undefined", () => {
+    it("빈 배열은 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels([], w, "ctx")).toBeUndefined();
     });
-    it("array all invalid -> undefined", () => {
+    it("모두 무효한 배열은 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels(["bad", "also/bad#invalid"], w, "ctx")).toBeUndefined();
     });
-    it("invalid type number -> warning undefined", () => {
+    it("잘못된 number 타입은 warning 남기고 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels(123, w, "ctx")).toBeUndefined();
       expect(w[0]).toMatch(/expected string or array/);
     });
-    it("invalid type object -> warning", () => {
+    it("잘못된 object 타입은 warning 남김을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels({}, w, "ctx")).toBeUndefined();
       expect(w[0]).toMatch(/expected string or array/);
     });
   });
 
-  describe("resolveEffectiveClassifier", () => {
-    it("profile only", () => {
+  describe("resolveEffectiveClassifier 동작을 검증함", () => {
+    it("profile만 있는 경우를 처리함을 검증함", () => {
       const profile = { classifierModels: [{ model: "openai/gpt-4o", thinking: "low" as const }] };
       const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.classifiers).toEqual([
@@ -117,7 +117,7 @@ describe("classifier", () => {
       ]);
       expect(r.source).toBe("profile");
     });
-    it("global only", () => {
+    it("global만 있는 경우를 처리함을 검증함", () => {
       const profile = {};
       const r = resolveEffectiveClassifier(profile as any, [
         { model: "openai/gpt-4o", thinking: "high" as const },
@@ -127,7 +127,7 @@ describe("classifier", () => {
       ]);
       expect(r.source).toBe("global");
     });
-    it("low only", () => {
+    it("low만 있는 경우를 처리함을 검증함", () => {
       const profile = { low: { models: ["google/gemini#low"] } };
       const r = resolveEffectiveClassifier(profile as any, undefined);
       expect(r.classifiers).toEqual([
@@ -135,7 +135,7 @@ describe("classifier", () => {
       ]);
       expect(r.source).toBe("low tier");
     });
-    it("profile+global+low", () => {
+    it("profile+global+low 조합을 처리함을 검증함", () => {
       const profile = {
         classifierModels: [{ model: "openai/a", thinking: "low" as const }],
         low: { models: ["google/gemini#high"] },
@@ -149,7 +149,7 @@ describe("classifier", () => {
       ]);
       expect(r.source).toBe("profile → global → low tier");
     });
-    it("profile+low", () => {
+    it("profile+low 조합을 처리함을 검증함", () => {
       const profile = {
         classifierModels: [{ model: "openai/gpt-4o", thinking: "low" as const }],
         low: { models: ["google/gemini#low"] },
@@ -158,13 +158,13 @@ describe("classifier", () => {
       expect(r.source).toBe("profile → low tier");
       expect(r.classifiers?.length).toBe(2);
     });
-    it("none -> undefined source none", () => {
+    it("없으면 classifiers는 undefined, source는 none임을 검증함", () => {
       const profile = { high: { models: ["openai/gpt-4o"] } };
       const r = resolveEffectiveClassifier(profile as any, undefined);
       expect(r.classifiers).toBeUndefined();
       expect(r.source).toBe("none");
     });
-    it("low with multiple models and thinking", () => {
+    it("여러 모델과 thinking이 있는 low를 처리함을 검증함", () => {
       const profile = { low: { models: ["google/gemini#high", "openai/gpt-4o-mini#off"] } };
       const r = resolveEffectiveClassifier(profile as any, undefined);
       expect(r.classifiers).toEqual([
@@ -172,17 +172,17 @@ describe("classifier", () => {
         { model: "openai/gpt-4o-mini", thinking: "off", source: "low tier" },
       ]);
     });
-    it("low empty -> ignored", () => {
+    it("빈 low는 무시함을 검증함", () => {
       const profile = { low: { models: [] } };
       const r = resolveEffectiveClassifier(profile as any, undefined);
       expect(r.classifiers).toBeUndefined();
     });
-    it("profile classifier empty -> ignored", () => {
+    it("빈 profile classifier는 무시함을 검증함", () => {
       const profile = { classifierModels: [] as any, low: { models: ["google/gemini#low"] } };
       const r = resolveEffectiveClassifier(profile as any, undefined);
       expect(r.source).toBe("low tier");
     });
-    it("global empty -> ignored", () => {
+    it("빈 global은 무시함을 검증함", () => {
       const profile = { low: { models: ["google/gemini#low"] } };
       const r = resolveEffectiveClassifier(profile as any, []);
       expect(r.source).toBe("low tier");

@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from "vitest";
 import { modelWithAuthBaseUrl, streamDelegated } from "../src/stream";
 import type { Api, Model } from "@earendil-works/pi-ai";
 
-describe("stream.ts", () => {
-  it("applies auth baseUrl when different", () => {
+describe("stream.ts 스트림은", () => {
+  it("다르면 auth baseUrl을 적용한다", () => {
     const model = {
       provider: "x",
       id: "m",
@@ -15,7 +15,7 @@ describe("stream.ts", () => {
     expect(model.baseUrl).toBe("https://a");
   });
 
-  it("keeps model when auth baseUrl is absent", () => {
+  it("auth baseUrl이 없으면 model을 유지한다", () => {
     const model = {
       provider: "x",
       id: "m",
@@ -24,7 +24,7 @@ describe("stream.ts", () => {
     expect(modelWithAuthBaseUrl(model, {})).toBe(model);
   });
 
-  it("throws when registry has no stream provider", () => {
+  it("registry에 stream provider가 없으면 throw한다", () => {
     const registry = {
       getProvider: () => undefined,
     } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext["modelRegistry"];
@@ -34,7 +34,7 @@ describe("stream.ts", () => {
     );
   });
 
-  it("delegates to registry provider streamSimple", () => {
+  it("registry provider의 streamSimple에 위임한다", () => {
     const streamSimple = vi.fn().mockReturnValue("stream");
     const registry = {
       getProvider: () => ({ streamSimple }),

@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { buildModelDefinitions, buildModelsKey } from "../../src/provider/models";
 import type { RouterConfig } from "../../src/types";
 
-describe("provider/models", () => {
-  describe("buildModelDefinitions", () => {
-    it("builds single profile with defaults", () => {
+describe("provider/models 모델 정의", () => {
+  describe("buildModelDefinitions 모델 정의 생성", () => {
+    it("기본값으로 단일 profile 생성", () => {
       const cfg: RouterConfig = {
         profiles: {
           balanced: {
@@ -23,7 +23,7 @@ describe("provider/models", () => {
       expect(defs[0].maxTokens).toBe(16384);
     });
 
-    it("computes max across tiers", () => {
+    it("tier 전체에서 최대값 계산", () => {
       const cfg: RouterConfig = {
         profiles: {
           p: {
@@ -54,7 +54,7 @@ describe("provider/models", () => {
       expect(defs[0].maxTokens).toBe(50000);
     });
 
-    it("uses registry when provided", () => {
+    it("registry가 주어지면 사용", () => {
       const registry = {
         find: vi.fn().mockReturnValue({ contextWindow: 200000, maxTokens: 50000 }),
       } as any;
@@ -70,7 +70,7 @@ describe("provider/models", () => {
       expect(defs[0].maxTokens).toBe(50000);
     });
 
-    it("handles multiple profiles sorted", () => {
+    it("여러 profile 정렬 처리", () => {
       const cfg: RouterConfig = {
         profiles: {
           zebra: { medium: { models: ["openai/a"] } as any },
@@ -81,7 +81,7 @@ describe("provider/models", () => {
       expect(defs.map((d) => d.id)).toEqual(["alpha", "zebra"]);
     });
 
-    it("handles profile with no tiers? filtered", () => {
+    it("tier 없는 profile 처리", () => {
       const cfg: RouterConfig = {
         profiles: {
           empty: {} as any,
@@ -94,14 +94,14 @@ describe("provider/models", () => {
       expect(defs.find((d) => d.id === "balanced")).toBeDefined();
     });
 
-    it("handles empty config", () => {
+    it("빈 config 처리", () => {
       const cfg: RouterConfig = { profiles: {} };
       expect(buildModelDefinitions(cfg, undefined)).toEqual([]);
     });
   });
 
-  describe("buildModelsKey", () => {
-    it("builds key", () => {
+  describe("buildModelsKey 모델 키 생성", () => {
+    it("키 생성", () => {
       const defs = [
         { id: "a", contextWindow: 100, maxTokens: 10, reasoning: true },
         { id: "b", contextWindow: 200, maxTokens: 20, reasoning: false },
@@ -109,8 +109,8 @@ describe("provider/models", () => {
       expect(buildModelsKey(defs)).toBe("a:100:10:true,b:200:20:false");
     });
 
-    it("empty", () => expect(buildModelsKey([] as any)).toBe(""));
-    it("single", () =>
+    it("빈 배열 처리", () => expect(buildModelsKey([] as any)).toBe(""));
+    it("단일 항목 처리", () =>
       expect(
         buildModelsKey([{ id: "x", contextWindow: 1, maxTokens: 2, reasoning: true } as any]),
       ).toBe("x:1:2:true"));

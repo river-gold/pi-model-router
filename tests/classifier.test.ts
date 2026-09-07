@@ -19,23 +19,23 @@ const makeRegistry = (over: Record<string, unknown> = {}) =>
     getProvider: () => ({ streamSimple }),
   }) as unknown as ExtensionContext["modelRegistry"];
 const baseCtx: Context = { messages: [{ role: "user", content: "hello", timestamp: 1 }] };
-describe("parseClassifierOutput", () => {
-  it("given valid tier then returns tier", () => {
+describe("parseClassifierOutput 함수는", () => {
+  it("유효한 tier가 주어지면 tier를 반환한다", () => {
     expect(parseClassifierOutput("low")?.tier).toBe("low");
   });
-  it("given case and spaces then normalizes", () => {
+  it("대소문자와 공백이 있으면 정규화한다", () => {
     expect(parseClassifierOutput("  HIGH  ")?.tier).toBe("high");
   });
-  it("given empty then undefined", () => {
+  it("빈 입력이면 undefined를 반환한다", () => {
     expect(parseClassifierOutput("   ")).toBeUndefined();
   });
-  it("given invalid then undefined", () => {
+  it("유효하지 않은 입력이면 undefined를 반환한다", () => {
     expect(parseClassifierOutput("invalid")).toBeUndefined();
   });
 });
-describe("runClassifierWithFallbacksDetailed", () => {
+describe("runClassifierWithFallbacksDetailed 함수는", () => {
   beforeEach(() => vi.clearAllMocks());
-  it("given valid stream then returns tier", async () => {
+  it("유효한 스트림이 주어지면 tier를 반환한다", async () => {
     const reg = makeRegistry();
     streamSimple.mockReturnValue(
       (async function* () {
@@ -47,7 +47,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
         ?.tier,
     ).toBe("high");
   });
-  it("given parse failure then retryable", async () => {
+  it("파싱 실패 시 retryable로 처리한다", async () => {
     const reg = makeRegistry();
     streamSimple.mockReturnValue(
       (async function* () {
@@ -68,7 +68,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
     expect(failed.size).toBe(0);
     expect(res.attempts[0].error).toContain("no tier parsed");
   });
-  it("given model not found then skipped session", async () => {
+  it("모델을 찾을 수 없으면 세션에서 skipped 처리한다", async () => {
     const reg = makeRegistry({ find: () => undefined });
     const failed = new Set<string>();
     const res = await runClassifierWithFallbacksDetailed(
@@ -83,14 +83,14 @@ describe("runClassifierWithFallbacksDetailed", () => {
     expect(res.attempts[0].error).toContain("model not found");
     expect(failed.has("openai/missing")).toBe(true);
   });
-  it("given auth ok false then error", async () => {
+  it("auth 결과 ok가 false이면 에러를 반환한다", async () => {
     const reg = makeRegistry({ getApiKeyAndHeaders: async () => ({ ok: false }) });
     expect(
       (await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0))
         .attempts[0].error,
     ).toContain("auth failed");
   });
-  it("given empty apiKey then hasKey false", async () => {
+  it("apiKey가 비어 있으면 hasKey=false 에러를 반환한다", async () => {
     const reg = makeRegistry({
       getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "", headers: {} }),
     });
@@ -99,7 +99,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
         .attempts[0].error,
     ).toContain("hasKey=false");
   });
-  it("given fallback chain then second succeeds", async () => {
+  it("fallback 체인에서는 두 번째 모델로 성공한다", async () => {
     const reg = makeRegistry();
     const s1 = (async function* () {
       yield { type: "text_delta", delta: "bad" };
@@ -119,7 +119,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
       ).result?.tier,
     ).toBe("low");
   });
-  it("given failedSet contains model then skipped", async () => {
+  it("failedSet에 모델이 있으면 skipped 처리한다", async () => {
     const reg = makeRegistry();
     const failed = new Set(["openai/gpt"]);
     expect(
@@ -136,7 +136,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
       ).attempts[0].error,
     ).toContain("skipped");
   });
-  it("given aborted signal then aborted", async () => {
+  it("aborted 시그널이면 aborted를 반환한다", async () => {
     const reg = makeRegistry();
     streamSimple.mockImplementation(() => {
       throw new Error("boom");
@@ -155,7 +155,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
       ).attempts[0].error,
     ).toBe("aborted");
   });
-  it("given non-Error throw then string error", async () => {
+  it("Error가 아닌 throw는 문자열 에러로 반환한다", async () => {
     const reg = makeRegistry();
     streamSimple.mockImplementation(() => {
       throw "string thrown";
@@ -165,7 +165,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
         .attempts[0].error,
     ).toBe("string thrown");
   });
-  it("given mixed events then valid delta parsed", async () => {
+  it("혼합 이벤트에서는 유효한 delta만 파싱한다", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
       yield { type: "other" } as never;
@@ -178,7 +178,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
         ?.tier,
     ).toBe("medium");
   });
-  it("given null event then ignored", async () => {
+  it("null 이벤트는 무시한다", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
       yield null as never;
@@ -190,7 +190,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
         ?.tier,
     ).toBe("low");
   });
-  it("given Error throw then message", async () => {
+  it("Error throw 시 메시지를 반환한다", async () => {
     const reg = makeRegistry();
     streamSimple.mockImplementation(() => {
       throw new Error("stream fail");
@@ -200,7 +200,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
         .attempts[0].error,
     ).toBe("stream fail");
   });
-  it("given reasoning off with reasoning model then succeeds", async () => {
+  it("reasoning이 off인 reasoning 모델도 성공한다", async () => {
     const reg = makeRegistry();
     streamSimple.mockReturnValue(
       (async function* () {
@@ -218,7 +218,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
       ).result?.tier,
     ).toBe("low");
   });
-  it("given history then succeeds", async () => {
+  it("history가 주어져도 성공한다", async () => {
     const reg = makeRegistry();
     streamSimple.mockReturnValue(
       (async function* () {
@@ -259,7 +259,7 @@ describe("runClassifierWithFallbacksDetailed", () => {
       ).result?.tier,
     ).toBe("low");
   });
-  it("given custom tierGuides then systemPrompt reflects override", async () => {
+  it("custom tierGuides가 주어지면 systemPrompt에 override가 반영된다", async () => {
     const reg = makeRegistry();
     streamSimple.mockReturnValue(
       (async function* () {

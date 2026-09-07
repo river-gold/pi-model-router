@@ -7,7 +7,7 @@ import {
 } from "../../src/index/handlers";
 import { createRouterState } from "../../src/state/create";
 
-describe("index/handlers", () => {
+describe("index/handlers 모듈", () => {
   const makeState = () => {
     const s = createRouterState();
     s.currentConfig = { profiles: { balanced: { medium: { models: ["openai/a"] } } } } as any;
@@ -24,8 +24,8 @@ describe("index/handlers", () => {
     ...over,
   });
 
-  describe("handleSessionStart", () => {
-    it("sets initialized and restores", async () => {
+  describe("handleSessionStart 함수", () => {
+    it("초기화 상태를 설정하고 복원한다", async () => {
       const state = makeState();
       const actions: any = makeActions();
       const ctx: any = {
@@ -44,7 +44,7 @@ describe("index/handlers", () => {
       expect(state.isInitialized).toBe(true);
     });
 
-    it("notifies when debugEnabled", async () => {
+    it("debugEnabled일 때 알림한다", async () => {
       const state = makeState();
       state.debugEnabled = true;
       state.currentConfig = { profiles: { balanced: {} } } as any;
@@ -69,8 +69,8 @@ describe("index/handlers", () => {
     });
   });
 
-  describe("handleModelSelect", () => {
-    it("ignores before initialization", async () => {
+  describe("handleModelSelect 함수", () => {
+    it("초기화 전에는 무시한다", async () => {
       const state = makeState();
       state.isInitialized = false;
       const actions: any = makeActions();
@@ -92,7 +92,7 @@ describe("index/handlers", () => {
       expect(actions.persistState).not.toHaveBeenCalled();
     });
 
-    it("ignores when isInternalModelSwitch", async () => {
+    it("isInternalModelSwitch일 때는 무시한다", async () => {
       const state = makeState();
       state.isInitialized = true;
       state.isInternalModelSwitch = 1;
@@ -115,7 +115,7 @@ describe("index/handlers", () => {
       expect(actions.persistState).not.toHaveBeenCalled();
     });
 
-    it("router valid profile", async () => {
+    it("router 유효 profile이다", async () => {
       const state = makeState();
       state.isInitialized = true;
       const actions: any = makeActions();
@@ -148,7 +148,7 @@ describe("index/handlers", () => {
       expect(actions.persistState).toHaveBeenCalled();
     });
 
-    it("router valid with different contextWindow triggers setModelInternally", async () => {
+    it("contextWindow가 다르면 setModelInternally를 호출한다", async () => {
       const state = makeState();
       state.isInitialized = true;
       const actions: any = makeActions();
@@ -179,7 +179,7 @@ describe("index/handlers", () => {
       expect(actions.setModelInternally).toHaveBeenCalled();
     });
 
-    it("router unknown profile with fallback", async () => {
+    it("알 수 없는 router profile은 폴백으로 처리한다", async () => {
       const state = makeState();
       state.isInitialized = true;
       state.currentConfig = { profiles: {} } as any;
@@ -209,7 +209,7 @@ describe("index/handlers", () => {
       );
     });
 
-    it("router unknown no fallback", async () => {
+    it("알 수 없는 router profile은 폴백 없이 처리한다", async () => {
       const state = makeState();
       state.isInitialized = true;
       state.currentConfig = { profiles: {} } as any;
@@ -235,7 +235,7 @@ describe("index/handlers", () => {
       expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("no fallback"), "warning");
     });
 
-    it("non-router", async () => {
+    it("non-router이다", async () => {
       const state = makeState();
       state.isInitialized = true;
       const actions: any = makeActions();
@@ -260,8 +260,8 @@ describe("index/handlers", () => {
     });
   });
 
-  describe("handleTurnStart", () => {
-    it("initializes when no registry", () => {
+  describe("handleTurnStart 함수", () => {
+    it("registry가 없으면 초기화한다", () => {
       const state = createRouterState();
       state.currentModelRegistry = undefined;
       const actions: any = { reloadConfig: vi.fn() };
@@ -271,7 +271,7 @@ describe("index/handlers", () => {
       expect(actions.reloadConfig).toHaveBeenCalledWith(ctx);
     });
 
-    it("does nothing when already initialized", () => {
+    it("이미 초기화되었으면 아무 것도 하지 않는다", () => {
       const state = createRouterState();
       state.currentModelRegistry = {} as any;
       const actions: any = { reloadConfig: vi.fn() };
@@ -281,8 +281,8 @@ describe("index/handlers", () => {
     });
   });
 
-  describe("handleTurnEnd", () => {
-    it("initializes when no registry", async () => {
+  describe("handleTurnEnd 함수", () => {
+    it("registry가 없으면 초기화한다", async () => {
       const state = createRouterState();
       state.currentModelRegistry = undefined;
       const actions: any = { reloadConfig: vi.fn(), persistState: vi.fn() };
@@ -296,7 +296,7 @@ describe("index/handlers", () => {
       expect(state.currentModelRegistry).toBe(ctx.modelRegistry);
     });
 
-    it("restores router model when enabled and not router", async () => {
+    it("활성화되어 있고 router가 아니면 router model을 복원한다", async () => {
       const state = createRouterState();
       state.currentModelRegistry = {
         find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }),
@@ -318,7 +318,7 @@ describe("index/handlers", () => {
       expect(actions.setModelInternally).toHaveBeenCalled();
     });
 
-    it("does not restore when already router", async () => {
+    it("이미 router이면 복원하지 않는다", async () => {
       const state = createRouterState();
       state.currentModelRegistry = { find: vi.fn() } as any;
       state.routerEnabled = true;
@@ -338,7 +338,7 @@ describe("index/handlers", () => {
       expect(actions.setModelInternally).not.toHaveBeenCalled();
     });
 
-    it("does not restore when no selectedProfile", async () => {
+    it("selectedProfile이 없으면 복원하지 않는다", async () => {
       const state = createRouterState();
       state.currentModelRegistry = { find: vi.fn() } as any;
       state.routerEnabled = true;
@@ -358,7 +358,7 @@ describe("index/handlers", () => {
       expect(actions.setModelInternally).not.toHaveBeenCalled();
     });
 
-    it("handles find returning undefined", async () => {
+    it("find가 undefined를 반환해도 처리한다", async () => {
       const state = createRouterState();
       state.currentModelRegistry = { find: vi.fn().mockReturnValue(undefined) } as any;
       state.routerEnabled = true;

@@ -44,8 +44,8 @@ const mdl = (id: string, cw = 100000) =>
   ({ id, provider: "router", api: "a" as Api, contextWindow: cw }) as unknown as Model<Api>;
 const wait = (ms = 90) => new Promise((r) => setTimeout(r, ms));
 
-describe("provider pure helpers", () => {
-  it("validateProviderState throws for missing registry and profile", () => {
+describe("provider 순수 헬퍼는", () => {
+  it("registry와 profile이 없으면 validateProviderState가 throw한다", () => {
     expect(() =>
       validateProviderState(undefined, { medium: { models: ["openai/a"] } } as unknown, "balanced"),
     ).toThrow("not initialized");
@@ -56,7 +56,7 @@ describe("provider pure helpers", () => {
       validateProviderState(makeReg(), { medium: { models: ["openai/a"] } } as unknown, "balanced"),
     ).not.toThrow();
   });
-  it("decideInitialDecision covers single tier, tool loop, thinking mapping", () => {
+  it("decideInitialDecision은 single tier, tool loop, thinking 매핑을 처리한다", () => {
     const profile = { high: { models: ["openai/h"] } } as unknown;
     const base = {
       profileName: "p",
@@ -87,7 +87,7 @@ describe("provider pure helpers", () => {
       }).tier,
     ).toBe("medium");
   });
-  it("createCommitMutex serializes", async () => {
+  it("createCommitMutex는 직렬화한다", async () => {
     const { withCommitMutex } = createCommitMutex();
     let v = 0;
     await withCommitMutex(async () => {
@@ -98,7 +98,7 @@ describe("provider pure helpers", () => {
     });
     expect(v).toBe(2);
   });
-  it("resolveTargetLimit finds tier and fallback", () => {
+  it("resolveTargetLimit은 tier와 fallback을 찾는다", () => {
     const profile = { medium: { models: ["openai/a"] } } as unknown;
     const decision = {
       tier: "medium",
@@ -119,7 +119,7 @@ describe("provider pure helpers", () => {
       resolveTargetLimit({} as unknown, decision, "openai/x", regNoWindow, "openai", "x"),
     ).toBeGreaterThan(0);
   });
-  it("buildEffectiveContext truncates when needed", () => {
+  it("buildEffectiveContext는 필요할 때 잘라낸다", () => {
     const c = {
       messages: [
         { role: "user", content: "a".repeat(5000), timestamp: 1 },
@@ -131,7 +131,7 @@ describe("provider pure helpers", () => {
     const same = buildEffectiveContext(c, 500000, mdl("balanced", 1000));
     expect(same).toBe(c);
   });
-  it("collectBufferedResult and isContentEvent", () => {
+  it("collectBufferedResult와 isContentEvent를 처리한다", () => {
     expect(isContentEvent("text_delta")).toBe(true);
     expect(isContentEvent("done")).toBe(false);
     const r1 = collectBufferedResult([
@@ -155,7 +155,7 @@ describe("provider pure helpers", () => {
   });
 });
 
-describe("provider integration", () => {
+describe("provider 통합 동작은", () => {
   let pi: ExtensionAPI;
   let state: Parameters<typeof registerRouterProvider>[1];
   let acts: Parameters<typeof registerRouterProvider>[2];
@@ -192,7 +192,7 @@ describe("provider integration", () => {
     };
     acts = { persistState: vi.fn(), recordDebugDecision: vi.fn(), updateStatus: vi.fn() };
   });
-  it("normal routing with thinking high", async () => {
+  it("thinking high로 정상 라우팅한다", async () => {
     (pi.getThinkingLevel as unknown as ReturnType<typeof vi.fn>).mockReturnValue("high");
     registerRouterProvider(pi, state, acts);
     const s = new S();
@@ -207,7 +207,7 @@ describe("provider integration", () => {
     await wait();
     expect(state.lastDecision?.tier).toBe("high");
   });
-  it("single tier and tool loop preserve", async () => {
+  it("single tier와 tool loop를 유지한다", async () => {
     const prev = {
       profile: "balanced",
       tier: "high",
@@ -244,7 +244,7 @@ describe("provider integration", () => {
     await wait();
     expect(state.lastDecision?.tier).toBe("high");
   });
-  it("registry undefined emits error", async () => {
+  it("registry가 undefined이면 error를 발생시킨다", async () => {
     state.currentModelRegistry = undefined;
     registerRouterProvider(pi, state, acts);
     const s = new S();
@@ -253,7 +253,7 @@ describe("provider integration", () => {
     await wait();
     expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
   });
-  it("unknown profile emits error", async () => {
+  it("unknown profile이면 error를 발생시킨다", async () => {
     registerRouterProvider(pi, state, acts);
     const s = new S();
     vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
@@ -261,7 +261,7 @@ describe("provider integration", () => {
     await wait();
     expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
   });
-  it("classifier off triggers branch and truncation", async () => {
+  it("classifier off는 분기와 잘라내기를 실행한다", async () => {
     state.currentConfig = {
       profiles: {
         balanced: {
@@ -305,7 +305,7 @@ describe("provider integration", () => {
     await wait(150);
     expect(state.lastDecision).toBeDefined();
   });
-  it("fallback retries and records cost", async () => {
+  it("fallback은 재시도하고 cost를 기록한다", async () => {
     registerRouterProvider(pi, state, acts);
     const s = new S();
     vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
@@ -322,7 +322,7 @@ describe("provider integration", () => {
     await wait();
     expect(state.accumulatedCost).toBe(0.0005);
   });
-  it("all failed via memory error", async () => {
+  it("모두 실패하면 memory error를 발생시킨다", async () => {
     state.failedByChain.set(
       "route:balanced:medium",
       new Set(["openai/gpt-4o-mini", "google/gemini-1.5-flash"]),
@@ -334,7 +334,7 @@ describe("provider integration", () => {
     await wait();
     expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
   });
-  it("aborted signal done with aborted", async () => {
+  it("aborted 시그널은 done과 aborted로 처리한다", async () => {
     registerRouterProvider(pi, state, acts);
     const s = new S();
     vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
@@ -346,7 +346,7 @@ describe("provider integration", () => {
     await wait();
     expect(s.events.some((e) => (e as { type: string }).type === "done")).toBe(true);
   });
-  it("stale error maps to done empty", async () => {
+  it("stale 에러는 빈 done으로 매핑된다", async () => {
     state.currentConfig = {
       profiles: { balanced: { medium: { models: ["openai/gpt"] } as unknown } },
     } as RouterConfig;
@@ -364,7 +364,7 @@ describe("provider integration", () => {
     expect(s.events.some((e) => (e as { type: string }).type === "done")).toBe(true);
     expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(false);
   });
-  it("delegate success false maps to error via string and undefined fallback", async () => {
+  it("delegate success false는 string과 undefined fallback 경유로 error에 매핑된다", async () => {
     // Use real delegate failure: make find return undefined for all models -> will throw All failed or record then fail
     state.currentModelRegistry = {
       find: () => undefined,
@@ -382,7 +382,7 @@ describe("provider integration", () => {
     await wait();
     expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
   });
-  it("updateStatus stale and persistState stale are swallowed", async () => {
+  it("stale updateStatus와 stale persistState는 무시된다", async () => {
     acts.updateStatus = vi.fn(() => {
       throw new Error("stale update");
     });
@@ -401,7 +401,7 @@ describe("provider integration", () => {
     await wait();
     expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(false);
   });
-  it("content then error is non-retryable", async () => {
+  it("content 이후 error는 non-retryable이다", async () => {
     state.currentConfig = {
       profiles: { balanced: { medium: { models: ["openai/gpt"] } as unknown } },
     } as RouterConfig;
@@ -419,7 +419,7 @@ describe("provider integration", () => {
     await wait();
     expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
   });
-  it("router ref skipped", async () => {
+  it("router 참조는 skipped 처리된다", async () => {
     state.currentConfig = {
       profiles: { balanced: { medium: { models: ["router/other", "openai/real"] } as unknown } },
     } as RouterConfig;

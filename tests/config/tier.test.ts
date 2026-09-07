@@ -1,81 +1,81 @@
 import { describe, expect, it } from "vitest";
 import { mergeTier, normalizeTierConfig } from "../../src/config/tier";
 
-describe("tier", () => {
-  describe("mergeTier", () => {
-    it("both undefined -> undefined", () =>
+describe("tier를 검증함", () => {
+  describe("mergeTier 동작을 검증함", () => {
+    it("둘 다 undefined면 undefined 반환함을 검증함", () =>
       expect(mergeTier(undefined, undefined)).toBeUndefined());
-    it("existing only -> existing", () => {
+    it("existing만 있으면 existing 반환함을 검증함", () => {
       const e = { models: ["openai/gpt-4o"] };
       expect(mergeTier(e, undefined)).toBe(e);
     });
-    it("next only -> next", () => {
+    it("next만 있으면 next 반환함을 검증함", () => {
       const n = { models: ["openai/gpt-4o"] };
       expect(mergeTier(undefined, n as any)).toEqual(n);
     });
-    it("both -> merged with next overriding", () => {
+    it("둘 다 있으면 next가 덮어쓰며 병합함을 검증함", () => {
       const e = { models: ["openai/gpt-4o"], contextWindow: 1000 } as any;
       const n = { models: ["google/gemini"] } as any;
       expect(mergeTier(e, n)).toEqual({ models: ["google/gemini"], contextWindow: 1000 });
     });
-    it("both with overlap -> next wins", () => {
+    it("겹치면 next가 우선함을 검증함", () => {
       const e = { models: ["openai/a"], maxTokens: 100 } as any;
       const n = { models: ["openai/b"], maxTokens: 200 } as any;
       expect(mergeTier(e, n)).toEqual({ models: ["openai/b"], maxTokens: 200 });
     });
   });
 
-  describe("normalizeTierConfig", () => {
-    it("not object -> undefined", () => {
+  describe("normalizeTierConfig 동작을 검증함", () => {
+    it("object가 아니면 undefined 반환함을 검증함", () => {
       expect(normalizeTierConfig("string", "p", "high", [])).toBeUndefined();
       expect(normalizeTierConfig(null, "p", "high", [])).toBeUndefined();
       expect(normalizeTierConfig([], "p", "high", [])).toBeUndefined();
     });
-    it("missing models -> warning and undefined", () => {
+    it("models 누락 시 warning 남기고 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeTierConfig({}, "p", "high", w)).toBeUndefined();
       expect(w[0]).toMatch(/missing "models"/);
     });
-    it("empty array -> warning", () => {
+    it("빈 배열이면 warning 남김을 검증함", () => {
       const w: string[] = [];
       expect(normalizeTierConfig({ models: [] }, "p", "high", w)).toBeUndefined();
       expect(w[0]).toMatch(/missing "models"/);
     });
-    it("models not array -> warning", () => {
+    it("models가 배열이 아니면 warning 남김을 검증함", () => {
       const w: string[] = [];
       expect(normalizeTierConfig({ models: "not-array" }, "p", "high", w)).toBeUndefined();
     });
-    it("invalid model entries: non-string, empty, whitespace", () => {
+    it("무효한 모델 항목 non-string, empty, whitespace를 처리함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig({ models: [123, "", "   ", null] }, "p", "high", w);
       expect(r).toBeUndefined();
       expect(w.filter((x) => x.includes("Invalid model entry")).length).toBe(4);
     });
-    it("invalid model ref -> warning and filtered", () => {
+    it("잘못된 model ref는 warning 남기고 제외함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig({ models: ["invalid", "openai/gpt-4o"] }, "p", "high", w);
       expect(r?.models).toEqual(["openai/gpt-4o"]);
       expect(w.some((x) => x.includes("Invalid model"))).toBe(true);
     });
-    it("all invalid -> disabled", () => {
+    it("모두 무효하면 비활성화됨을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig({ models: ["bad", "also/bad#invalid"] }, "p", "high", w);
       expect(r).toBeUndefined();
       expect(w.some((x) => x.includes("no valid models"))).toBe(true);
     });
-    it("valid with thinking extracted", () => {
+    it("유효한 입력에서 thinking을 추출함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig({ models: ["openai/gpt-4o#high"] }, "p", "high", w);
       expect(r?.thinking).toBe("high");
       expect(r?.models).toEqual(["openai/gpt-4o#high"]);
     });
-    it("valid without thinking", () => {
+    it("thinking 없는 유효한 입력을 처리함을 검증함", () => {
       const w: string[] = [];
       expect(
         normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.thinking,
       ).toBeUndefined();
     });
-    it("with contextWindow valid", () => {
+    it("유효한 contextWindow를 처리함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig(
         { models: ["openai/gpt-4o"], contextWindow: 50000 },
@@ -86,7 +86,7 @@ describe("tier", () => {
       expect(r?.contextWindow).toBe(50000);
       expect(r?.resolvedContextWindow).toBe(50000);
     });
-    it("with contextWindow invalid (negative, zero, non-number)", () => {
+    it("무효한 contextWindow(negative, zero, non-number)를 처리함을 검증함", () => {
       const w: string[] = [];
       const r1 = normalizeTierConfig(
         { models: ["openai/gpt-4o"], contextWindow: -1 },
@@ -111,7 +111,7 @@ describe("tier", () => {
       );
       expect(r3?.contextWindow).toBeUndefined();
     });
-    it("with maxTokens valid/invalid", () => {
+    it("유효/무효 maxTokens를 처리함을 검증함", () => {
       const w: string[] = [];
       const r1 = normalizeTierConfig(
         { models: ["openai/gpt-4o"], maxTokens: 2000 },
@@ -127,7 +127,7 @@ describe("tier", () => {
       const r3 = normalizeTierConfig({ models: ["openai/gpt-4o"], maxTokens: 0 }, "p", "high", []);
       expect(r3?.maxTokens).toBeUndefined();
     });
-    it("with reasoning true/false/non-boolean", () => {
+    it("reasoning true/false/non-boolean 값을 처리함을 검증함", () => {
       expect(
         normalizeTierConfig({ models: ["openai/gpt-4o"], reasoning: true }, "p", "high", [])
           ?.reasoning,
@@ -141,7 +141,7 @@ describe("tier", () => {
           ?.reasoning,
       ).toBeUndefined();
     });
-    it("multiple models with trimming and valid", () => {
+    it("공백 제거된 여러 유효 모델을 처리함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig(
         { models: ["openai/gpt-4o#high", "google/gemini-1.5-flash#low", "invalid"] },

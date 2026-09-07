@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { buildPersistedState } from "../../src/state/build";
 import type { RoutingDecision } from "../../src/types";
 
-describe("state/build", () => {
-  it("builds with all fields", () => {
+describe("state/build 모듈", () => {
+  it("모든 필드로 빌드한다", () => {
     const d: RoutingDecision = {
       profile: "balanced",
       tier: "high",
@@ -19,17 +19,17 @@ describe("state/build", () => {
     expect(s.timestamp).toBeDefined();
   });
 
-  it("handles undefined selectedProfile", () => {
+  it("selectedProfile이 undefined인 경우를 처리한다", () => {
     const s = buildPersistedState(false, undefined, false, [], undefined, undefined, 0);
     expect(s.selectedProfile).toBe("");
   });
 
-  it("handles empty string profile", () => {
+  it("빈 문자열 profile을 처리한다", () => {
     const s = buildPersistedState(true, "", false, [], undefined, undefined, 0);
     expect(s.selectedProfile).toBe("");
   });
 
-  it("uses Date.now", () => {
+  it("Date.now를 사용한다", () => {
     const now = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(now);
     const s = buildPersistedState(false, "p", false, [], undefined, undefined, 0);

@@ -3,15 +3,15 @@ import { describe, it, expect } from "vitest";
 import { isRouterPersistedState, buildPersistedState } from "../src/state";
 import type { RoutingDecision } from "../src/types";
 
-describe("state.ts", () => {
-  describe("isRouterPersistedState", () => {
-    it("should return false for non-objects or null", () => {
+describe("state.ts 상태는", () => {
+  describe("isRouterPersistedState 영속 상태 검사는", () => {
+    it("non-object나 null이면 false를 반환한다", () => {
       expect(isRouterPersistedState(null)).toBe(false);
       expect(isRouterPersistedState("string")).toBe(false);
       expect(isRouterPersistedState(123)).toBe(false);
     });
 
-    it("should return false if required properties are missing or wrong type", () => {
+    it("필수 속성이 없거나 타입이 틀리면 false를 반환한다", () => {
       expect(isRouterPersistedState({ enabled: true })).toBe(false);
       expect(
         isRouterPersistedState({
@@ -22,7 +22,7 @@ describe("state.ts", () => {
       ).toBe(false);
     });
 
-    it("should return true for valid persisted state objects", () => {
+    it("유효한 persisted state 객체이면 true를 반환한다", () => {
       const state = {
         enabled: true,
         selectedProfile: "balanced",
@@ -32,8 +32,8 @@ describe("state.ts", () => {
     });
   });
 
-  describe("buildPersistedState", () => {
-    it("should build a state object matching the interface requirements", () => {
+  describe("buildPersistedState 영속 상태 생성은", () => {
+    it("인터페이스 요구사항에 맞는 state 객체를 생성한다", () => {
       const decision: RoutingDecision = {
         profile: "balanced",
         tier: "high",
@@ -65,7 +65,7 @@ describe("state.ts", () => {
       expect(state.timestamp).toBeGreaterThan(0);
     });
 
-    it("should handle undefined selectedProfile", () => {
+    it("undefined selectedProfile을 처리한다", () => {
       const state = buildPersistedState(false, undefined, false, [], undefined, undefined, 0);
       expect(state.selectedProfile).toBe("");
     });

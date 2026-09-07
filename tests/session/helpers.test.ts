@@ -7,9 +7,9 @@ import {
 import { createRouterState } from "../../src/state/create";
 import type { RouterState } from "../../src/state/create";
 
-describe("session/helpers", () => {
-  describe("createSetModelInternally", () => {
-    it("increments/decrements and returns true", async () => {
+describe("session/helpers 모듈", () => {
+  describe("createSetModelInternally 함수", () => {
+    it("증가·감소 후 true를 반환한다", async () => {
       const state = { isInternalModelSwitch: 0 } as RouterState;
       const pi = { setModel: vi.fn().mockResolvedValue(true) } as any;
       const fn = createSetModelInternally(pi, state);
@@ -19,7 +19,7 @@ describe("session/helpers", () => {
       expect(pi.setModel).toHaveBeenCalled();
     });
 
-    it("returns false on throw", async () => {
+    it("예외 발생 시 false를 반환한다", async () => {
       const state = { isInternalModelSwitch: 0 } as RouterState;
       const pi = { setModel: vi.fn().mockRejectedValue(new Error("fail")) } as any;
       const fn = createSetModelInternally(pi, state);
@@ -28,7 +28,7 @@ describe("session/helpers", () => {
       expect(state.isInternalModelSwitch).toBe(0);
     });
 
-    it("handles setModel returning false", async () => {
+    it("setModel이 false를 반환해도 처리한다", async () => {
       const state = { isInternalModelSwitch: 0 } as RouterState;
       const pi = { setModel: vi.fn().mockResolvedValue(false) } as any;
       const fn = createSetModelInternally(pi, state);
@@ -36,8 +36,8 @@ describe("session/helpers", () => {
     });
   });
 
-  describe("createPersistState", () => {
-    it("persists and updates snapshot", () => {
+  describe("createPersistState 함수", () => {
+    it("저장하고 스냅샷을 업데이트한다", () => {
       const state = createRouterState();
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
@@ -51,7 +51,7 @@ describe("session/helpers", () => {
       expect(state.lastPersistedSnapshot).toBeDefined();
     });
 
-    it("persists with lastDecision and debugHistory", () => {
+    it("lastDecision과 debugHistory를 포함해 저장한다", () => {
       const state = createRouterState();
       const decision = {
         profile: "balanced",
@@ -74,7 +74,7 @@ describe("session/helpers", () => {
       expect(snapshot.debugHistory[0].timestamp).toBe(0);
     });
 
-    it("dedupes identical snapshot", () => {
+    it("동일한 스냅샷은 중복 제거한다", () => {
       const state = createRouterState();
       const pi = { appendEntry: vi.fn() } as any;
       const fn = createPersistState(pi, state);
@@ -84,7 +84,7 @@ describe("session/helpers", () => {
       expect(pi.appendEntry.mock.calls.length).toBe(firstCalls);
     });
 
-    it("handles appendEntry throw", () => {
+    it("appendEntry 예외를 처리한다", () => {
       const state = createRouterState();
       const pi = {
         appendEntry: vi.fn().mockImplementation(() => {
@@ -98,7 +98,7 @@ describe("session/helpers", () => {
       expect(pi.appendEntry).toHaveBeenCalled();
     });
 
-    it("handles different state after change", () => {
+    it("변경 후 다른 state를 처리한다", () => {
       const state = createRouterState();
       const pi = { appendEntry: vi.fn() } as any;
       const fn = createPersistState(pi, state);
@@ -110,8 +110,8 @@ describe("session/helpers", () => {
     });
   });
 
-  describe("createSessionHelpers", () => {
-    it("returns both helpers", () => {
+  describe("createSessionHelpers 함수", () => {
+    it("두 helper를 모두 반환한다", () => {
       const state = createRouterState();
       const pi = { appendEntry: vi.fn(), setModel: vi.fn().mockResolvedValue(true) } as any;
       const helpers = createSessionHelpers(pi, state);

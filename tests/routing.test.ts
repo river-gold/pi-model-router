@@ -9,9 +9,9 @@ import {
 } from "../src/routing";
 import type { RouterProfile } from "../src/types";
 
-describe("routing.ts", () => {
-  describe("thinkingToTier", () => {
-    it("maps thinking levels to tiers", () => {
+describe("routing.ts 라우팅은", () => {
+  describe("thinkingToTier 변환은", () => {
+    it("thinking 레벨을 tier에 매핑한다", () => {
       expect(thinkingToTier("max")).toBe("max");
       expect(thinkingToTier("xhigh")).toBe("xhigh");
       expect(thinkingToTier("high")).toBe("high");
@@ -21,67 +21,67 @@ describe("routing.ts", () => {
       expect(thinkingToTier("off")).toBe("minimal");
     });
   });
-  describe("resolveAvailableTier", () => {
+  describe("resolveAvailableTier 사용 가능 티어는", () => {
     const _profile: RouterProfile = {
       medium: { models: ["openai/gpt-4o"] },
     };
 
-    it("should return preferred if available", () => {
+    it("사용 가능하면 preferred를 반환한다", () => {
       expect(
         resolveAvailableTier({ high: { models: ["a"] }, medium: { models: ["b"] } }, "high"),
       ).toBe("high");
     });
 
-    it("should fall up if preferred is unavailable", () => {
+    it("preferred가 없으면 상위로 fallback한다", () => {
       expect(resolveAvailableTier({ high: { models: ["a"] } }, "low")).toBe("high");
     });
 
-    it("should fall down if falling up finds nothing", () => {
+    it("상위에서 못 찾으면 하위로 fallback한다", () => {
       expect(resolveAvailableTier({ low: { models: ["a"] } }, "medium")).toBe("low");
     });
 
-    it("should fall from missing minimal to low", () => {
+    it("minimal이 없으면 low로 fallback한다", () => {
       expect(
         resolveAvailableTier({ low: { models: ["a"] }, medium: { models: ["b"] } }, "minimal"),
       ).toBe("low");
     });
 
-    it("should return preferred when profile is empty (fallback covers final return)", () => {
+    it("profile이 비어 있으면 preferred를 반환한다 (fallback이 최종 반환을 처리한다)", () => {
       expect(resolveAvailableTier({} as RouterProfile, "medium")).toBe("medium");
     });
 
-    it("should return preferred when empty profile and preferred is max (covers both loops without match)", () => {
+    it("profile이 비어 있고 preferred가 max이면 preferred를 반환한다 (양쪽 루프 불일치를 처리한다)", () => {
       expect(resolveAvailableTier({} as RouterProfile, "max")).toBe("max");
     });
 
-    it("should return preferred when empty profile and preferred is minimal", () => {
+    it("profile이 비어 있고 preferred가 minimal이면 preferred를 반환한다", () => {
       expect(resolveAvailableTier({} as RouterProfile, "minimal")).toBe("minimal");
     });
 
-    it("should handle startIdx -1 by falling up through entire order", () => {
+    it("startIdx -1을 전체 순서 상위 fallback으로 처리한다", () => {
       const profile: RouterProfile = {
         medium: { models: ["openai/gpt-4o"] },
       };
       expect(resolveAvailableTier(profile, "unknown" as RouterTier)).toBe("medium");
     });
 
-    it("should handle startIdx -1 with empty profile (covers both loops empty)", () => {
+    it("startIdx -1과 빈 profile을 처리한다 (양쪽 루프가 비어 있는 경우를 처리한다)", () => {
       expect(resolveAvailableTier({} as RouterProfile, "unknown" as RouterTier)).toBe(
         "unknown" as RouterTier,
       );
     });
 
-    it("should fall down to minimal when only minimal is available", () => {
+    it("minimal만 사용 가능하면 minimal로 하위 fallback한다", () => {
       expect(resolveAvailableTier({ minimal: { models: ["a"] } }, "max")).toBe("minimal");
     });
   });
 
-  describe("buildRoutingDecision", () => {
+  describe("buildRoutingDecision 결정 생성은", () => {
     const profile: RouterProfile = {
       high: { models: ["openai/gpt-4o-pro"], thinking: "high" },
     };
 
-    it("should construct correct decision object", () => {
+    it("올바른 decision 객체를 생성한다", () => {
       const decision = buildRoutingDecision("balanced", profile, "high", "Reasoning string");
       expect(decision.profile).toBe("balanced");
       expect(decision.tier).toBe("high");
@@ -92,19 +92,19 @@ describe("routing.ts", () => {
       expect(decision.reasoning).toBe("Reasoning string");
     });
 
-    it("should throw if tier is not in profile", () => {
+    it("tier가 profile에 없으면 throw한다", () => {
       expect(() => buildRoutingDecision("balanced", profile, "medium", "Reason")).toThrow();
     });
   });
 
-  describe("decideRouting", () => {
+  describe("decideRouting 라우팅 결정은", () => {
     const profile: RouterProfile = {
       high: { models: ["openai/gpt-4o"], resolvedContextWindow: 100 },
       medium: { models: ["openai/gpt-4o-mini"], resolvedContextWindow: 100 },
       low: { models: ["openai/gpt-4o-micro"], resolvedContextWindow: 100 },
     };
 
-    it("should always return medium", () => {
+    it("항상 medium을 반환한다", () => {
       const ctx: Context = {
         messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
       };
@@ -113,7 +113,7 @@ describe("routing.ts", () => {
       expect(d.reasoning).toContain("Defaulted to medium");
     });
 
-    it("should always return medium regardless of previous decision", () => {
+    it("이전 decision과 무관하게 항상 medium을 반환한다", () => {
       const ctx: Context = {
         messages: [{ role: "user", content: "hello", timestamp: Date.now() }],
       };
@@ -122,7 +122,7 @@ describe("routing.ts", () => {
       expect(d.tier).toBe("medium");
     });
 
-    it("should fallback when medium tier is missing (covers resolvedTier !== tier branch)", () => {
+    it("medium tier가 없으면 fallback한다 (resolvedTier !== tier 분기를 처리한다)", () => {
       const fallbackProfile: RouterProfile = {
         low: { models: ["openai/gpt-4o-micro"] },
       };
@@ -134,7 +134,7 @@ describe("routing.ts", () => {
       expect(d.reasoning).toContain("Resolved from medium to low");
     });
 
-    it("should fallback upward when only high is available", () => {
+    it("high만 사용 가능하면 상위로 fallback한다", () => {
       const highOnly: RouterProfile = {
         high: { models: ["openai/gpt-4o"] },
       };
