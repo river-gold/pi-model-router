@@ -120,6 +120,7 @@ describe("provider/classifier 분류기 적용", () => {
       0,
       expect.any(Set),
       "source",
+      undefined,
     );
   });
 
@@ -147,6 +148,7 @@ describe("provider/classifier 분류기 적용", () => {
       5,
       expect.any(Set),
       "source",
+      undefined,
     );
   });
 
@@ -175,6 +177,36 @@ describe("provider/classifier 분류기 적용", () => {
       0,
       set,
       "source",
+      undefined,
+    );
+  });
+
+  it("sessionId가 주어지면 runClassifierBranch에 전달한다", async () => {
+    const state = makeState(0);
+    await applyClassifierIfNeeded(
+      mockProfile,
+      mockDecision,
+      "modelId",
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+      "sess-7",
+    );
+    expect(runClassifierBranch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      0,
+      expect.any(Set),
+      "source",
+      "sess-7",
     );
   });
 

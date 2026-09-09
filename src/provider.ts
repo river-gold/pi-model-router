@@ -111,6 +111,7 @@ export const registerRouterProvider = (
             isToolLoopNow,
             pi.getThinkingLevel(),
             source,
+            options?.sessionId,
           );
           await withCommitMutex(async () => {
             state.lastDecision = decision;

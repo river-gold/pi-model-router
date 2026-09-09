@@ -23,6 +23,7 @@ export const runClassifierBranch = async (
   effectiveHistorySize: number,
   failedSet: Set<string>,
   classifierSource: string,
+  sessionId?: string,
 ): Promise<{
   result: { tier: RouterTier; reasoning: string } | undefined;
   attempts: ClassifierAttempt[];
@@ -54,6 +55,7 @@ export const runClassifierBranch = async (
     },
     failedSet,
     state.currentConfig.tierGuides,
+    sessionId,
   );
   if (failedSet.size > 0) state.failedByChain.set(CLASSIFIER_CHAIN_KEY, failedSet);
   try {

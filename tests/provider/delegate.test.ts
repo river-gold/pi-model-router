@@ -603,6 +603,66 @@ describe("attemptSingleModel 단일 모델 시도", () => {
     expect(r.status).toBe("success");
     expect(push).toHaveBeenCalledTimes(2);
   });
+  it("opencode-go 위임 시 x-opencode-session을 주입한다", async () => {
+    vi.mocked(streamDelegated).mockImplementation(
+      () =>
+        (async function* () {
+          yield { type: "done", message: { usage: { cost: { total: 0 } } } };
+        })() as any,
+    );
+    const p = base({
+      registry: {
+        find: vi.fn(
+          () =>
+            ({
+              provider: "opencode-go",
+              id: "muse-spark-1.3-contributor",
+              baseUrl: "https://opencode.ai/zen/go/v1",
+              reasoning: false,
+            }) as any,
+        ),
+        getApiKeyAndHeaders: vi.fn(async () => ({
+          ok: true,
+          apiKey: "k",
+          headers: { Authorization: "Bearer k" },
+        })),
+      } as any,
+      options: {
+        sessionId: "sess-1",
+        headers: { "x-caller": "yes" },
+        transformHeaders: vi.fn(),
+      } as any,
+    });
+    const r = await attemptSingleModel(
+      "opencode-go/muse-spark-1.3-contributor",
+      0,
+      p as any,
+      vi.fn(),
+    );
+    expect(r.status).toBe("success");
+    const delegatedOpts = vi.mocked(streamDelegated).mock.calls[0][3] as Record<string, unknown>;
+    expect(delegatedOpts["headers"]).toEqual({
+      "x-opencode-session": "sess-1",
+      "x-opencode-client": "pi",
+      Authorization: "Bearer k",
+      "x-caller": "yes",
+    });
+    expect(delegatedOpts["sessionId"]).toBe("sess-1");
+    expect("transformHeaders" in (delegatedOpts as object)).toBe(false);
+  });
+  it("opencode 타깃이 아니면 세션 헤더를 주입하지 않는다", async () => {
+    vi.mocked(streamDelegated).mockImplementation(
+      () =>
+        (async function* () {
+          yield { type: "done", message: { usage: { cost: { total: 0 } } } };
+        })() as any,
+    );
+    const p = base({ options: { sessionId: "sess-1" } as any });
+    const r = await attemptSingleModel("openai/gpt-high", 0, p as any, vi.fn());
+    expect(r.status).toBe("success");
+    const delegatedOpts = vi.mocked(streamDelegated).mock.calls[0][3] as Record<string, unknown>;
+    expect(delegatedOpts["headers"]).not.toHaveProperty("x-opencode-session");
+  });
 });
 
 describe("delegateToTierModels tier 모델 위임", () => {

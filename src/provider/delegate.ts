@@ -10,6 +10,7 @@ import {
 } from "../config";
 import { truncateContext } from "../context";
 import { modelWithAuthBaseUrl, streamDelegated } from "../stream";
+import { mergeDelegatedHeaders } from "./attribution";
 import {
   chainKeyForRoute,
   failedRefsForChain,
@@ -219,7 +220,11 @@ export const attemptSingleModel = async (
     if (delegatedReasoning) state.lastExtensionContext?.ui.setHiddenThinkingLabel?.(label);
     else state.lastExtensionContext?.ui.setHiddenThinkingLabel?.();
   } catch {}
-  const { reasoning: _piReasoning, ...delegationOptions } = (options ?? {}) as SimpleStreamOptions;
+  const {
+    reasoning: _piReasoning,
+    transformHeaders: _routerTransformHeaders,
+    ...delegationOptions
+  } = (options ?? {}) as SimpleStreamOptions & { transformHeaders?: unknown };
   let delegatedStream: AsyncIterable<unknown>;
   try {
     delegatedStream = streamDelegated(
@@ -229,7 +234,12 @@ export const attemptSingleModel = async (
       {
         ...delegationOptions,
         apiKey: auth.apiKey,
-        headers: auth.headers,
+        headers: mergeDelegatedHeaders(
+          targetModel,
+          delegationOptions.sessionId,
+          delegationOptions.headers,
+          (auth as { headers?: Record<string, string | null> }).headers,
+        ),
         ...(delegatedReasoning ? { reasoning: delegatedReasoning } : {}),
       },
     );

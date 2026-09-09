@@ -18,6 +18,7 @@ export const applyClassifierIfNeeded = async (
   isToolLoopNow: boolean,
   thinkingLevel: ReturnType<ExtensionAPI["getThinkingLevel"]>,
   classifierSource: string,
+  sessionId?: string,
 ): Promise<RoutingDecision> => {
   if (isSingleTier || isToolLoopNow || thinkingLevel !== "off") return decision;
   const effectiveHistorySize = state.currentConfig.historySize ?? 0;
@@ -33,6 +34,7 @@ export const applyClassifierIfNeeded = async (
       effectiveHistorySize,
       failedSet,
       classifierSource,
+      sessionId,
     ));
   } catch (e) {
     if ((e as Error).message === "aborted") throw e;

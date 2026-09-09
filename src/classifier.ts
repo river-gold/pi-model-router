@@ -8,6 +8,7 @@ import type { TierGuides } from "./types";
 import { getLastUserText, getHistoryPairsText } from "./context";
 import { logClassifierSync } from "./logger";
 import { modelWithAuthBaseUrl, streamDelegated } from "./stream";
+import { mergeDelegatedHeaders } from "./provider/attribution";
 
 export const CLASSIFIER_SYSTEM_PROMPT = buildClassifierSystemPrompt();
 
@@ -61,6 +62,7 @@ export const runClassifierWithFallbacksDetailed = async (
   onAttempt?: (entry: { model: string; thinking?: ThinkingLevel; source?: string }) => void,
   failedSet?: Set<string>,
   tierGuides?: TierGuides,
+  sessionId?: string,
 ): Promise<{
   result?: { tier: RouterTier; reasoning: string };
   attempts: ClassifierAttempt[];
@@ -85,6 +87,7 @@ export const runClassifierWithFallbacksDetailed = async (
       entry.thinking,
       signal,
       tierGuides,
+      sessionId,
     );
     if (outcome.result) {
       return {
@@ -200,6 +203,7 @@ const runClassifierOutcome = async (
   thinking?: ThinkingLevel,
   signal?: AbortSignal,
   tierGuides?: TierGuides,
+  sessionId?: string,
 ): Promise<ClassifierOutcome> => {
   try {
     const modelResolution = resolveClassifierModel(modelRegistry, classifierModelRef);
@@ -234,7 +238,7 @@ const runClassifierOutcome = async (
 
     const stream = streamDelegated(modelRegistry, model, classifierContext, {
       apiKey: authResolution.apiKey,
-      headers: authResolution.headers,
+      headers: mergeDelegatedHeaders(model, sessionId, undefined, authResolution.headers),
       ...(reasoningOption
         ? { reasoning: reasoningOption as unknown as SimpleStreamOptions["reasoning"] }
         : {}),

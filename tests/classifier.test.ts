@@ -281,4 +281,46 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     expect(sentContext.systemPrompt).toContain("- low: custom low guide");
     expect(sentContext.systemPrompt).toContain("- high: Local design under uncertainty");
   });
+  it("opencode-go classifier에 sessionId가 있으면 세션 헤더를 주입한다", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockReturnValue(
+      (async function* () {
+        yield { type: "text_delta", delta: "high" };
+      })() as never,
+    );
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "opencode-go/muse-spark-1.3-contributor" }],
+      reg,
+      baseCtx,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "sess-9",
+    );
+    expect(res.result?.tier).toBe("high");
+    const sentOptions = streamSimple.mock.calls[0][2] as { headers: Record<string, string> };
+    expect(sentOptions.headers).toEqual({
+      "x-opencode-session": "sess-9",
+      "x-opencode-client": "pi",
+    });
+  });
+  it("sessionId가 없으면 세션 헤더를 주입하지 않는다", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockReturnValue(
+      (async function* () {
+        yield { type: "text_delta", delta: "high" };
+      })() as never,
+    );
+    const res = await runClassifierWithFallbacksDetailed(
+      [{ model: "opencode-go/muse-spark-1.3-contributor" }],
+      reg,
+      baseCtx,
+      0,
+    );
+    expect(res.result?.tier).toBe("high");
+    const sentOptions = streamSimple.mock.calls[0][2] as { headers: Record<string, string> };
+    expect(sentOptions.headers).not.toHaveProperty("x-opencode-session");
+  });
 });
