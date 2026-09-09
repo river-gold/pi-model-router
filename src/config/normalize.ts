@@ -3,6 +3,7 @@ import { DEFAULT_HISTORY_SIZE, MAX_HISTORY_SIZE } from "./constants";
 import { isObjectRecord } from "./guards";
 import { normalizeClassifierModels } from "./classifier";
 import { normalizeTierConfig } from "./tier";
+import { resolveProfileTierRefs } from "./ref";
 import { normalizeTierGuides } from "./tierGuides";
 
 export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
@@ -25,12 +26,17 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 
   const normalizedProfiles: Record<string, RouterProfile> = {};
 
+  const rawProfiles: Record<string, Record<string, unknown>> = {};
   for (const [name, profile] of Object.entries(raw.profiles ?? {})) {
     if (!isObjectRecord(profile)) {
       warnings.push(`Profile "${name}" is not an object. Skipped.`);
       continue;
     }
-    const record = profile as Record<string, unknown>;
+    rawProfiles[name] = { ...(profile as Record<string, unknown>) };
+  }
+  resolveProfileTierRefs(rawProfiles, warnings);
+
+  for (const [name, record] of Object.entries(rawProfiles)) {
     const max = normalizeTierConfig(record.max, name, "max", warnings);
     const xhigh = normalizeTierConfig(record.xhigh, name, "xhigh", warnings);
     const high = normalizeTierConfig(record.high, name, "high", warnings);

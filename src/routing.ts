@@ -1,7 +1,9 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RouterTier, RouterProfile, RoutingDecision } from "./types";
-import { parseCanonicalModelRef, formatModelRef } from "./config";
+import { parseCanonicalModelRef, formatModelRef, resolveAvailableTier } from "./config";
+
+export { resolveAvailableTier };
 
 export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
   if (thinking === "max") return "max";
@@ -10,19 +12,6 @@ export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
   if (thinking === "medium") return "medium";
   if (thinking === "low") return "low";
   return "minimal";
-};
-
-export const resolveAvailableTier = (profile: RouterProfile, preferred: RouterTier): RouterTier => {
-  if (profile[preferred]) return preferred;
-  const order: RouterTier[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
-  const startIdx = order.indexOf(preferred);
-  for (let i = startIdx + 1; i < order.length; i++) {
-    if (profile[order[i]]) return order[i];
-  }
-  for (let i = startIdx - 1; i >= 0; i--) {
-    if (profile[order[i]]) return order[i];
-  }
-  return preferred;
 };
 
 export const buildRoutingDecision = (

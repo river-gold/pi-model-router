@@ -7,7 +7,8 @@ export {
 export { isObjectRecord, isRouterTier } from "./guards";
 export { stripJsonc, stripComments, stripTrailingCommas } from "./jsonc";
 export { parseCanonicalModelRef, formatModelRef } from "./modelRef";
-export { mergeTier, normalizeTierConfig } from "./tier";
+export { mergeTier, normalizeTierConfig, resolveAvailableTier } from "./tier";
+export { resolveProfileTierRefs } from "./ref";
 export {
   TIER_GUIDE_ORDER,
   DEFAULT_TIER_GUIDES,
