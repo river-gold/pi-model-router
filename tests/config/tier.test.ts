@@ -178,6 +178,32 @@ describe("tier를 검증함", () => {
           ?.reasoning,
       ).toBeUndefined();
     });
+    it("프로필 기본 모델을 상속함을 검증함", () => {
+      const w: string[] = [];
+      const r = normalizeTierConfig({ effort: "max" }, "p", "high", w, [
+        "openai/gpt-4o",
+        "google/gemini-flash#low",
+      ]);
+      expect(w).toEqual([]);
+      expect(r?.models).toEqual(["openai/gpt-4o", "google/gemini-flash#low"]);
+      expect(r?.thinking).toBe("max");
+    });
+    it("티어 models가 있으면 프로필 기본값보다 우선함을 검증함", () => {
+      const r = normalizeTierConfig(
+        { models: ["openai/gpt-4o-mini"], effort: "low" },
+        "p",
+        "low",
+        [],
+        ["openai/gpt-4o"],
+      );
+      expect(r?.models).toEqual(["openai/gpt-4o-mini"]);
+      expect(r?.thinking).toBe("low");
+    });
+    it("상속 없이 models 없으면 비활성화됨을 검증함", () => {
+      const w: string[] = [];
+      expect(normalizeTierConfig({ effort: "high" }, "p", "high", w)).toBeUndefined();
+      expect(w[0]).toMatch(/missing "models"/);
+    });
     it("공백 제거된 여러 유효 모델을 처리함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig(

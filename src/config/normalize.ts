@@ -2,7 +2,7 @@ import type { ConfigLoadResult, RouterConfig, RouterProfile } from "../types";
 import { DEFAULT_HISTORY_SIZE, MAX_HISTORY_SIZE } from "./constants";
 import { isObjectRecord } from "./guards";
 import { normalizeClassifierModels } from "./classifier";
-import { normalizeTierConfig } from "./tier";
+import { normalizeModelList, normalizeTierConfig } from "./tier";
 import { resolveProfileTierRefs } from "./ref";
 import { normalizeTierGuides } from "./tierGuides";
 
@@ -37,12 +37,22 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   resolveProfileTierRefs(rawProfiles, warnings);
 
   for (const [name, record] of Object.entries(rawProfiles)) {
-    const max = normalizeTierConfig(record.max, name, "max", warnings);
-    const xhigh = normalizeTierConfig(record.xhigh, name, "xhigh", warnings);
-    const high = normalizeTierConfig(record.high, name, "high", warnings);
-    const medium = normalizeTierConfig(record.medium, name, "medium", warnings);
-    const low = normalizeTierConfig(record.low, name, "low", warnings);
-    const minimal = normalizeTierConfig(record.minimal, name, "minimal", warnings);
+    // 프로필 기본 모델: 티어 `models`가 없을 때 상속됨.
+    let profileModels: string[] | undefined;
+    if (record.models !== undefined) {
+      const parsed = normalizeModelList(record.models, name, "profile models", warnings);
+      if (!parsed) {
+        warnings.push(`Profile "${name}" has no valid profile-level "models". Ignored.`);
+      } else {
+        profileModels = parsed;
+      }
+    }
+    const max = normalizeTierConfig(record.max, name, "max", warnings, profileModels);
+    const xhigh = normalizeTierConfig(record.xhigh, name, "xhigh", warnings, profileModels);
+    const high = normalizeTierConfig(record.high, name, "high", warnings, profileModels);
+    const medium = normalizeTierConfig(record.medium, name, "medium", warnings, profileModels);
+    const low = normalizeTierConfig(record.low, name, "low", warnings, profileModels);
+    const minimal = normalizeTierConfig(record.minimal, name, "minimal", warnings, profileModels);
 
     if (!max && !xhigh && !high && !medium && !low && !minimal) {
       warnings.push(`Profile "${name}" has no valid tiers. Skipped.`);
@@ -57,6 +67,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     );
 
     normalizedProfiles[name] = {
+      ...(profileModels ? { models: profileModels } : {}),
       ...(max ? { max } : {}),
       ...(xhigh ? { xhigh } : {}),
       high,

@@ -10,73 +10,48 @@
     "auto": {
       "high": {
         "models": [
-          "openai/gpt-5.4-pro#high",
-          "anthropic/claude-3-5-sonnet-20241022#high",
+          "openai/gpt-5.4-pro",
+          "anthropic/claude-3-5-sonnet-20241022",
           "openai/gpt-4o#off"
-        ]
+        ],
+        "effort": "high"
       },
-      "medium": { "models": ["google/gemini-flash-latest#medium"] },
-      "low": { "models": ["openai/gpt-5.4-nano#low"] }
+      "medium": { "models": ["google/gemini-flash-latest"], "effort": "medium" },
+      "low": { "models": ["openai/gpt-5.4-nano"], "effort": "low" }
     },
     "cheap": {
       "classifierModels": ["google/gemini-flash-lite-latest#low"],
-      "high": { "models": ["google/gemini-flash-latest#low"] },
-      "medium": { "models": ["openai/gpt-5.4-nano#off"] },
-      "low": { "models": ["google/gemini-flash-lite-latest#off"] }
+      "high": { "models": ["google/gemini-flash-latest"], "effort": "low" },
+      "medium": { "models": ["openai/gpt-5.4-nano"], "effort": "off" },
+      "low": { "models": ["google/gemini-flash-lite-latest"], "effort": "off" }
     },
     "deep": {
       "classifierModels": ["openai/gpt-5.4-pro#low"],
-      "high": { "models": ["openai/o1-preview#xhigh"] },
-      "medium": { "models": ["openai/gpt-5.4-pro#medium"] },
-      "low": { "models": ["google/gemini-flash-latest#low"] }
+      "high": { "models": ["openai/o1-preview"], "thinking": "xhigh" },
+      "medium": { "models": ["openai/gpt-5.4-pro"], "thinking": "medium" },
+      "low": { "models": ["google/gemini-flash-latest"], "thinking": "low" }
     },
     "minimal": {
       "classifierModels": ["google/gemini-flash-latest"],
       "high": { "models": ["openai/gpt-5.4-pro"] },
       "medium": { "models": ["google/gemini-flash-latest"] },
-      "low": { "models": ["openai/gpt-5.4-nano#off"] }
+      "low": { "models": ["openai/gpt-5.4-nano"], "effort": "off" }
     },
     "effort": {
-      "high": { "models": ["openai/gpt-5.4-pro#high"] },
-      "medium": { "models": ["openai/gpt-5.4-pro#medium"] },
-      "low": { "models": ["openai/gpt-5.4-pro#low"] }
+      "models": ["openai/gpt-5.4-pro"],
+      "high": { "effort": "high" },
+      "medium": { "effort": "medium" },
+      "low": { "effort": "low" }
     },
     "grok": {
       "classifierModels": ["xai/grok-composer-2.5"],
-      "max": {
-        "models": ["xai/grok-4.6#max", "commandcode/xai/grok-4.6#max", "opencode-go/grok-4.6#max"]
-      },
-      "xhigh": {
-        "models": [
-          "xai/grok-4.6#xhigh",
-          "commandcode/xai/grok-4.6#xhigh",
-          "opencode-go/grok-4.6#xhigh"
-        ]
-      },
-      "high": {
-        "models": [
-          "xai/grok-4.6#high",
-          "commandcode/xai/grok-4.6#high",
-          "opencode-go/grok-4.6#high"
-        ]
-      },
-      "medium": {
-        "models": [
-          "xai/grok-4.6#medium",
-          "commandcode/xai/grok-4.6#medium",
-          "opencode-go/grok-4.6#medium"
-        ]
-      },
-      "low": {
-        "models": ["xai/grok-4.6#low", "commandcode/xai/grok-4.6#low", "opencode-go/grok-4.6#low"]
-      },
-      "minimal": {
-        "models": [
-          "xai/grok-4.6#minimal",
-          "commandcode/xai/grok-4.6#minimal",
-          "opencode-go/grok-4.6#minimal"
-        ]
-      }
+      "models": ["xai/grok-4.6", "commandcode/xai/grok-4.6", "opencode-go/grok-4.6"],
+      "max": { "effort": "max" },
+      "xhigh": { "effort": "xhigh" },
+      "high": { "effort": "high" },
+      "medium": { "effort": "medium" },
+      "low": { "effort": "low" },
+      "minimal": { "effort": "minimal" }
     }
   }
 }

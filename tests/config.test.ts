@@ -137,11 +137,7 @@ describe("config.ts 설정은", () => {
       );
       expect(w).toEqual([]);
       expect(r?.thinking).toBe("high");
-      expect(r?.models).toEqual([
-        "openai/gpt-4o#max",
-        "google/gemini-flash",
-        "openai/gpt-4o-mini",
-      ]);
+      expect(r?.models).toEqual(["openai/gpt-4o#max", "google/gemini-flash", "openai/gpt-4o-mini"]);
     });
     it("thinking과 effort가 다르면 thinking 우선 + 경고한다", () => {
       const w: string[] = [];
@@ -195,10 +191,41 @@ describe("config.ts 설정은", () => {
         classifierModels: ["openai/gpt-4o#medium"],
         profiles: { balanced: { high: { models: ["google/gemini-2.5-pro"] } } },
       } as unknown as RouterConfig);
-      expect(
-        warnings.filter((w) => !w.includes("deprecated") && !w.includes('"model" is removed')),
-      ).toEqual([]);
+      expect(warnings).toEqual([]);
       expect(config.classifierModels?.[0].model).toBe("openai/gpt-4o");
+    });
+    it("프로필 models를 effort만 있는 티어에 상속한다", () => {
+      const { config, warnings } = normalizeConfig({
+        profiles: {
+          deepseek: {
+            models: ["openai/gpt-4o", "google/gemini-flash"],
+            high: { effort: "max" },
+            low: { models: ["openai/gpt-4o-mini"], effort: "low" },
+          },
+        },
+      } as unknown as RouterConfig);
+      expect(warnings).toEqual([]);
+      expect(config.profiles.deepseek.models).toEqual(["openai/gpt-4o", "google/gemini-flash"]);
+      expect(config.profiles.deepseek.high?.models).toEqual([
+        "openai/gpt-4o",
+        "google/gemini-flash",
+      ]);
+      expect(config.profiles.deepseek.high?.thinking).toBe("max");
+      expect(config.profiles.deepseek.low?.models).toEqual(["openai/gpt-4o-mini"]);
+      expect(config.profiles.deepseek.low?.thinking).toBe("low");
+    });
+    it("무효한 프로필 models는 경고 후 무시한다", () => {
+      const { config, warnings } = normalizeConfig({
+        profiles: {
+          p: {
+            models: ["bad", "also/bad#invalid"],
+            high: { models: ["openai/gpt-4o"] },
+          },
+        },
+      } as unknown as RouterConfig);
+      expect(config.profiles.p.models).toBeUndefined();
+      expect(config.profiles.p.high?.models).toEqual(["openai/gpt-4o"]);
+      expect(warnings.some((x) => x.includes('profile-level "models"'))).toBe(true);
     });
   });
   describe("historySize 히스토리 크기는", () => {

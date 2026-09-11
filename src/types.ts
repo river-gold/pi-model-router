@@ -22,6 +22,8 @@ export interface RoutedTierConfig {
 }
 
 export interface RouterProfile {
+  /** 프로필 기본 모델. 티어에 `models`가 없으면 상속됨 (명시된 티어 키에 한함). */
+  models?: string[];
   max?: RoutedTierConfig;
   xhigh?: RoutedTierConfig;
   high?: RoutedTierConfig;

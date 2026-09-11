@@ -50,11 +50,39 @@ export const mergeTier = (
   return { ...existing, ...next };
 };
 
+export const normalizeModelList = (
+  rawModels: unknown,
+  profileName: string,
+  label: string,
+  warnings: string[],
+): string[] | undefined => {
+  if (!Array.isArray(rawModels) || rawModels.length === 0) {
+    return undefined;
+  }
+  const models: string[] = [];
+  for (const m of rawModels) {
+    if (typeof m !== "string" || !m.trim()) {
+      warnings.push(`Invalid model entry "${String(m)}" in profile "${profileName}" ${label}.`);
+      continue;
+    }
+    try {
+      parseCanonicalModelRef(m.trim());
+      models.push(m.trim());
+    } catch (error) {
+      warnings.push(
+        `Invalid model "${m}" in profile "${profileName}" ${label}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return models.length > 0 ? models : undefined;
+};
+
 export const normalizeTierConfig = (
   value: unknown,
   profileName: string,
   tier: RouterTier,
   warnings: string[],
+  profileModels?: string[],
 ): RoutedTierConfig | undefined => {
   if (!isObjectRecord(value)) {
     return undefined;
@@ -79,49 +107,39 @@ export const normalizeTierConfig = (
     return { ref: trimmed };
   }
   const rawModels = record.models;
-  if (!Array.isArray(rawModels) || rawModels.length === 0) {
-    warnings.push(
-      `Profile "${profileName}" ${tier} tier is missing "models" array. Tier disabled.`,
-    );
-    return undefined;
+  // 티어 `models`가 없으면 프로필 기본값 상속. ref 티어는 상속 제외.
+  let models = normalizeModelList(rawModels, profileName, `${tier} tier`, warnings);
+  if (!models && profileModels?.length) {
+    models = [...profileModels];
   }
-
-  const models: string[] = [];
-  for (const m of rawModels) {
-    if (typeof m !== "string" || !m.trim()) {
-      warnings.push(`Invalid model entry "${String(m)}" in profile "${profileName}" ${tier} tier.`);
-      continue;
-    }
-    try {
-      parseCanonicalModelRef(m.trim());
-      models.push(m.trim());
-    } catch (error) {
+  if (!models) {
+    if (Array.isArray(rawModels) && rawModels.length > 0) {
+      warnings.push(`Profile "${profileName}" ${tier} tier has no valid models. Tier disabled.`);
+    } else {
       warnings.push(
-        `Invalid model "${m}" in profile "${profileName}" ${tier} tier: ${error instanceof Error ? error.message : String(error)}`,
+        `Profile "${profileName}" ${tier} tier is missing "models" array. Tier disabled.`,
       );
     }
-  }
-  if (models.length === 0) {
-    warnings.push(`Profile "${profileName}" ${tier} tier has no valid models. Tier disabled.`);
     return undefined;
   }
 
   const primaryParsed = parseCanonicalModelRef(models[0]!);
 
+  const invalidTierDefault = (key: string, raw: unknown): undefined => {
+    warnings.push(
+      `Profile "${profileName}" ${tier} tier has invalid ${key} ${JSON.stringify(raw)}: expected one of ${(ALLOWED_THINKING as readonly string[]).join(", ")}. Ignored.`,
+    );
+    return undefined;
+  };
+
   const parseTierDefault = (raw: unknown, key: string): ThinkingLevel | undefined => {
     if (raw === undefined) return undefined;
     if (typeof raw !== "string" || !raw.trim()) {
-      warnings.push(
-        `Profile "${profileName}" ${tier} tier has invalid ${key} "${String(raw)}": expected one of ${(ALLOWED_THINKING as readonly string[]).join(", ")}. Ignored.`,
-      );
-      return undefined;
+      return invalidTierDefault(key, raw);
     }
     const v = raw.trim();
     if (!(ALLOWED_THINKING as readonly string[]).includes(v)) {
-      warnings.push(
-        `Profile "${profileName}" ${tier} tier has invalid ${key} "${String(raw)}": expected one of ${(ALLOWED_THINKING as readonly string[]).join(", ")}. Ignored.`,
-      );
-      return undefined;
+      return invalidTierDefault(key, raw);
     }
     return v as ThinkingLevel;
   };

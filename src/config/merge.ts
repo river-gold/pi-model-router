@@ -13,6 +13,7 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
     const existing = mergedProfiles[name];
     const nextProfile = profile as Partial<RouterProfile>;
     mergedProfiles[name] = {
+      models: (nextProfile.models as string[] | undefined) ?? existing?.models,
       max: mergeTier(existing?.max, nextProfile.max),
       xhigh: mergeTier(existing?.xhigh, nextProfile.xhigh),
       high: mergeTier(existing?.high, nextProfile.high),
