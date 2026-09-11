@@ -1,11 +1,13 @@
 import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RoutingDecision } from "../types";
+import { dereferenceTier } from "../config";
 import {
   parseCanonicalModelRef,
   formatModelRef,
   ROUTER_TIERS,
   resolveContextWindow,
+  resolveContextWindowLive,
   resolveDelegatedReasoning,
 } from "../config";
 import { truncateContext } from "../context";
@@ -23,6 +25,8 @@ export type DelegateParams = {
   registry: ExtensionContext["modelRegistry"];
   profile: RouterProfile;
   decision: RoutingDecision;
+  /** 있으면 tier models/limit을 실시간 추적함. */
+  profiles?: Record<string, RouterProfile>;
   routerModel: Model<Api>;
   context: Context;
   options?: SimpleStreamOptions;
@@ -47,7 +51,12 @@ export type DelegateResult = {
 export const getInitialModelsToTry = (
   profile: RouterProfile,
   decision: RoutingDecision,
+  profiles?: Record<string, RouterProfile>,
 ): string[] => {
+  if (profiles) {
+    const live = dereferenceTier(profiles, decision.profile, decision.tier)?.config.models;
+    if (live?.length) return [...new Set(live)];
+  }
   const tierModels = profile[decision.tier]?.models;
   if (!tierModels?.length)
     return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
@@ -85,7 +94,21 @@ export const resolveTargetLimit = (
   registry: ExtensionContext["modelRegistry"],
   targetProvider: string,
   targetModelId: string,
+  profiles?: Record<string, RouterProfile>,
 ): number => {
+  if (profiles) {
+    for (const t of ROUTER_TIERS) {
+      const live = dereferenceTier(profiles, decision.profile, t)?.config.models;
+      if (live?.includes(modelRef)) {
+        return resolveContextWindowLive(profiles, decision.profile, t, registry);
+      }
+    }
+    const found = registry.find(targetProvider, targetModelId);
+    return (
+      found?.contextWindow ??
+      resolveContextWindowLive(profiles, decision.profile, decision.tier, registry)
+    );
+  }
   for (const t of ROUTER_TIERS) {
     const tc = profile[t];
     if (tc?.models?.includes(modelRef)) return resolveContextWindow(t, profile, registry);
@@ -210,7 +233,15 @@ export const attemptSingleModel = async (
     return { status: "retry", error: err };
   }
   if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
-  const targetLimit = resolveTargetLimit(profile, decision, modelRef, registry, provider, modelId);
+  const targetLimit = resolveTargetLimit(
+    profile,
+    decision,
+    modelRef,
+    registry,
+    provider,
+    modelId,
+    params.profiles,
+  );
   const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
   const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
     | SimpleStreamOptions["reasoning"]
@@ -308,7 +339,7 @@ export const runDelegateAttempt = async (
   curDecision: RoutingDecision,
 ): Promise<{ success: boolean; costDelta: number; lastError?: unknown }> => {
   const { profile, state } = params;
-  const initialModels = getInitialModelsToTry(profile, curDecision);
+  const initialModels = getInitialModelsToTry(profile, curDecision, params.profiles);
   const routeChainKey = chainKeyForRoute(curDecision.profile, curDecision.tier);
   const recordRouteFailure = createRecordFailure(state, routeChainKey);
   const {

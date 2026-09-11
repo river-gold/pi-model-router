@@ -7,8 +7,16 @@ export {
 export { isObjectRecord, isRouterTier } from "./guards";
 export { stripJsonc, stripComments, stripTrailingCommas } from "./jsonc";
 export { parseCanonicalModelRef, formatModelRef } from "./modelRef";
-export { mergeTier, normalizeTierConfig, resolveAvailableTier } from "./tier";
-export { resolveProfileTierRefs } from "./ref";
+export { mergeTier, normalizeTierConfig, resolveAvailableTier, nearbyTierOrder } from "./tier";
+export {
+  resolveProfileTierRefs,
+  parseTierRef,
+  isTierRef,
+  dereferenceTier,
+  resolveAvailableTierLive,
+  resolvableTiers,
+} from "./ref";
+export type { ResolvedTier } from "./ref";
 export {
   TIER_GUIDE_ORDER,
   DEFAULT_TIER_GUIDES,
@@ -40,5 +48,10 @@ export type {
   LoadRouterConfigDeps,
 } from "./io";
 export { profileNames, resolveProfileName } from "./profile";
-export { resolveContextWindow, resolveMaxTokens } from "./registry";
+export {
+  resolveContextWindow,
+  resolveMaxTokens,
+  resolveContextWindowLive,
+  resolveMaxTokensLive,
+} from "./registry";
 export { resolveDelegatedReasoning } from "./reasoning";

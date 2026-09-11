@@ -1,9 +1,26 @@
 import type { RoutedTierConfig, RouterTier } from "../types";
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from "../constants";
+import { ROUTER_TIERS } from "./constants";
 import { isObjectRecord } from "./guards";
 import { parseCanonicalModelRef } from "./modelRef";
 
 const NEARBY_TIER_ORDER: RouterTier[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+/**
+ * 선호 tier부터 가까운 순서(선호 → 위쪽 → 아래쪽) 목록.
+ * resolveAvailableTier와 ref 실시간 추적(src/config/ref.ts)이 공유하는 단일 순서 규칙임.
+ */
+export const nearbyTierOrder = (preferred: RouterTier): RouterTier[] => {
+  const order: RouterTier[] = [preferred];
+  const startIdx = NEARBY_TIER_ORDER.indexOf(preferred);
+  for (let i = startIdx + 1; i < NEARBY_TIER_ORDER.length; i++) {
+    order.push(NEARBY_TIER_ORDER[i] as RouterTier);
+  }
+  for (let i = startIdx - 1; i >= 0; i--) {
+    order.push(NEARBY_TIER_ORDER[i] as RouterTier);
+  }
+  return order;
+};
 
 /**
  * 선호 tier가 없으면 가까운 tier로 폴백함 (위쪽 먼저, 없으면 아래쪽).
@@ -13,14 +30,7 @@ export const resolveAvailableTier = (
   profile: Partial<Record<RouterTier, unknown>>,
   preferred: RouterTier,
 ): RouterTier => {
-  if (profile[preferred]) return preferred;
-  const startIdx = NEARBY_TIER_ORDER.indexOf(preferred);
-  for (let i = startIdx + 1; i < NEARBY_TIER_ORDER.length; i++) {
-    const tier = NEARBY_TIER_ORDER[i] as RouterTier;
-    if (profile[tier]) return tier;
-  }
-  for (let i = startIdx - 1; i >= 0; i--) {
-    const tier = NEARBY_TIER_ORDER[i] as RouterTier;
+  for (const tier of nearbyTierOrder(preferred)) {
     if (profile[tier]) return tier;
   }
   return preferred;
@@ -50,6 +60,23 @@ export const normalizeTierConfig = (
   }
 
   const record = value as Record<string, unknown>;
+  const rawRef = record.ref;
+  if (typeof rawRef === "string") {
+    const trimmed = rawRef.trim();
+    const parts = trimmed.split("#");
+    const ok =
+      parts.length === 2 &&
+      parts[0]!.trim().length > 0 &&
+      (ROUTER_TIERS as readonly string[]).includes(parts[1]!.trim());
+    if (!ok) {
+      warnings.push(
+        `Profile "${profileName}" ${tier} tier has invalid ref "${String(rawRef)}": expected "profile#tier". Tier disabled.`,
+      );
+      return undefined;
+    }
+    // 논리적 참조 유지: models 치환 없이 ref만 보관하고 라우팅 시점에 추적함.
+    return { ref: trimmed };
+  }
   const rawModels = record.models;
   if (!Array.isArray(rawModels) || rawModels.length === 0) {
     warnings.push(

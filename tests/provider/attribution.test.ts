@@ -23,9 +23,7 @@ describe("isOpencodeTarget 함수는", () => {
   it("opencode/opencode-go provider를 판별한다", () => {
     expect(isOpencodeTarget({ provider: "opencode-go", baseUrl: "https://x" })).toBe(true);
     expect(isOpencodeTarget({ provider: "opencode", baseUrl: "https://x" })).toBe(true);
-    expect(isOpencodeTarget({ provider: "openai", baseUrl: "https://api.openai.com" })).toBe(
-      false,
-    );
+    expect(isOpencodeTarget({ provider: "openai", baseUrl: "https://api.openai.com" })).toBe(false);
   });
   it("provider가 달라도 opencode.ai 호스트이면 true를 반환한다", () => {
     expect(isOpencodeTarget({ provider: "custom", baseUrl: "https://opencode.ai/zen" })).toBe(true);
@@ -40,11 +38,16 @@ describe("getOpencodeSessionHeaders 함수는", () => {
   });
   it("sessionId가 없으면 undefined를 반환한다", () => {
     expect(
-      getOpencodeSessionHeaders({ provider: "opencode-go", baseUrl: "https://opencode.ai" }, undefined),
+      getOpencodeSessionHeaders(
+        { provider: "opencode-go", baseUrl: "https://opencode.ai" },
+        undefined,
+      ),
     ).toBeUndefined();
   });
   it("opencode 타깃이 아니면 undefined를 반환한다", () => {
-    expect(getOpencodeSessionHeaders({ provider: "openai", baseUrl: "https://x" }, "s1")).toBeUndefined();
+    expect(
+      getOpencodeSessionHeaders({ provider: "openai", baseUrl: "https://x" }, "s1"),
+    ).toBeUndefined();
   });
 });
 

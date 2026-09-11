@@ -14,4 +14,5 @@ export const decideInitialDecision = (params: {
   isToolLoop: boolean;
   singleTier: RouterTier | undefined;
   validTierCount: number;
+  profiles?: Record<string, RouterProfile>;
 }): RoutingDecision => resolveRoutingDecision(params);

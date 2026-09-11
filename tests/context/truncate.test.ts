@@ -76,7 +76,8 @@ describe("truncate 헬퍼 함수들", () => {
 
   describe("countLeadingOrphanToolResults 앞쪽 고아 toolResult 개수", () => {
     it("빈 배열이면 0을 반환한다", () => expect(countLeadingOrphanToolResults([])).toBe(0));
-    it("고아가 없으면 0을 반환한다", () => expect(countLeadingOrphanToolResults([m("user", "a")])).toBe(0));
+    it("고아가 없으면 0을 반환한다", () =>
+      expect(countLeadingOrphanToolResults([m("user", "a")])).toBe(0));
     it("고아 toolResult 하나를 센다", () =>
       expect(countLeadingOrphanToolResults([m("toolResult", "a") as any])).toBe(1));
     it("고아 toolResult 두 개를 센다", () =>

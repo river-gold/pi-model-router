@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RoutingDecision, RouterTier } from "./types";
-import { profileNames, ROUTER_TIERS, resolveEffectiveClassifier } from "./config";
+import { profileNames, resolveEffectiveClassifier, resolvableTiers } from "./config";
 import { decideInitialDecision } from "./provider/routing";
 import { delegateToTierModels } from "./provider/delegate";
 import { validateProviderState } from "./provider/validation";
@@ -78,6 +78,8 @@ export const registerRouterProvider = (
             context.messages[context.messages.length - 1]?.role === "toolResult" &&
             snap?.profile === model.id &&
             snap !== undefined;
+          const profiles = state.currentConfig.profiles;
+          const liveTiers = resolvableTiers(profiles, model.id);
           let decision = decideInitialDecision({
             profileName: model.id,
             profile: profile as RouterProfile,
@@ -85,17 +87,15 @@ export const registerRouterProvider = (
             snapshotLastDecision: snap,
             thinkingLevel: pi.getThinkingLevel(),
             isToolLoop,
-            singleTier: ROUTER_TIERS.find((t) => (profile as RouterProfile)[t]) as
-              | RouterTier
-              | undefined,
-            validTierCount: ROUTER_TIERS.filter((t) => (profile as RouterProfile)[t]).length,
+            singleTier: liveTiers[0] as RouterTier | undefined,
+            validTierCount: liveTiers.length,
+            profiles,
           });
           const { source } = resolveEffectiveClassifier(
             profile as RouterProfile,
             state.currentConfig.classifierModels,
           );
-          const isSingleTier =
-            ROUTER_TIERS.filter((t) => (profile as RouterProfile)[t]).length === 1;
+          const isSingleTier = liveTiers.length === 1;
           const isToolLoopNow =
             context.messages[context.messages.length - 1]?.role === "toolResult" &&
             snap?.profile === model.id;
@@ -112,6 +112,7 @@ export const registerRouterProvider = (
             pi.getThinkingLevel(),
             source,
             options?.sessionId,
+            profiles,
           );
           await withCommitMutex(async () => {
             state.lastDecision = decision;
@@ -121,6 +122,7 @@ export const registerRouterProvider = (
           const res = await delegateToTierModels({
             registry: registry as ExtensionContext["modelRegistry"],
             profile: profile as RouterProfile,
+            profiles,
             decision,
             routerModel: model,
             context,

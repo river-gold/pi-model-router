@@ -69,7 +69,8 @@ describe("modelRef를 검증함", () => {
   });
 
   describe("formatModelRef 동작을 검증함", () => {
-    it("thinking 없이 포맷함을 검증함", () => expect(formatModelRef("openai", "gpt-4o")).toBe("openai/gpt-4o"));
+    it("thinking 없이 포맷함을 검증함", () =>
+      expect(formatModelRef("openai", "gpt-4o")).toBe("openai/gpt-4o"));
     it("thinking과 함께 포맷함을 검증함", () =>
       expect(formatModelRef("openai", "gpt-4o", "high")).toBe("openai/gpt-4o#high"));
     it("off와 함께 포맷함을 검증함", () =>

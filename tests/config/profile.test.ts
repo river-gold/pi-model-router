@@ -15,7 +15,8 @@ describe("profile을 검증함", () => {
       expect(profileNames(config)).toEqual(["alpha", "middle", "zebra"]);
     });
     it("빈 입력을 처리함을 검증함", () => expect(profileNames({ profiles: {} })).toEqual([]));
-    it("단일 항목을 처리함을 검증함", () => expect(profileNames({ profiles: { only: {} as any } })).toEqual(["only"]));
+    it("단일 항목을 처리함을 검증함", () =>
+      expect(profileNames({ profiles: { only: {} as any } })).toEqual(["only"]));
   });
   describe("resolveProfileName 동작을 검증함", () => {
     const config: RouterConfig = {
@@ -27,7 +28,8 @@ describe("profile을 검증함", () => {
       expect(resolveProfileName(config, "missing")).toBeUndefined());
     it("undefined 입력은 undefined 반환함을 검증함", () =>
       expect(resolveProfileName(config, undefined)).toBeUndefined());
-    it("빈 문자열은 undefined 반환함을 검증함", () => expect(resolveProfileName(config, "")).toBeUndefined());
+    it("빈 문자열은 undefined 반환함을 검증함", () =>
+      expect(resolveProfileName(config, "")).toBeUndefined());
     it("profile은 있으나 요청이 다르면 undefined 반환함을 검증함", () =>
       expect(resolveProfileName(config, "other")).toBeUndefined());
   });

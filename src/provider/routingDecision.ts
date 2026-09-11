@@ -3,6 +3,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RouterProfile, RoutingDecision, RouterTier } from "../types";
 import {
   buildRoutingDecision,
+  buildRoutingDecisionLive,
   decideRouting,
   resolveAvailableTier,
   thinkingToTier,
@@ -17,6 +18,8 @@ export type ResolveRoutingDecisionParams = {
   isToolLoop: boolean;
   singleTier: RouterTier | undefined;
   validTierCount: number;
+  /** 있으면 ref를 실시간 추적함. 없으면 기존 concrete 동작. */
+  profiles?: Record<string, RouterProfile>;
 };
 
 // resolveRoutingDecision: thinking single-tier and effort mapping
@@ -32,39 +35,47 @@ export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): Ro
     isToolLoop,
     singleTier,
     validTierCount,
+    profiles,
   } = params;
-  let decision: RoutingDecision = decideRouting(
-    context,
-    profileName,
-    profile,
-    snapshotLastDecision,
-  );
+  const build = (tier: RouterTier, reasoning: string, isClassifier?: boolean): RoutingDecision =>
+    profiles
+      ? buildRoutingDecisionLive(profiles, profileName, tier, reasoning, isClassifier)
+      : buildRoutingDecision(profileName, profile, tier, reasoning, isClassifier);
+
+  let decision: RoutingDecision = profiles
+    ? decideRouting(context, profileName, profile, snapshotLastDecision, profiles)
+    : decideRouting(context, profileName, profile, snapshotLastDecision);
   const isSingleTier = validTierCount === 1 && singleTier !== undefined;
   if (isToolLoop && snapshotLastDecision) {
-    decision = buildRoutingDecision(
-      profileName,
-      profile,
+    decision = build(
       snapshotLastDecision.tier,
       `Preserved ${snapshotLastDecision.tier} tier during toolResult loop`,
       false,
     );
   }
   if (isSingleTier && !isToolLoop) {
-    decision = buildRoutingDecision(
-      profileName,
-      profile,
+    decision = build(
       singleTier,
       `Single tier "${singleTier}" defined — skipping classifier/thinking mapping.`,
       false,
     );
   } else if (thinkingLevel !== "off" && !isToolLoop) {
     const preferred = thinkingToTier(thinkingLevel);
-    const tier = resolveAvailableTier(profile, preferred);
-    let reasoning = `Thinking level ${thinkingLevel} mapped to ${tier} tier.`;
-    if (tier !== preferred) {
-      reasoning = `Thinking level ${thinkingLevel} mapped to ${preferred} tier, resolved to ${tier} (${preferred} tier is not configured).`;
+    if (profiles) {
+      // live 빌드가 가까운 tier 폴백과 ref 경로 표기를 직접 처리함.
+      decision = build(
+        preferred,
+        `Thinking level ${thinkingLevel} mapped to ${preferred} tier.`,
+        false,
+      );
+    } else {
+      const tier = resolveAvailableTier(profile, preferred);
+      let reasoning = `Thinking level ${thinkingLevel} mapped to ${tier} tier.`;
+      if (tier !== preferred) {
+        reasoning = `Thinking level ${thinkingLevel} mapped to ${preferred} tier, resolved to ${tier} (${preferred} tier is not configured).`;
+      }
+      decision = build(tier, reasoning, false);
     }
-    decision = buildRoutingDecision(profileName, profile, tier, reasoning, false);
   }
   return decision;
 };

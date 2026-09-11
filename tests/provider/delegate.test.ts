@@ -851,3 +851,79 @@ describe("toDelegateResult 위임 결과 변환", () => {
     ).toBe(false);
   });
 });
+
+describe("delegate 논리적 ref 실시간 추적", () => {
+  const liveProfiles = {
+    balanced: {
+      high: { ref: "base#high" },
+      medium: { models: ["openai/gpt-medium"] },
+    },
+    base: {
+      high: { models: ["openai/gpt-high"], resolvedContextWindow: 1000 },
+    },
+  } as any;
+  it("getInitialModelsToTry가 추적된 모델을 반환함", () => {
+    expect(
+      getInitialModelsToTry(
+        liveProfiles.balanced,
+        decision({ profile: "balanced", tier: "high" }),
+        liveProfiles,
+      ),
+    ).toEqual(["openai/gpt-high"]);
+  });
+  it("getInitialModelsToTry 추적 실패 시 기존 profile로 대체함", () => {
+    const profiles = {
+      balanced: { high: { ref: "missing#high" } },
+    } as any;
+    expect(
+      getInitialModelsToTry(
+        { high: { models: ["openai/fallback"] } } as any,
+        decision({ profile: "balanced", tier: "high" }),
+        profiles,
+      ),
+    ).toEqual(["openai/fallback"]);
+  });
+  it("resolveTargetLimit이 추적된 tier limit을 반환함", () => {
+    const registry = { find: vi.fn().mockReturnValue({ contextWindow: 2000 }) } as any;
+    expect(
+      resolveTargetLimit(
+        liveProfiles.balanced,
+        decision({ profile: "balanced", tier: "high" }),
+        "openai/gpt-high",
+        registry,
+        "openai",
+        "gpt-high",
+        liveProfiles,
+      ),
+    ).toBe(2000);
+  });
+  it("resolveTargetLimit이 목록에 없으면 registry 대체값을 반환함", () => {
+    const registry = { find: vi.fn().mockReturnValue({ contextWindow: 3000 }) } as any;
+    expect(
+      resolveTargetLimit(
+        liveProfiles.balanced,
+        decision({ profile: "balanced", tier: "high" }),
+        "openai/other",
+        registry,
+        "openai",
+        "other",
+        liveProfiles,
+      ),
+    ).toBe(3000);
+  });
+  it("resolveTargetLimit이 전부 해석 불가면 기본값을 반환함", () => {
+    const profiles = { balanced: { high: { ref: "missing#high" } } } as any;
+    const registry = { find: vi.fn().mockReturnValue(undefined) } as any;
+    expect(
+      resolveTargetLimit(
+        profiles.balanced,
+        decision({ profile: "balanced", tier: "high" }),
+        "openai/other",
+        registry,
+        "openai",
+        "other",
+        profiles,
+      ),
+    ).toBe(128000);
+  });
+});

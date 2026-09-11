@@ -8,6 +8,8 @@ export interface ClassifierConfig {
 }
 
 export interface RoutedTierConfig {
+  /** 논리적 참조. 있으면 models 대신 "profile#tier"를 라우팅 시점에 실시간 추적함. */
+  ref?: string;
   models?: string[];
   thinking?: ThinkingLevel; // thinking of primary (default medium)
   contextWindow?: number;

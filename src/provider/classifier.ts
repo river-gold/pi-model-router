@@ -1,7 +1,8 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RouterTier, RoutingDecision } from "../types";
-import { resolveAvailableTier, buildRoutingDecision } from "../routing";
+import { resolveAvailableTier, buildRoutingDecision, buildRoutingDecisionLive } from "../routing";
+import { resolveAvailableTierLive } from "../config";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
 import { runClassifierBranch } from "./classifierBranch";
 import type { RouterProviderState } from "./state";
@@ -19,6 +20,7 @@ export const applyClassifierIfNeeded = async (
   thinkingLevel: ReturnType<ExtensionAPI["getThinkingLevel"]>,
   classifierSource: string,
   sessionId?: string,
+  profiles?: Record<string, RouterProfile>,
 ): Promise<RoutingDecision> => {
   if (isSingleTier || isToolLoopNow || thinkingLevel !== "off") return decision;
   const effectiveHistorySize = state.currentConfig.historySize ?? 0;
@@ -41,10 +43,15 @@ export const applyClassifierIfNeeded = async (
     return decision;
   }
   if (!result) return decision;
-  const tier = resolveAvailableTier(profile, result.tier);
+  const requestedTier = result.tier;
+  const resolvedTier = profiles
+    ? (resolveAvailableTierLive(profiles, modelId, requestedTier)?.tier ?? requestedTier)
+    : resolveAvailableTier(profile, requestedTier);
   let reasoning = `Classifier: ${result.reasoning}`;
-  if (tier !== result.tier) {
-    reasoning = `Resolved from ${result.tier} to ${tier} tier (${result.tier} tier is not configured). Original: ${reasoning}`;
+  if (resolvedTier !== requestedTier) {
+    reasoning = `Resolved from ${requestedTier} to ${resolvedTier} tier (${requestedTier} tier is not configured). Original: ${reasoning}`;
   }
-  return buildRoutingDecision(modelId, profile, tier, reasoning, true);
+  return profiles
+    ? buildRoutingDecisionLive(profiles, modelId, resolvedTier, reasoning, true)
+    : buildRoutingDecision(modelId, profile, resolvedTier, reasoning, true);
 };

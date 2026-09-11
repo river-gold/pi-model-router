@@ -35,26 +35,36 @@ describe("history 히스토리 조회", () => {
     it("빈 배열은 빈 배열을 반환한다", () => expect(resolveHistoryUserIndices([], 2)).toEqual([]));
     it("user가 하나면 마지막을 제외해 빈 배열을 반환한다", () =>
       expect(resolveHistoryUserIndices([0], 1)).toEqual([]));
-    it("pairCount 1개를 반환한다", () => expect(resolveHistoryUserIndices([0, 1, 2], 1)).toEqual([1]));
-    it("pairCount 2개를 반환한다", () => expect(resolveHistoryUserIndices([0, 1, 2], 2)).toEqual([0, 1]));
+    it("pairCount 1개를 반환한다", () =>
+      expect(resolveHistoryUserIndices([0, 1, 2], 1)).toEqual([1]));
+    it("pairCount 2개를 반환한다", () =>
+      expect(resolveHistoryUserIndices([0, 1, 2], 2)).toEqual([0, 1]));
     it("pairCount가 가용 수보다 크면 전부를 반환한다", () =>
       expect(resolveHistoryUserIndices([0, 1, 2], 10)).toEqual([0, 1]));
-    it("pairCount가 정확히 맞으면 해당 구간을 반환한다", () => expect(resolveHistoryUserIndices([0, 1, 2, 3], 2)).toEqual([1, 2]));
+    it("pairCount가 정확히 맞으면 해당 구간을 반환한다", () =>
+      expect(resolveHistoryUserIndices([0, 1, 2, 3], 2)).toEqual([1, 2]));
   });
 
   describe("isAssistantOrToolResult assistant·toolResult 판별", () => {
-    it("assistant는 true를 반환한다", () => expect(isAssistantOrToolResult("assistant")).toBe(true));
-    it("toolResult는 true를 반환한다", () => expect(isAssistantOrToolResult("toolResult")).toBe(true));
+    it("assistant는 true를 반환한다", () =>
+      expect(isAssistantOrToolResult("assistant")).toBe(true));
+    it("toolResult는 true를 반환한다", () =>
+      expect(isAssistantOrToolResult("toolResult")).toBe(true));
     it("user는 false를 반환한다", () => expect(isAssistantOrToolResult("user")).toBe(false));
     it("system은 false를 반환한다", () => expect(isAssistantOrToolResult("system")).toBe(false));
-    it("toolCall은 false를 반환한다", () => expect(isAssistantOrToolResult("toolCall")).toBe(false));
+    it("toolCall은 false를 반환한다", () =>
+      expect(isAssistantOrToolResult("toolCall")).toBe(false));
   });
 
   describe("getNextUserIdx 다음 user 인덱스 조회", () => {
-    it("마지막이 아니면 다음 user를 반환한다", () => expect(getNextUserIdx([0, 5, 10], 0, 20)).toBe(5));
-    it("중간 위치에서 다음 user를 반환한다", () => expect(getNextUserIdx([0, 5, 10], 1, 20)).toBe(10));
-    it("마지막 위치면 messagesLength를 반환한다", () => expect(getNextUserIdx([0, 5, 10], 2, 20)).toBe(20));
-    it("길이가 달라도 마지막 위치면 messagesLength를 반환한다", () => expect(getNextUserIdx([0], 0, 5)).toBe(5));
+    it("마지막이 아니면 다음 user를 반환한다", () =>
+      expect(getNextUserIdx([0, 5, 10], 0, 20)).toBe(5));
+    it("중간 위치에서 다음 user를 반환한다", () =>
+      expect(getNextUserIdx([0, 5, 10], 1, 20)).toBe(10));
+    it("마지막 위치면 messagesLength를 반환한다", () =>
+      expect(getNextUserIdx([0, 5, 10], 2, 20)).toBe(20));
+    it("길이가 달라도 마지막 위치면 messagesLength를 반환한다", () =>
+      expect(getNextUserIdx([0], 0, 5)).toBe(5));
   });
 
   describe("buildUserPosMap user 위치 맵 생성", () => {

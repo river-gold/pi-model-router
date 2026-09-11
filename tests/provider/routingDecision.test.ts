@@ -103,3 +103,44 @@ describe("resolveRoutingDecision 라우팅 결정", () => {
     expect(d.tier).toBe("medium");
   });
 });
+
+describe("resolveRoutingDecision 논리적 ref", () => {
+  const liveProfiles = {
+    balanced: {
+      high: { models: ["openai/gpt-high"] },
+      medium: { ref: "base#high" },
+    },
+    base: { high: { models: ["openai/gpt-base"] } },
+  } as any;
+  it("profiles가 있으면 ref 추적 thinking 매핑", () => {
+    const d = resolveRoutingDecision({
+      profileName: "balanced",
+      profile: liveProfiles.balanced,
+      context: baseContext,
+      snapshotLastDecision: undefined,
+      thinkingLevel: "medium" as any,
+      isToolLoop: false,
+      singleTier: undefined,
+      validTierCount: 2,
+      profiles: liveProfiles,
+    });
+    expect(d.tier).toBe("medium");
+    expect(d.targetModelId).toBe("gpt-base");
+    expect(d.reasoning).toContain("[ref:");
+  });
+  it("profiles가 있어도 해석 불가면 throw", () => {
+    expect(() =>
+      resolveRoutingDecision({
+        profileName: "broken",
+        profile: { medium: { ref: "missing#high" } } as any,
+        context: baseContext,
+        snapshotLastDecision: undefined,
+        thinkingLevel: "high" as any,
+        isToolLoop: false,
+        singleTier: undefined,
+        validTierCount: 1,
+        profiles: { broken: { medium: { ref: "missing#high" } } } as any,
+      }),
+    ).toThrow(/no resolvable configuration/);
+  });
+});

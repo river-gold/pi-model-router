@@ -1,7 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { mergeTier, normalizeTierConfig } from "../../src/config/tier";
+import {
+  mergeTier,
+  nearbyTierOrder,
+  normalizeTierConfig,
+  resolveAvailableTier,
+} from "../../src/config/tier";
 
 describe("tier를 검증함", () => {
+  describe("nearbyTierOrder 순서 규칙을 검증함", () => {
+    it("선호 → 위쪽 → 아래쪽 순서를 검증함", () => {
+      expect(nearbyTierOrder("medium")).toEqual([
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "low",
+        "minimal",
+      ]);
+    });
+    it("resolveAvailableTier와 같은 결과를 검증함", () => {
+      const profile = { high: { models: ["a"] }, low: { models: ["b"] } };
+      expect(resolveAvailableTier(profile, "medium")).toBe(
+        nearbyTierOrder("medium").find((t) => (profile as Record<string, unknown>)[t]),
+      );
+    });
+  });
   describe("mergeTier 동작을 검증함", () => {
     it("둘 다 undefined면 undefined 반환함을 검증함", () =>
       expect(mergeTier(undefined, undefined)).toBeUndefined());
@@ -26,6 +49,20 @@ describe("tier를 검증함", () => {
   });
 
   describe("normalizeTierConfig 동작을 검증함", () => {
+    it("유효한 ref는 논리적 참조로 유지함을 검증함", () => {
+      const w: string[] = [];
+      expect(normalizeTierConfig({ ref: "copilot#high" }, "p", "high", w)).toEqual({
+        ref: "copilot#high",
+      });
+      expect(w).toEqual([]);
+    });
+    it("무효한 ref는 warning 남기고 undefined 반환함을 검증함", () => {
+      for (const ref of ["bad", "#high", "p#", "p#unknown", "a#b#c"]) {
+        const w: string[] = [];
+        expect(normalizeTierConfig({ ref }, "p", "high", w)).toBeUndefined();
+        expect(w.some((x) => x.includes("invalid ref"))).toBe(true);
+      }
+    });
     it("object가 아니면 undefined 반환함을 검증함", () => {
       expect(normalizeTierConfig("string", "p", "high", [])).toBeUndefined();
       expect(normalizeTierConfig(null, "p", "high", [])).toBeUndefined();

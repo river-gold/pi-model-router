@@ -14,8 +14,9 @@ describe("guards를 검증함", () => {
   });
 
   describe("isRouterTier 동작을 검증함", () => {
-    it.each(["max", "xhigh", "high", "medium", "low", "minimal"] as const)("%s는 true 반환함을 검증함", (t) =>
-      expect(isRouterTier(t)).toBe(true),
+    it.each(["max", "xhigh", "high", "medium", "low", "minimal"] as const)(
+      "%s는 true 반환함을 검증함",
+      (t) => expect(isRouterTier(t)).toBe(true),
     );
     it("auto는 false 반환함을 검증함", () => expect(isRouterTier("auto")).toBe(false));
     it("빈 문자열은 false 반환함을 검증함", () => expect(isRouterTier("")).toBe(false));

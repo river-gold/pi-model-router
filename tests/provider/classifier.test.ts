@@ -13,10 +13,20 @@ vi.mock("../../src/routing", () => ({
     reasoning,
     isClassifier,
   })),
+  buildRoutingDecisionLive: vi.fn((profiles, modelId, tier, reasoning, isClassifier) => ({
+    profile: modelId,
+    tier,
+    reasoning,
+    isClassifier,
+  })),
 }));
 
 import { runClassifierBranch } from "../../src/provider/classifierBranch";
-import { resolveAvailableTier, buildRoutingDecision } from "../../src/routing";
+import {
+  resolveAvailableTier,
+  buildRoutingDecision,
+  buildRoutingDecisionLive,
+} from "../../src/routing";
 
 describe("provider/classifier 분류기 적용", () => {
   const mockDecision = { tier: "medium", reasoning: "orig" } as any;
@@ -347,5 +357,63 @@ describe("provider/classifier 분류기 적용", () => {
       expect.stringContaining("Resolved from high"),
       true,
     );
+  });
+});
+
+describe("provider/classifier 논리적 ref", () => {
+  const liveProfiles = {
+    myModel: { high: { ref: "base#high" } },
+    base: { high: { models: ["openai/gpt-base"] } },
+  } as any;
+  const callLive = (profiles: any, modelId = "myModel") => {
+    const state = {
+      currentConfig: { historySize: 0, profiles: {} } as any,
+      failedByChain: { get: vi.fn() } as any,
+    };
+    return applyClassifierIfNeeded(
+      { high: { ref: "base#high" } } as any,
+      { tier: "medium", reasoning: "orig" } as any,
+      modelId,
+      {} as any,
+      state as any,
+      {} as any,
+      undefined,
+      false,
+      false,
+      "off" as any,
+      "source",
+      undefined,
+      profiles,
+    );
+  };
+  it("profiles가 있으면 live 결정으로 반환함", async () => {
+    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    } as any);
+    const result = await callLive(liveProfiles);
+    expect(buildRoutingDecisionLive).toHaveBeenCalledWith(
+      liveProfiles,
+      "myModel",
+      "high",
+      expect.stringContaining("Classifier:"),
+      true,
+    );
+    expect(result).toEqual(
+      expect.objectContaining({ profile: "myModel", tier: "high", isClassifier: true }),
+    );
+  });
+  it("profiles에 없어도 요청 tier로 live 결정함", async () => {
+    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    } as any);
+    const result = await callLive({});
+    expect(buildRoutingDecisionLive).toHaveBeenCalledWith(
+      {},
+      "myModel",
+      "high",
+      expect.stringContaining("Classifier:"),
+      true,
+    );
+    expect(result).toEqual(expect.objectContaining({ profile: "myModel" }));
   });
 });

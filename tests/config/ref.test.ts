@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   mergeTier,
+  resolveAvailableTier,
   resolveAvailableTier as resolveAvailableTierFromConfig,
 } from "../../src/config/tier";
 import { resolveAvailableTier as resolveAvailableTierFromRouting } from "../../src/routing";
 import { normalizeConfig } from "../../src/config/normalize";
-import { resolveProfileTierRefs } from "../../src/config/ref";
-import type { RouterConfig } from "../../src/types";
+import {
+  dereferenceTier,
+  resolveAvailableTierLive,
+  resolvableTiers,
+  resolveProfileTierRefs,
+} from "../../src/config/ref";
+import type { RouterConfig, RouterProfile } from "../../src/types";
 
 const makeProfiles = (): Record<string, Record<string, unknown>> => ({
   auto: {
@@ -20,13 +26,17 @@ const makeProfiles = (): Record<string, Record<string, unknown>> => ({
   },
 });
 
-describe("tier ref 치환을 검증함", () => {
-  describe("resolveProfileTierRefs 동작을 검증함", () => {
-    it("ref를 대상 tier 값으로 치환함을 검증함", () => {
+const asRouterProfiles = (
+  raw: Record<string, Record<string, unknown>>,
+): Record<string, RouterProfile> => raw as unknown as Record<string, RouterProfile>;
+
+describe("논리적 tier ref를 검증함", () => {
+  describe("resolveProfileTierRefs 검증을 검증함", () => {
+    it("ref를 치환하지 않고 그대로 둠을 검증함", () => {
       const profiles = makeProfiles();
       const warnings: string[] = [];
       resolveProfileTierRefs(profiles, warnings);
-      expect(profiles.auto!.medium).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
+      expect(profiles.auto!.medium).toEqual({ ref: "copilot#high" });
       expect(warnings).toEqual([]);
     });
     it("object가 아닌 profile은 건너뜀을 검증함", () => {
@@ -35,27 +45,11 @@ describe("tier ref 치환을 검증함", () => {
       resolveProfileTierRefs(profiles, warnings);
       expect(warnings).toEqual([]);
     });
-    it("structuredClone이 없으면 JSON 복사로 치환함을 검증함", () => {
-      vi.stubGlobal("structuredClone", undefined);
-      try {
-        const profiles = makeProfiles();
-        resolveProfileTierRefs(profiles, []);
-        expect(profiles.auto!.medium).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
-      } finally {
-        vi.unstubAllGlobals();
-      }
-    });
-    it("deep copy로 치환되어 원본과 독립적임을 검증함", () => {
-      const profiles = makeProfiles();
-      resolveProfileTierRefs(profiles, []);
-      (profiles.auto!.medium as Record<string, unknown[]>).models!.push("x/y");
-      expect(profiles.copilot!.high).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
-    });
-    it("ref와 다른 키가 함께 있어도 통째로 치환함을 검증함", () => {
+    it("ref와 다른 키가 함께 있어도 건드리지 않음을 검증함", () => {
       const profiles = makeProfiles();
       profiles.auto!.medium = { ref: "copilot#high", models: ["x/y"] };
       resolveProfileTierRefs(profiles, []);
-      expect(profiles.auto!.medium).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
+      expect(profiles.auto!.medium).toEqual({ ref: "copilot#high", models: ["x/y"] });
     });
     it("잘못된 ref 형식은 tier를 비활성화함을 검증함", () => {
       const cases = ["copilot", "#high", "copilot#", "copilot#unknown", "", "a#b#c"];
@@ -68,14 +62,6 @@ describe("tier ref 치환을 검증함", () => {
         expect(warnings.some((w) => w.includes("invalid ref"))).toBe(true);
       }
     });
-    it("존재하지 않는 대상은 tier를 비활성화함을 검증함", () => {
-      const profiles = makeProfiles();
-      profiles.auto!.medium = { ref: "missing#high" };
-      const warnings: string[] = [];
-      resolveProfileTierRefs(profiles, warnings);
-      expect(profiles.auto!.medium).toBeUndefined();
-      expect(warnings.some((w) => w.includes("not found"))).toBe(true);
-    });
     it("자기참조는 tier를 비활성화함을 검증함", () => {
       const profiles = makeProfiles();
       profiles.auto!.medium = { ref: "auto#medium" };
@@ -84,17 +70,12 @@ describe("tier ref 치환을 검증함", () => {
       expect(profiles.auto!.medium).toBeUndefined();
       expect(warnings.some((w) => w.includes("itself"))).toBe(true);
     });
-    it("대상이 또 ref면 해결하지 않고 비활성화함을 검증함", () => {
-      const profiles: Record<string, Record<string, unknown>> = {
-        a: { medium: { ref: "b#high" } },
-        b: { high: { ref: "c#high" } },
-        c: { high: { models: ["openai/gpt-4o"] } },
-      };
+    it("존재하지 않는 대상도 논리적 참조로 유지함을 검증함", () => {
+      const profiles = makeProfiles();
+      profiles.auto!.medium = { ref: "missing#high" };
       const warnings: string[] = [];
       resolveProfileTierRefs(profiles, warnings);
-      expect(profiles.a!.medium).toBeUndefined();
-      expect(warnings.some((w) => w.includes("itself a ref"))).toBe(true);
-      expect(profiles.b!.high).toEqual({ models: ["openai/gpt-4o"] });
+      expect(profiles.auto!.medium).toEqual({ ref: "missing#high" });
     });
     it("ref가 없는 tier는 그대로 둠을 검증함", () => {
       const profiles = makeProfiles();
@@ -105,8 +86,198 @@ describe("tier ref 치환을 검증함", () => {
     });
   });
 
+  describe("dereferenceTier 실시간 추적을 검증함", () => {
+    it("ref를 대상 tier 값으로 추적함을 검증함", () => {
+      const resolved = dereferenceTier(asRouterProfiles(makeProfiles()), "auto", "medium");
+      expect(resolved?.config).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
+      expect(resolved?.profileName).toBe("copilot");
+      expect(resolved?.tier).toBe("high");
+    });
+    it("원본 변경이 다음 추적에 바로 반영됨을 검증함", () => {
+      const profiles = asRouterProfiles(makeProfiles());
+      expect(dereferenceTier(profiles, "auto", "medium")?.config).toEqual({
+        models: ["github-copilot/gpt-5.6-sol#high"],
+      });
+      (profiles.copilot!.high as { models: string[] }).models = [
+        "github-copilot/gpt-5.6-luna#high",
+      ];
+      expect(dereferenceTier(profiles, "auto", "medium")?.config).toEqual({
+        models: ["github-copilot/gpt-5.6-luna#high"],
+      });
+    });
+    it("chained ref를 끝까지 따라감을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        a: { medium: { ref: "b#high" } },
+        b: { high: { ref: "c#high" } },
+        c: { high: { models: ["openai/gpt-4o"] } },
+      };
+      const resolved = dereferenceTier(asRouterProfiles(profiles), "a", "medium");
+      expect(resolved?.config).toEqual({ models: ["openai/gpt-4o"] });
+      expect(resolved?.chain).toEqual(["a#medium", "b#high", "c#high"]);
+    });
+    it("순환 참조는 undefined를 반환함을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        a: { medium: { ref: "b#high" } },
+        b: { high: { ref: "a#medium" } },
+      };
+      expect(dereferenceTier(asRouterProfiles(profiles), "a", "medium")).toBeUndefined();
+    });
+    it("존재하지 않는 대상은 undefined를 반환함을 검증함", () => {
+      const profiles = makeProfiles();
+      profiles.auto!.medium = { ref: "missing#high" };
+      expect(dereferenceTier(asRouterProfiles(profiles), "auto", "medium")).toBeUndefined();
+    });
+    it("없는 tier는 대상 profile의 위쪽 가까운 tier로 추적함을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "copilot#low" } },
+        copilot: { high: { models: ["github-copilot/gpt-5.6-sol#high"] } },
+      };
+      const resolved = dereferenceTier(asRouterProfiles(profiles), "auto", "medium");
+      expect(resolved?.config).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
+      expect(resolved?.tier).toBe("high");
+    });
+    it("위쪽이 없으면 아래쪽 가까운 tier로 추적함을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "copilot#high" } },
+        copilot: { low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] } },
+      };
+      const resolved = dereferenceTier(asRouterProfiles(profiles), "auto", "medium");
+      expect(resolved?.config).toEqual({
+        models: ["ollama-cloud/deepseek-v4-flash:0731#low"],
+      });
+    });
+    it("대상 profile에 구체 tier가 없으면 undefined를 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "copilot#high" } },
+        copilot: {},
+      };
+      expect(dereferenceTier(asRouterProfiles(profiles), "auto", "medium")).toBeUndefined();
+    });
+    it("high+low가 있으면 위쪽 high를 우선함을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "copilot#medium" } },
+        copilot: {
+          high: { models: ["github-copilot/gpt-5.6-sol#high"] },
+          low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] },
+        },
+      };
+      const resolved = dereferenceTier(asRouterProfiles(profiles), "auto", "medium");
+      expect(resolved?.tier).toBe("high");
+    });
+    it("resolveAvailableTier와 같은 tier를 고름을 검증함", () => {
+      const target = {
+        high: { models: ["github-copilot/gpt-5.6-sol#high"] },
+        low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] },
+      };
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "copilot#medium" } },
+        copilot: { ...target },
+      };
+      const resolved = dereferenceTier(asRouterProfiles(profiles), "auto", "medium");
+      expect(resolved?.tier).toBe(resolveAvailableTier(target, "medium"));
+    });
+    it("모델 없는 객체 tier는 undefined를 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { contextWindow: 1000 } },
+      };
+      expect(dereferenceTier(asRouterProfiles(profiles), "auto", "medium")).toBeUndefined();
+    });
+    it("형식 오류 ref를 live 추적하면 undefined를 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "badformat" } },
+      };
+      expect(dereferenceTier(asRouterProfiles(profiles), "auto", "medium")).toBeUndefined();
+    });
+    it("대상 profile 자체가 없으면 undefined를 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "ghost#high" } },
+      };
+      expect(dereferenceTier(asRouterProfiles(profiles), "auto", "medium")).toBeUndefined();
+    });
+    it("36홉을 넘는 체인은 중단하고 undefined를 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {};
+      const n = 40;
+      for (let i = 0; i < n; i++) {
+        profiles[`p${i}`] = { medium: { ref: `p${i + 1}#medium` } };
+      }
+      profiles[`p${n}`] = { medium: { models: ["openai/gpt-4o"] } };
+      expect(dereferenceTier(asRouterProfiles(profiles), "p0", "medium")).toBeUndefined();
+    });
+    it("36홉 안의 체인은 끝까지 따라감을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {};
+      const n = 10;
+      for (let i = 0; i < n; i++) {
+        profiles[`p${i}`] = { medium: { ref: `p${i + 1}#medium` } };
+      }
+      profiles[`p${n}`] = { medium: { models: ["openai/gpt-4o"] } };
+      expect(dereferenceTier(asRouterProfiles(profiles), "p0", "medium")?.config).toEqual({
+        models: ["openai/gpt-4o"],
+      });
+    });
+  });
+
+  describe("resolveAvailableTierLive를 검증함", () => {
+    it("ref tier도 해석 가능 tier로 셈을 검증함", () => {
+      const found = resolveAvailableTierLive(asRouterProfiles(makeProfiles()), "auto", "medium");
+      expect(found?.tier).toBe("medium");
+      expect(found?.resolved.config).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
+    });
+    it("깨진 ref는 같은 profile의 가까운 tier로 폴백함을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: {
+          medium: { ref: "missing#high" },
+          low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] },
+        },
+      };
+      const found = resolveAvailableTierLive(asRouterProfiles(profiles), "auto", "medium");
+      expect(found?.tier).toBe("low");
+    });
+    it("빈 자리 건너뛰고 가까운 tier를 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] } },
+      };
+      const found = resolveAvailableTierLive(asRouterProfiles(profiles), "auto", "medium");
+      expect(found?.tier).toBe("low");
+    });
+    it("모두 해석 불가면 undefined를 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: { medium: { ref: "missing#high" } },
+      };
+      expect(
+        resolveAvailableTierLive(asRouterProfiles(profiles), "auto", "medium"),
+      ).toBeUndefined();
+    });
+    it("없는 profile은 undefined를 검증함", () => {
+      expect(
+        resolveAvailableTierLive(asRouterProfiles(makeProfiles()), "ghost", "medium"),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("resolvableTiers를 검증함", () => {
+    it("ref 포함 해석 가능 tier 목록을 검증함", () => {
+      expect(resolvableTiers(asRouterProfiles(makeProfiles()), "auto")).toEqual([
+        "high",
+        "medium",
+        "low",
+      ]);
+    });
+    it("깨진 ref는 제외함을 검증함", () => {
+      const profiles: Record<string, Record<string, unknown>> = {
+        auto: {
+          medium: { ref: "missing#high" },
+          low: { models: ["openai/gpt"] },
+        },
+      };
+      expect(resolvableTiers(asRouterProfiles(profiles), "auto")).toEqual(["low"]);
+    });
+    it("없는 profile은 빈 배열을 검증함", () => {
+      expect(resolvableTiers(asRouterProfiles(makeProfiles()), "ghost")).toEqual([]);
+    });
+  });
+
   describe("normalizeConfig 통합을 검증함", () => {
-    it("auto.medium ref가 copilot.high 값으로 로드됨을 검증함", () => {
+    it("auto.medium ref가 논리적 참조로 로드됨을 검증함", () => {
       const { config, warnings } = normalizeConfig({
         profiles: {
           auto: {
@@ -121,22 +292,33 @@ describe("tier ref 치환을 검증함", () => {
         },
       } as unknown as RouterConfig);
       expect(warnings).toEqual([]);
-      expect(config.profiles.auto!.medium?.models).toEqual(["github-copilot/gpt-5.6-sol#high"]);
-      expect(config.profiles.auto!.high?.models).toEqual(["xai/grok-4.6#high"]);
-      expect("ref" in (config.profiles.auto!.medium as unknown as Record<string, unknown>)).toBe(
-        false,
-      );
+      expect(config.profiles.auto!.medium).toEqual({ ref: "copilot#high" });
+      expect(dereferenceTier(config.profiles, "auto", "medium")?.config.models).toEqual([
+        "github-copilot/gpt-5.6-sol#high",
+      ]);
+    });
+    it("ref 대상 변경이 추적 결과에 바로 반영됨을 검증함", () => {
+      const { config } = normalizeConfig({
+        profiles: {
+          auto: { medium: { ref: "copilot#high" } },
+          copilot: { high: { models: ["github-copilot/gpt-5.6-sol#high"] } },
+        },
+      } as unknown as RouterConfig);
+      (config.profiles.copilot!.high as { models: string[] }).models = ["openai/gpt-4o"];
+      expect(dereferenceTier(config.profiles, "auto", "medium")?.config.models).toEqual([
+        "openai/gpt-4o",
+      ]);
     });
     it("무효한 ref tier는 제외하고 유효 tier는 유지함을 검증함", () => {
       const { config, warnings } = normalizeConfig({
         profiles: {
           auto: {
-            medium: { ref: "missing#high" },
+            medium: { ref: "badformat" },
             low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] },
           },
         },
       } as unknown as RouterConfig);
-      expect(warnings.some((w) => w.includes("not found"))).toBe(true);
+      expect(warnings.some((w) => w.includes("invalid ref"))).toBe(true);
       expect(config.profiles.auto!.medium).toBeUndefined();
       expect(config.profiles.auto!.low?.models).toEqual([
         "ollama-cloud/deepseek-v4-flash:0731#low",
@@ -144,7 +326,7 @@ describe("tier ref 치환을 검증함", () => {
     });
     it("ref만 있고 모두 실패한 profile은 건너뜀을 검증함", () => {
       const { config, warnings } = normalizeConfig({
-        profiles: { auto: { medium: { ref: "missing#high" } } },
+        profiles: { auto: { medium: { ref: "badformat" } } },
       } as unknown as RouterConfig);
       expect(config.profiles.auto).toBeUndefined();
       expect(warnings.some((w) => w.includes("has no valid tiers"))).toBe(true);
@@ -158,63 +340,18 @@ describe("tier ref 치환을 검증함", () => {
     });
   });
 
-  describe("가까운 tier 폴백을 검증함", () => {
+  describe("가까운 tier 폴백 공유를 검증함", () => {
     it("라우팅과 같은 함수를 공유함을 검증함", () => {
       expect(resolveAvailableTierFromConfig).toBe(resolveAvailableTierFromRouting);
     });
-    it("없는 tier는 위쪽 가까운 tier로 치환함을 검증함", () => {
-      const profiles: Record<string, Record<string, unknown>> = {
-        auto: { medium: { ref: "copilot#low" } },
-        copilot: { high: { models: ["github-copilot/gpt-5.6-sol#high"] } },
-      };
-      const warnings: string[] = [];
-      resolveProfileTierRefs(profiles, warnings);
-      expect(profiles.auto!.medium).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
-      expect(warnings.some((w) => w.includes('Resolved to nearby "copilot#high"'))).toBe(true);
-    });
-    it("위쪽이 없으면 아래쪽 가까운 tier로 치환함을 검증함", () => {
-      const profiles: Record<string, Record<string, unknown>> = {
-        auto: { medium: { ref: "copilot#high" } },
-        copilot: { low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] } },
-      };
-      resolveProfileTierRefs(profiles, []);
-      expect(profiles.auto!.medium).toEqual({
-        models: ["ollama-cloud/deepseek-v4-flash:0731#low"],
-      });
-    });
-    it("가까운 tier 탐색에서 ref tier는 제외함을 검증함", () => {
-      const profiles: Record<string, Record<string, unknown>> = {
-        auto: { medium: { ref: "copilot#high" } },
-        copilot: {
-          low: { ref: "other#low" },
-          minimal: { models: ["openai/min"] },
-        },
-        other: { low: { models: ["openai/other"] } },
-      };
-      resolveProfileTierRefs(profiles, []);
-      expect(profiles.auto!.medium).toEqual({ models: ["openai/min"] });
-    });
-    it("대상 profile에 구체 tier가 없으면 비활성화함을 검증함", () => {
-      const profiles: Record<string, Record<string, unknown>> = {
-        auto: { medium: { ref: "copilot#high" } },
-        copilot: {},
-      };
-      const warnings: string[] = [];
-      resolveProfileTierRefs(profiles, warnings);
-      expect(profiles.auto!.medium).toBeUndefined();
-      expect(warnings.some((w) => w.includes("Tier disabled"))).toBe(true);
-    });
-    it("normalizeConfig 통합에서 가까운 tier로 로드됨을 검증함", () => {
-      const { config, warnings } = normalizeConfig({
-        profiles: {
-          auto: { medium: { ref: "copilot#high" } },
-          copilot: { low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] } },
-        },
-      } as unknown as RouterConfig);
-      expect(config.profiles.auto!.medium?.models).toEqual([
-        "ollama-cloud/deepseek-v4-flash:0731#low",
-      ]);
-      expect(warnings.some((w) => w.includes("nearby"))).toBe(true);
+    it("structuredClone 유무와 무관하게 동작함을 검증함", () => {
+      vi.stubGlobal("structuredClone", undefined);
+      try {
+        const resolved = dereferenceTier(asRouterProfiles(makeProfiles()), "auto", "medium");
+        expect(resolved?.config).toEqual({ models: ["github-copilot/gpt-5.6-sol#high"] });
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 });
