@@ -124,6 +124,57 @@ describe("config.ts 설정은", () => {
         normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.thinking,
       ).toBeUndefined();
     });
+    it("effort가 있으면 # 없는 모델의 기본값으로 적용한다", () => {
+      const w: string[] = [];
+      const r = normalizeTierConfig(
+        {
+          models: ["openai/gpt-4o#max", "google/gemini-flash", "openai/gpt-4o-mini"],
+          effort: "high",
+        },
+        "p",
+        "medium",
+        w,
+      );
+      expect(w).toEqual([]);
+      expect(r?.thinking).toBe("high");
+      expect(r?.models).toEqual([
+        "openai/gpt-4o#max",
+        "google/gemini-flash",
+        "openai/gpt-4o-mini",
+      ]);
+    });
+    it("thinking과 effort가 다르면 thinking 우선 + 경고한다", () => {
+      const w: string[] = [];
+      const r = normalizeTierConfig(
+        { models: ["openai/gpt-4o"], thinking: "low", effort: "high" },
+        "p",
+        "medium",
+        w,
+      );
+      expect(r?.thinking).toBe("low");
+      expect(w.some((x) => x.includes('"thinking"'))).toBe(true);
+    });
+    it("유효하지 않은 effort는 경고 + 무시한다", () => {
+      const w: string[] = [];
+      const r = normalizeTierConfig(
+        { models: ["openai/gpt-4o#low"], effort: "ultra" },
+        "p",
+        "medium",
+        w,
+      );
+      expect(r?.thinking).toBe("low");
+      expect(w.some((x) => x.includes("invalid effort"))).toBe(true);
+
+      const w2: string[] = [];
+      const r2 = normalizeTierConfig(
+        { models: ["openai/gpt-4o#low"], effort: 123 as unknown as string },
+        "p",
+        "medium",
+        w2,
+      );
+      expect(r2?.thinking).toBe("low");
+      expect(w2.some((x) => x.includes("invalid effort"))).toBe(true);
+    });
     it("세부 정보를 resolve하고 정규화한다", () => {
       const w: string[] = [];
       const raw = {

@@ -11,7 +11,9 @@ export interface RoutedTierConfig {
   /** 논리적 참조. 있으면 models 대신 "profile#tier"를 라우팅 시점에 실시간 추적함. */
   ref?: string;
   models?: string[];
-  thinking?: ThinkingLevel; // thinking of primary (default medium)
+  thinking?: ThinkingLevel; // 티어 기본값: `#` 없는 모델에 적용 (primary `#`가 있으면 우선)
+  /** `thinking`의 별칭. 둘 다 있으면 `thinking` 우선. */
+  effort?: ThinkingLevel;
   contextWindow?: number;
   maxTokens?: number;
   reasoning?: boolean;

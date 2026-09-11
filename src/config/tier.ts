@@ -1,6 +1,7 @@
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RoutedTierConfig, RouterTier } from "../types";
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from "../constants";
-import { ROUTER_TIERS } from "./constants";
+import { ALLOWED_THINKING, ROUTER_TIERS } from "./constants";
 import { isObjectRecord } from "./guards";
 import { parseCanonicalModelRef } from "./modelRef";
 
@@ -106,7 +107,34 @@ export const normalizeTierConfig = (
   }
 
   const primaryParsed = parseCanonicalModelRef(models[0]!);
-  const thinking = primaryParsed.thinking;
+
+  const parseTierDefault = (raw: unknown, key: string): ThinkingLevel | undefined => {
+    if (raw === undefined) return undefined;
+    if (typeof raw !== "string" || !raw.trim()) {
+      warnings.push(
+        `Profile "${profileName}" ${tier} tier has invalid ${key} "${String(raw)}": expected one of ${(ALLOWED_THINKING as readonly string[]).join(", ")}. Ignored.`,
+      );
+      return undefined;
+    }
+    const v = raw.trim();
+    if (!(ALLOWED_THINKING as readonly string[]).includes(v)) {
+      warnings.push(
+        `Profile "${profileName}" ${tier} tier has invalid ${key} "${String(raw)}": expected one of ${(ALLOWED_THINKING as readonly string[]).join(", ")}. Ignored.`,
+      );
+      return undefined;
+    }
+    return v as ThinkingLevel;
+  };
+  const tierThinking = parseTierDefault(record.thinking, "thinking");
+  const tierEffort = parseTierDefault(record.effort, "effort");
+  if (tierThinking !== undefined && tierEffort !== undefined && tierThinking !== tierEffort) {
+    warnings.push(
+      `Profile "${profileName}" ${tier} tier has both "thinking" and "effort": using "thinking" ("${tierThinking}").`,
+    );
+  }
+  // `#` 없는 모델의 기본값. 모델별 `#`가 있으면 모델값 우선 (routing/delegate에서 `??` 처리).
+  // 티어 기본값(thinking/effort)이 있으면 그것을 저장하고, 없을 때만 primary `#`를 승격함.
+  const thinking = tierThinking ?? tierEffort ?? primaryParsed.thinking;
 
   let tierContextWindow: number | undefined;
   if (typeof record.contextWindow === "number") {
