@@ -19,18 +19,15 @@ export const parseCanonicalModelRef = (
   if (!provider || !modelId) {
     throw new Error(`Invalid model reference "${value}". Expected "provider/model[#thinking]".`);
   }
-  if (thinkingRaw !== undefined) {
-    if (thinkingRaw && !isAllowedThinking(thinkingRaw)) {
-      throw new Error(
-        `Invalid thinking "${thinkingRaw}": expected one of ${ALLOWED_THINKING.join(", ")}.`,
-      );
-    }
+  if (thinkingRaw === undefined || thinkingRaw === "") {
+    return { provider, modelId };
   }
-  return {
-    provider,
-    modelId,
-    ...(thinkingRaw ? { thinking: thinkingRaw as ThinkingLevel } : {}),
-  };
+  if (!isAllowedThinking(thinkingRaw)) {
+    throw new Error(
+      `Invalid thinking "${thinkingRaw}": expected one of ${ALLOWED_THINKING.join(", ")}.`,
+    );
+  }
+  return { provider, modelId, thinking: thinkingRaw };
 };
 
 export const formatModelRef = (

@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import { describe, it, expect } from "vitest";
 import { isRouterPersistedState, buildPersistedState } from "../src/state";
 import type { RoutingDecision } from "../src/types";

@@ -2,7 +2,7 @@ import type { Context, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterTier } from "./types";
-import { parseCanonicalModelRef, isRouterTier } from "./config";
+import { isObjectRecord, parseCanonicalModelRef, isRouterTier } from "./config";
 import { buildClassifierSystemPrompt } from "./config/tierGuides";
 import type { TierGuides } from "./types";
 import { getLastUserText, getHistoryPairsText } from "./context";
@@ -119,7 +119,9 @@ type ClassifierOutcome =
 const resolveClassifierModel = (
   registry: ExtensionContext["modelRegistry"],
   ref: string,
-): { model: ReturnType<ExtensionContext["modelRegistry"]["find"]> } | { error: string } => {
+):
+  | { model: NonNullable<ReturnType<ExtensionContext["modelRegistry"]["find"]>> }
+  | { error: string } => {
   const { provider, modelId } = parseCanonicalModelRef(ref);
   const model = registry.find(provider, modelId);
   if (!model) return { error: `model not found: ${provider}/${modelId}` };
@@ -130,21 +132,21 @@ const fetchClassifierAuth = async (
   registry: ExtensionContext["modelRegistry"],
   model: NonNullable<ReturnType<ExtensionContext["modelRegistry"]["find"]>>,
 ): Promise<
-  | { apiKey: string; headers: Record<string, string>; requestModel: typeof model }
+  | {
+      apiKey: string;
+      headers: Record<string, string | null> | undefined;
+      requestModel: typeof model;
+    }
   | { error: string }
 > => {
   const auth = await registry.getApiKeyAndHeaders(model);
-  const hasKey =
-    "apiKey" in (auth as Record<string, unknown>) && !!(auth as { apiKey: string }).apiKey;
-  if (!auth.ok || !hasKey) {
+  const hasKey = "apiKey" in auth && !!auth.apiKey;
+  if (!auth.ok || typeof auth.apiKey !== "string" || !auth.apiKey) {
     return { error: `auth failed: ok=${auth.ok} hasKey=${hasKey}` };
   }
-  const apiKey = (auth as { apiKey: string }).apiKey;
-  const headers = (auth as { headers: Record<string, string> }).headers;
-  const requestModel = modelWithAuthBaseUrl(
-    model as unknown as { baseUrl: string } & typeof model,
-    auth as { baseUrl?: string },
-  ) as typeof model;
+  const apiKey = auth.apiKey;
+  const headers = auth.headers;
+  const requestModel = modelWithAuthBaseUrl(model, auth);
   return { apiKey, headers, requestModel };
 };
 
@@ -174,7 +176,7 @@ const buildClassifierContext = (
 const resolveReasoningOption = (
   model: { reasoning?: unknown },
   thinking?: ThinkingLevel,
-): ThinkingLevel | undefined => {
+): Exclude<ThinkingLevel, "off"> | undefined => {
   if (!model.reasoning) return undefined;
   if (!thinking) return undefined;
   if (thinking === "off") return undefined;
@@ -182,9 +184,8 @@ const resolveReasoningOption = (
 };
 
 const isTextDeltaEvent = (event: unknown): event is { type: string; delta: string } => {
-  if (typeof event !== "object" || event === null) return false;
-  const e = event as Record<string, unknown>;
-  return e.type === "text_delta" && "delta" in e && typeof e.delta === "string";
+  if (!isObjectRecord(event)) return false;
+  return event.type === "text_delta" && "delta" in event && typeof event.delta === "string";
 };
 
 const collectStreamText = async (stream: AsyncIterable<unknown>): Promise<string> => {
@@ -218,7 +219,7 @@ const runClassifierOutcome = async (
       });
       return { skipSession: ClassifierSkip.SKIP, error: modelResolution.error };
     }
-    const model = modelResolution.model as NonNullable<typeof modelResolution.model>;
+    const model = modelResolution.model;
 
     const authResolution = await fetchClassifierAuth(modelRegistry, model);
     if ("error" in authResolution) {
@@ -239,9 +240,7 @@ const runClassifierOutcome = async (
     const stream = streamDelegated(modelRegistry, model, classifierContext, {
       apiKey: authResolution.apiKey,
       headers: mergeDelegatedHeaders(model, sessionId, undefined, authResolution.headers),
-      ...(reasoningOption
-        ? { reasoning: reasoningOption as unknown as SimpleStreamOptions["reasoning"] }
-        : {}),
+      ...(reasoningOption ? { reasoning: reasoningOption } : {}),
       ...(signal ? { signal } : {}),
     } as SimpleStreamOptions);
 

@@ -1,6 +1,15 @@
-/* oxlint-disable */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import type * as PiAi from "@earendil-works/pi-ai";
+import type {
+  AssistantMessageEvent,
+  Context,
+  Message,
+  Model,
+  Api,
+  ToolResultMessage,
+  UserMessage,
+} from "@earendil-works/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { registerRouterProvider } from "../src/provider";
 import { validateProviderState } from "../src/provider/validation";
 import { decideInitialDecision } from "../src/provider/routing";
@@ -11,65 +20,106 @@ import {
   isContentEvent,
 } from "../src/provider/delegate";
 import { createCommitMutex } from "../src/provider/state";
-import { isRecordablePreStreamError } from "../src/failureMemory";
-import type { Api, Model, Context } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterConfig } from "../src/types";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { RouterConfig, RouterProfile, RouterTier, RoutingDecision } from "../src/types";
+import {
+  makeFakeDecision,
+  makeFakeExtensionContext,
+  makeFakeModel,
+  makeFakePi,
+  makeFakeProvider,
+  makeFakeProviderState,
+  makeFakeRegistry,
+  makeFakeUi,
+} from "./helpers";
 
-vi.mock("@earendil-works/pi-ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@earendil-works/pi-ai")>();
-  return { ...actual, createAssistantMessageEventStream: vi.fn() };
+const { mockCreateStream } = vi.hoisted(() => ({ mockCreateStream: vi.fn() }));
+
+vi.mock("@earendil-works/pi-ai", async () => {
+  const actual = await vi.importActual<typeof PiAi>("@earendil-works/pi-ai");
+  return { ...actual, createAssistantMessageEventStream: mockCreateStream };
 });
 
-const streamSimpleMock = vi.fn();
-class S {
-  events: unknown[] = [];
-  push(e: unknown) {
-    this.events.push(e);
+type RouterProviderConfig = Parameters<ExtensionAPI["registerProvider"]>[1];
+
+class FakeStream {
+  events: AssistantMessageEvent[] = [];
+  push(event: AssistantMessageEvent): void {
+    this.events.push(event);
   }
-  end() {}
+  end(): void {}
 }
-const makeReg = (findImpl?: (p: string, id: string) => unknown) =>
-  ({
-    find: vi.fn((p: string, id: string) =>
+
+const streamSimpleMock = vi.fn();
+
+const makeReg = (findImpl?: (provider: string, modelId: string) => Model<Api> | undefined) =>
+  makeFakeRegistry({
+    find: vi.fn((provider: string, modelId: string) =>
       findImpl
-        ? findImpl(p, id)
-        : ({ provider: p, id, input: ["text"], contextWindow: 50000, reasoning: true } as unknown),
+        ? findImpl(provider, modelId)
+        : makeFakeModel({ id: modelId, contextWindow: 50000, reasoning: true }),
     ),
-    getApiKeyAndHeaders: vi.fn(async () => ({ ok: true, apiKey: "k", headers: {} })),
-    getProvider: () => ({ streamSimple: streamSimpleMock }),
-  }) as unknown as ExtensionContext["modelRegistry"];
-const ctx = (msgs: unknown[]) => ({ messages: msgs }) as unknown as Context;
-const mdl = (id: string, cw = 100000) =>
-  ({ id, provider: "router", api: "a" as Api, contextWindow: cw }) as unknown as Model<Api>;
+    getApiKeyAndHeaders: vi.fn(async () => ({ ok: true as const, apiKey: "k", headers: {} })),
+    getProvider: vi.fn(() => makeFakeProvider({ streamSimple: streamSimpleMock })),
+  });
+
+const userMsg = (content: string, timestamp = 1): UserMessage => ({
+  role: "user",
+  content,
+  timestamp,
+});
+
+const toolResultMsg = (): ToolResultMessage => ({
+  role: "toolResult",
+  toolCallId: "1",
+  toolName: "t",
+  content: [{ type: "text", text: "out" }],
+  isError: false,
+  timestamp: 2,
+});
+
+const ctxOf = (messages: Message[]): Context => ({ messages });
+
+const routerModel = (id: string, contextWindow = 100000): Model<Api> =>
+  makeFakeModel({ id, contextWindow });
+
+const isRouterProviderConfig = (value: unknown): value is RouterProviderConfig =>
+  typeof value === "object" && value !== null && "streamSimple" in value;
+
 const wait = (ms = 90) => new Promise((r) => setTimeout(r, ms));
 
 describe("provider 순수 헬퍼는", () => {
   it("registry와 profile이 없으면 validateProviderState가 throw한다", () => {
-    expect(() =>
-      validateProviderState(undefined, { medium: { models: ["openai/a"] } } as unknown, "balanced"),
-    ).toThrow("not initialized");
+    const profile: RouterProfile = { medium: { models: ["openai/a"] } };
+    expect(() => validateProviderState(undefined, profile, "balanced")).toThrow("not initialized");
     expect(() => validateProviderState(makeReg(), undefined, "unknown")).toThrow(
       "Unknown router profile",
     );
-    expect(() =>
-      validateProviderState(makeReg(), { medium: { models: ["openai/a"] } } as unknown, "balanced"),
-    ).not.toThrow();
+    expect(() => validateProviderState(makeReg(), profile, "balanced")).not.toThrow();
   });
   it("decideInitialDecision은 single tier, tool loop, thinking 매핑을 처리한다", () => {
-    const profile = { high: { models: ["openai/h"] } } as unknown;
-    const base = {
+    const profile: RouterProfile = { high: { models: ["openai/h"] } };
+    const base: {
+      profileName: string;
+      profile: RouterProfile;
+      context: Context;
+      snapshotLastDecision: RoutingDecision | undefined;
+      thinkingLevel: ThinkingLevel;
+      isToolLoop: boolean;
+      singleTier: RouterTier | undefined;
+      validTierCount: number;
+    } = {
       profileName: "p",
       profile,
-      context: ctx([{ role: "user", content: "hi" }]),
+      context: ctxOf([userMsg("hi")]),
       snapshotLastDecision: undefined,
-      thinkingLevel: "high" as const,
+      thinkingLevel: "high",
       isToolLoop: false,
-      singleTier: "high" as const,
+      singleTier: "high",
       validTierCount: 1,
     };
     expect(decideInitialDecision(base).tier).toBe("high");
-    const loopSnap = { profile: "p", tier: "high" } as unknown as never;
+    const loopSnap = makeFakeDecision({ profile: "p", tier: "high" });
     expect(
       decideInitialDecision({ ...base, isToolLoop: true, snapshotLastDecision: loopSnap })
         .reasoning,
@@ -77,10 +127,10 @@ describe("provider 순수 헬퍼는", () => {
     expect(
       decideInitialDecision({
         profileName: "p",
-        profile: { medium: { models: ["openai/m"] } } as unknown,
-        context: ctx([{ role: "user", content: "hi" }]),
+        profile: { medium: { models: ["openai/m"] } },
+        context: ctxOf([userMsg("hi")]),
         snapshotLastDecision: undefined,
-        thinkingLevel: "off" as const,
+        thinkingLevel: "off",
         isToolLoop: false,
         singleTier: undefined,
         validTierCount: 1,
@@ -99,36 +149,34 @@ describe("provider 순수 헬퍼는", () => {
     expect(v).toBe(2);
   });
   it("resolveTargetLimit은 tier와 fallback을 찾는다", () => {
-    const profile = { medium: { models: ["openai/a"] } } as unknown;
-    const decision = {
+    const profile: RouterProfile = { medium: { models: ["openai/a"] } };
+    const decision = makeFakeDecision({
       tier: "medium",
       targetProvider: "openai",
       targetModelId: "fallback",
-    } as unknown as never;
-    const reg = makeReg((_, id) =>
-      id === "fallback" ? ({ contextWindow: 12345 } as unknown) : undefined,
+    });
+    const reg = makeReg((_provider, id) =>
+      id === "fallback" ? makeFakeModel({ contextWindow: 12345 }) : undefined,
     );
+    expect(resolveTargetLimit(profile, decision, "openai/a", reg, "openai", "a")).toBeGreaterThan(
+      0,
+    );
+    const emptyProfile: RouterProfile = {};
     expect(
-      resolveTargetLimit(profile as unknown, decision, "openai/a", reg, "openai", "a"),
-    ).toBeGreaterThan(0);
-    expect(
-      resolveTargetLimit({} as unknown, decision, "openai/fallback", reg, "openai", "fallback"),
+      resolveTargetLimit(emptyProfile, decision, "openai/fallback", reg, "openai", "fallback"),
     ).toBe(12345);
-    const regNoWindow = makeReg(() => ({ provider: "openai", id: "x" }) as unknown);
+    const regNoWindow = makeReg(() => makeFakeModel({ id: "x" }));
     expect(
-      resolveTargetLimit({} as unknown, decision, "openai/x", regNoWindow, "openai", "x"),
+      resolveTargetLimit(emptyProfile, decision, "openai/x", regNoWindow, "openai", "x"),
     ).toBeGreaterThan(0);
   });
   it("buildEffectiveContext는 필요할 때 잘라낸다", () => {
-    const c = {
-      messages: [
-        { role: "user", content: "a".repeat(5000), timestamp: 1 },
-        { role: "user", content: "b".repeat(5000), timestamp: 2 },
-      ],
-    } as unknown as Context;
-    const truncated = buildEffectiveContext(c, 100, mdl("balanced", 100000));
+    const c: Context = {
+      messages: [userMsg("a".repeat(5000), 1), userMsg("b".repeat(5000), 2)],
+    };
+    const truncated = buildEffectiveContext(c, 100, routerModel("balanced", 100000));
     expect(truncated.messages.length).toBeLessThan(c.messages.length);
-    const same = buildEffectiveContext(c, 500000, mdl("balanced", 1000));
+    const same = buildEffectiveContext(c, 500000, routerModel("balanced", 1000));
     expect(same).toBe(c);
   });
   it("collectBufferedResult와 isContentEvent를 처리한다", () => {
@@ -157,58 +205,62 @@ describe("provider 순수 헬퍼는", () => {
 
 describe("provider 통합 동작은", () => {
   let pi: ExtensionAPI;
+  let thinkingLevelMock = vi.fn((): ThinkingLevel => "medium");
   let state: Parameters<typeof registerRouterProvider>[1];
   let acts: Parameters<typeof registerRouterProvider>[2];
-  let opts: { streamSimple: (m: Model<Api>, c: Context, o?: unknown) => unknown };
+  let captured: RouterProviderConfig | undefined;
+  const getStreamSimple = (): NonNullable<RouterProviderConfig["streamSimple"]> => {
+    const fn = captured?.streamSimple;
+    if (fn === undefined) expect.unreachable("router provider not registered");
+    return fn;
+  };
   beforeEach(() => {
     vi.clearAllMocks();
     streamSimpleMock.mockReset();
-    pi = {
-      registerProvider: vi.fn((_, o) => {
-        opts = o as unknown as typeof opts;
+    mockCreateStream.mockReset();
+    captured = undefined;
+    thinkingLevelMock = vi.fn((): ThinkingLevel => "medium");
+    pi = makeFakePi({
+      registerProvider: vi.fn((...args: unknown[]) => {
+        const config = args[1];
+        if (isRouterProviderConfig(config)) captured = config;
       }),
-      getThinkingLevel: vi.fn().mockReturnValue("medium"),
-    } as unknown as ExtensionAPI;
+      getThinkingLevel: thinkingLevelMock,
+    });
     const cfg: RouterConfig = {
       profiles: {
         balanced: {
-          high: { models: ["openai/gpt-4o"] } as unknown,
-          medium: { models: ["openai/gpt-4o-mini", "google/gemini-1.5-flash"] } as unknown,
+          high: { models: ["openai/gpt-4o"] },
+          medium: { models: ["openai/gpt-4o-mini", "google/gemini-1.5-flash"] },
         },
       },
     };
-    state = {
-      lastRegisteredModels: "",
+    state = makeFakeProviderState({
       currentConfig: cfg,
       currentModelRegistry: makeReg(),
-      lastExtensionContext: {
-        ui: { setHiddenThinkingLabel: vi.fn(), setWorkingMessage: vi.fn() },
-      } as unknown as ExtensionContext,
-      selectedProfile: undefined,
-      routerEnabled: false,
-      lastDecision: undefined,
-      accumulatedCost: 0,
-      failedByChain: new Map(),
-    };
+      lastExtensionContext: makeFakeExtensionContext({
+        ui: makeFakeUi({ setHiddenThinkingLabel: vi.fn(), setWorkingMessage: vi.fn() }),
+      }),
+    });
     acts = { persistState: vi.fn(), recordDebugDecision: vi.fn(), updateStatus: vi.fn() };
   });
   it("thinking high로 정상 라우팅한다", async () => {
-    (pi.getThinkingLevel as unknown as ReturnType<typeof vi.fn>).mockReturnValue("high");
+    thinkingLevelMock.mockReturnValue("high");
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     streamSimpleMock.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "ok" };
         yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-      })() as unknown,
+      })(),
     );
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
     expect(state.lastDecision?.tier).toBe("high");
   });
   it("single tier와 tool loop를 유지한다", async () => {
-    const prev = {
+    state.lastDecision = makeFakeDecision({
       profile: "balanced",
       tier: "high",
       targetProvider: "openai",
@@ -216,109 +268,98 @@ describe("provider 통합 동작은", () => {
       targetLabel: "openai/gpt",
       reasoning: "prev",
       timestamp: Date.now(),
-    } as unknown as never;
-    state.lastDecision = prev as unknown as never;
-    (pi.getThinkingLevel as unknown as ReturnType<typeof vi.fn>).mockReturnValue("off");
+    });
+    thinkingLevelMock.mockReturnValue("off");
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     streamSimpleMock.mockReturnValue(
       (async function* () {
         yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-      })() as unknown,
+      })(),
     );
-    opts.streamSimple(
-      mdl("balanced"),
-      ctx([
-        { role: "user", content: "hi" },
-        {
-          role: "toolResult",
-          toolCallId: "1",
-          toolName: "t",
-          content: "out",
-          isError: false,
-          timestamp: 2,
-        } as unknown,
-      ]),
-    );
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi"), toolResultMsg()]));
     await wait();
     expect(state.lastDecision?.tier).toBe("high");
   });
   it("registry가 undefined이면 error를 발생시킨다", async () => {
-    state.currentModelRegistry = undefined;
+    state = { ...state, currentModelRegistry: undefined };
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
+    expect(s.events.some((e) => e.type === "error")).toBe(true);
   });
   it("unknown profile이면 error를 발생시킨다", async () => {
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
-    opts.streamSimple(mdl("unknown"), ctx([{ role: "user", content: "hi" }]));
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
+    getStreamSimple()(routerModel("unknown"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
+    expect(s.events.some((e) => e.type === "error")).toBe(true);
   });
   it("classifier off는 분기와 잘라내기를 실행한다", async () => {
-    state.currentConfig = {
-      profiles: {
-        balanced: {
-          high: { models: ["openai/gpt-high"] } as unknown,
-          medium: { models: ["openai/mini"] } as unknown,
+    state = {
+      ...state,
+      currentConfig: {
+        profiles: {
+          balanced: {
+            high: { models: ["openai/gpt-high"] },
+            medium: { models: ["openai/mini"] },
+          },
         },
+        classifierModels: [{ model: "openai/gpt" }],
+        historySize: 0,
       },
-      classifierModels: [{ model: "openai/gpt" } as unknown],
-      historySize: 0,
-    } as RouterConfig;
-    (pi.getThinkingLevel as unknown as ReturnType<typeof vi.fn>).mockReturnValue("off");
+    };
+    thinkingLevelMock.mockReturnValue("off");
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     streamSimpleMock
       .mockReturnValueOnce(
         (async function* () {
           yield { type: "text_delta", delta: "high" };
-        })() as unknown,
+        })(),
       )
       .mockReturnValueOnce(
         (async function* () {
           yield { type: "text_delta", delta: "ans" };
           yield { type: "done", message: { usage: { cost: { total: 0.001 } } } };
-        })() as unknown,
+        })(),
       );
-    let passed: Context | null = null;
+    let _passed: Context | null = null;
     const orig = streamSimpleMock.getMockImplementation();
-    streamSimpleMock.mockImplementation((m: unknown, c: Context) => {
-      if ((m as Model<Api>).id !== "gpt") passed = c;
-      return (orig as unknown as (m: unknown, c: Context) => unknown)(m, c);
+    streamSimpleMock.mockImplementation((model: Model<Api>, context: Context) => {
+      if (model.id !== "gpt") _passed = context;
+      return orig?.(model, context);
     });
-    opts.streamSimple(mdl("balanced", 10000), {
+    getStreamSimple()(routerModel("balanced", 10000), {
       systemPrompt: "sys",
       messages: [
-        { role: "user", content: "a".repeat(8000), timestamp: 1 } as unknown,
-        { role: "user", content: "b".repeat(8000), timestamp: 2 } as unknown,
-        { role: "user", content: "c".repeat(2000), timestamp: 3 } as unknown,
+        userMsg("a".repeat(8000), 1),
+        userMsg("b".repeat(8000), 2),
+        userMsg("c".repeat(2000), 3),
       ],
-    } as unknown);
+    });
     await wait(150);
     expect(state.lastDecision).toBeDefined();
   });
   it("fallback은 재시도하고 cost를 기록한다", async () => {
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
-    streamSimpleMock.mockImplementation((m: Model<Api>) =>
-      m.id === "gpt-4o-mini"
-        ? ((async function* () {
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
+    streamSimpleMock.mockImplementation((model: Model<Api>) =>
+      model.id === "gpt-4o-mini"
+        ? (async function* () {
             yield { type: "error", error: { errorMessage: "fail" } };
-          })() as unknown)
-        : ((async function* () {
+          })()
+        : (async function* () {
             yield { type: "done", message: { usage: { cost: { total: 0.0005 } } } };
-          })() as unknown),
+          })(),
     );
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
     expect(state.accumulatedCost).toBe(0.0005);
   });
@@ -328,59 +369,62 @@ describe("provider 통합 동작은", () => {
       new Set(["openai/gpt-4o-mini", "google/gemini-1.5-flash"]),
     );
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
+    expect(s.events.some((e) => e.type === "error")).toBe(true);
   });
   it("aborted 시그널은 done과 aborted로 처리한다", async () => {
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     const c = new AbortController();
     c.abort();
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]), {
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]), {
       signal: c.signal,
-    } as unknown);
+    });
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "done")).toBe(true);
+    expect(s.events.some((e) => e.type === "done")).toBe(true);
   });
   it("stale 에러는 빈 done으로 매핑된다", async () => {
-    state.currentConfig = {
-      profiles: { balanced: { medium: { models: ["openai/gpt"] } as unknown } },
-    } as RouterConfig;
-    state.lastRegisteredModels = "";
+    state = {
+      ...state,
+      currentConfig: {
+        profiles: { balanced: { medium: { models: ["openai/gpt"] } } },
+      },
+      lastRegisteredModels: "",
+    };
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     streamSimpleMock.mockReturnValue(
       (async function* () {
+        yield* [];
         throw new Error("stale context");
-      })() as unknown,
+      })(),
     );
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "done")).toBe(true);
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(false);
+    expect(s.events.some((e) => e.type === "done")).toBe(true);
+    expect(s.events.some((e) => e.type === "error")).toBe(false);
   });
   it("delegate success false는 string과 undefined fallback 경유로 error에 매핑된다", async () => {
     // Use real delegate failure: make find return undefined for all models -> will throw All failed or record then fail
-    state.currentModelRegistry = {
-      find: () => undefined,
-      getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k", headers: {} }),
-      getProvider: () => ({ streamSimple: streamSimpleMock }),
-    } as unknown as ExtensionContext["modelRegistry"];
-    state.currentConfig = {
-      profiles: { balanced: { medium: { models: ["openai/missing"] } as unknown } },
-    } as RouterConfig;
-    state.lastRegisteredModels = "";
+    state = {
+      ...state,
+      currentModelRegistry: makeReg(() => undefined),
+      currentConfig: {
+        profiles: { balanced: { medium: { models: ["openai/missing"] } } },
+      },
+      lastRegisteredModels: "",
+    };
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
+    expect(s.events.some((e) => e.type === "error")).toBe(true);
   });
   it("stale updateStatus와 stale persistState는 무시된다", async () => {
     acts.updateStatus = vi.fn(() => {
@@ -390,55 +434,56 @@ describe("provider 통합 동작은", () => {
       throw new Error("stale persist");
     });
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     streamSimpleMock.mockReturnValue(
       (async function* () {
         yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-      })() as unknown,
+      })(),
     );
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(false);
+    expect(s.events.some((e) => e.type === "error")).toBe(false);
   });
   it("content 이후 error는 non-retryable이다", async () => {
-    state.currentConfig = {
-      profiles: { balanced: { medium: { models: ["openai/gpt"] } as unknown } },
-    } as RouterConfig;
-    state.lastRegisteredModels = "";
+    state = {
+      ...state,
+      currentConfig: {
+        profiles: { balanced: { medium: { models: ["openai/gpt"] } } },
+      },
+      lastRegisteredModels: "",
+    };
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     streamSimpleMock.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "part" };
         yield { type: "error", error: { errorMessage: "fail after content" } };
-      })() as unknown,
+      })(),
     );
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(s.events.some((e) => (e as { type: string }).type === "error")).toBe(true);
+    expect(s.events.some((e) => e.type === "error")).toBe(true);
   });
   it("router 참조는 skipped 처리된다", async () => {
-    state.currentConfig = {
-      profiles: { balanced: { medium: { models: ["router/other", "openai/real"] } as unknown } },
-    } as RouterConfig;
-    state.lastRegisteredModels = "";
+    state = {
+      ...state,
+      currentConfig: {
+        profiles: { balanced: { medium: { models: ["router/other", "openai/real"] } } },
+      },
+      lastRegisteredModels: "",
+    };
     registerRouterProvider(pi, state, acts);
-    const s = new S();
-    vi.mocked(createAssistantMessageEventStream).mockReturnValue(s as unknown as never);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
     streamSimpleMock.mockReturnValue(
       (async function* () {
         yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-      })() as unknown,
+      })(),
     );
-    opts.streamSimple(mdl("balanced"), ctx([{ role: "user", content: "hi" }]));
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
-    expect(
-      s.events.some(
-        (e) =>
-          (e as { type: string }).type === "done" || (e as { type: string }).type === "text_delta",
-      ),
-    ).toBe(true);
+    expect(s.events.some((e) => e.type === "done" || e.type === "text_delta")).toBe(true);
   });
 });

@@ -1,5 +1,3 @@
-/* oxlint-disable */
-import type { Api, Model } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import {
   isObjectRecord,
@@ -13,6 +11,7 @@ import {
   resolveEffectiveClassifier,
 } from "../src/config";
 import type { RouterConfig, RouterProfile } from "../src/types";
+import { makeFakeModel } from "./helpers";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   getAgentDir: () => "/mock/agent/dir",
@@ -163,7 +162,7 @@ describe("config.ts 설정은", () => {
 
       const w2: string[] = [];
       const r2 = normalizeTierConfig(
-        { models: ["openai/gpt-4o#low"], effort: 123 as unknown as string },
+        { models: ["openai/gpt-4o#low"], effort: 123 },
         "p",
         "medium",
         w2,
@@ -190,7 +189,7 @@ describe("config.ts 설정은", () => {
         debug: true,
         classifierModels: ["openai/gpt-4o#medium"],
         profiles: { balanced: { high: { models: ["google/gemini-2.5-pro"] } } },
-      } as unknown as RouterConfig);
+      });
       expect(warnings).toEqual([]);
       expect(config.classifierModels?.[0].model).toBe("openai/gpt-4o");
     });
@@ -203,7 +202,7 @@ describe("config.ts 설정은", () => {
             low: { models: ["openai/gpt-4o-mini"], effort: "low" },
           },
         },
-      } as unknown as RouterConfig);
+      });
       expect(warnings).toEqual([]);
       expect(config.profiles.deepseek.models).toEqual(["openai/gpt-4o", "google/gemini-flash"]);
       expect(config.profiles.deepseek.high?.models).toEqual([
@@ -222,7 +221,7 @@ describe("config.ts 설정은", () => {
             high: { models: ["openai/gpt-4o"] },
           },
         },
-      } as unknown as RouterConfig);
+      });
       expect(config.profiles.p.models).toBeUndefined();
       expect(config.profiles.p.high?.models).toEqual(["openai/gpt-4o"]);
       expect(warnings.some((x) => x.includes('profile-level "models"'))).toBe(true);
@@ -237,7 +236,7 @@ describe("config.ts 설정은", () => {
             high: { models: ["openai/gpt-4o"] },
           },
         },
-      } as unknown as RouterConfig);
+      });
       expect(config.historySize).toBe(4);
     });
   });
@@ -250,7 +249,7 @@ describe("config.ts 설정은", () => {
           },
         },
         classifierModels: ["openai/gpt-4o"],
-      } as unknown as RouterConfig);
+      });
       expect(config.classifierModels?.[0].thinking).toBeUndefined();
     });
     it("문자열 배열 형태를 사용한다", () => {
@@ -260,8 +259,8 @@ describe("config.ts 설정은", () => {
             high: { models: ["openai/gpt-4o"] },
           },
         },
-        classifierModels: ["openai/gpt-4o#low", "google/gemini-flash#off"] as unknown as any,
-      } as unknown as RouterConfig);
+        classifierModels: ["openai/gpt-4o#low", "google/gemini-flash#off"],
+      });
       expect(config.classifierModels?.length).toBe(2);
       expect(config.classifierModels?.[0].thinking).toBe("low");
     });
@@ -275,20 +274,21 @@ describe("config.ts 설정은", () => {
         classifierModels: [
           "google/gemini-flash-latest#high",
           "google/gemini-flash-lite-latest#low",
-        ] as unknown as any,
-      } as unknown as RouterConfig);
+        ],
+      });
       expect(config.classifierModels).toHaveLength(2);
       expect(config.classifierModels?.[1].thinking).toBe("low");
     });
   });
   describe("resolveDelegatedReasoning 위임 추론은", () => {
     it("값을 resolve한다", () => {
+      expect(resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "off")).toBeUndefined();
+      expect(resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "high")).toBe("high");
+    });
+    it("유효하지 않은 thinking은 undefined를 반환한다", () => {
       expect(
-        resolveDelegatedReasoning({ reasoning: true } as unknown as Model<Api>, "off"),
+        resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "turbo"),
       ).toBeUndefined();
-      expect(resolveDelegatedReasoning({ reasoning: true } as unknown as Model<Api>, "high")).toBe(
-        "high",
-      );
     });
   });
   describe("resolveEffectiveClassifier 유효 분류기는", () => {

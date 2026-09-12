@@ -150,7 +150,7 @@ describe("normalizeConfig/mergeConfig 경유의 tierGuides를 검증함", () => 
     const { config, warnings } = normalizeConfig({
       tierGuides: { low: "  custom low  " },
       profiles: { p: { medium: { models: ["openai/gpt-4o"] } } },
-    } as unknown as RouterConfig);
+    });
     expect(config.tierGuides).toEqual({ low: "custom low" });
     expect(warnings).toEqual([]);
   });
@@ -161,7 +161,7 @@ describe("normalizeConfig/mergeConfig 경유의 tierGuides를 검증함", () => 
         normalizeConfig({
           tierGuides,
           profiles: { p: { medium: { models: ["openai/gpt-4o"] } } },
-        } as unknown as RouterConfig),
+        }),
       ).toThrow("Invalid tierGuides");
     }
   });

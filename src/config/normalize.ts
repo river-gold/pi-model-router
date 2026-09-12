@@ -17,7 +17,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       "tierGuides",
       "profiles",
     ]);
-    for (const key of Object.keys(raw as unknown as Record<string, unknown>)) {
+    for (const key of Object.keys(raw)) {
       if (!allowedKeys.has(key)) {
         warnings.push(`Unknown config field "${key}" ignored.`);
       }
@@ -32,7 +32,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       warnings.push(`Profile "${name}" is not an object. Skipped.`);
       continue;
     }
-    rawProfiles[name] = { ...(profile as Record<string, unknown>) };
+    rawProfiles[name] = { ...profile };
   }
   resolveProfileTierRefs(rawProfiles, warnings);
 
@@ -78,7 +78,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     };
   }
 
-  const rawGlobalClassifier = (raw as unknown as Record<string, unknown>).classifierModels;
+  const rawGlobalClassifier = raw.classifierModels;
   const classifierModels = normalizeClassifierModels(
     rawGlobalClassifier as unknown,
     warnings,
@@ -86,7 +86,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   );
 
   let historySize: number | undefined = undefined;
-  const rawHistorySize = (raw as unknown as Record<string, unknown>).historySize;
+  const rawHistorySize = raw.historySize;
   if (rawHistorySize !== undefined) {
     if (
       typeof rawHistorySize === "number" &&
@@ -103,7 +103,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     }
   }
 
-  const tierGuides = normalizeTierGuides((raw as unknown as Record<string, unknown>).tierGuides);
+  const tierGuides = normalizeTierGuides(raw.tierGuides);
 
   return {
     config: {

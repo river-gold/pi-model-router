@@ -5,22 +5,22 @@ import { LOG_PATH } from "./constants";
 export type Mkdir = (path: string, opts: { recursive: boolean }) => Promise<unknown>;
 export type Dirname = (p: string) => string;
 
+export type ResettableEnsure = (() => Promise<void>) & { _reset?: () => void };
+
 export const createEnsureLogDir = (
-  mkdirFn: Mkdir = mkdir as unknown as Mkdir,
+  mkdirFn: Mkdir = (path, opts) => mkdir(path, opts),
   dirnameFn: Dirname = dirname,
   logPath: string = LOG_PATH,
 ) => {
   let ensureDir: Promise<void> | null = null;
-  const fn = async (): Promise<void> => {
+  const fn: ResettableEnsure = async (): Promise<void> => {
     if (!ensureDir) {
-      ensureDir = (mkdirFn(dirnameFn(logPath), { recursive: true }) as Promise<unknown>).then(
-        () => undefined,
-      );
+      ensureDir = mkdirFn(dirnameFn(logPath), { recursive: true }).then(() => undefined);
     }
     return ensureDir;
   };
   // expose for testing reset
-  (fn as unknown as { _reset: () => void })._reset = () => {
+  fn._reset = () => {
     ensureDir = null;
   };
   return fn;

@@ -8,8 +8,20 @@ import {
   truncateContext,
 } from "../../src/context/truncate";
 import type { Context, Message } from "@earendil-works/pi-ai";
+import { fakeMessage } from "../helpers";
 
-const m = (role: string, content: string): Message => ({ role, content }) as unknown as Message;
+const m = (role: "user" | "assistant" | "toolResult", content: string): Message => {
+  if (role === "user") return { role, content, timestamp: 0 };
+  if (role === "assistant") return fakeMessage({ content: [{ type: "text", text: content }] });
+  return {
+    role,
+    content: [{ type: "text", text: content }],
+    toolCallId: "1",
+    toolName: "t",
+    isError: false,
+    timestamp: 0,
+  };
+};
 
 describe("truncate 헬퍼 함수들", () => {
   describe("calculateSystemTokens 시스템 토큰 계산", () => {
@@ -79,115 +91,93 @@ describe("truncate 헬퍼 함수들", () => {
     it("고아가 없으면 0을 반환한다", () =>
       expect(countLeadingOrphanToolResults([m("user", "a")])).toBe(0));
     it("고아 toolResult 하나를 센다", () =>
-      expect(countLeadingOrphanToolResults([m("toolResult", "a") as any])).toBe(1));
+      expect(countLeadingOrphanToolResults([m("toolResult", "a")])).toBe(1));
     it("고아 toolResult 두 개를 센다", () =>
-      expect(
-        countLeadingOrphanToolResults([m("toolResult", "a") as any, m("toolResult", "b") as any]),
-      ).toBe(2));
+      expect(countLeadingOrphanToolResults([m("toolResult", "a"), m("toolResult", "b")])).toBe(2));
     it("고아 뒤 user에서 멈춘다", () =>
-      expect(countLeadingOrphanToolResults([m("toolResult", "a") as any, m("user", "b")])).toBe(1));
+      expect(countLeadingOrphanToolResults([m("toolResult", "a"), m("user", "b")])).toBe(1));
     it("고아 뒤 assistant는 고아로 세지 않는다", () =>
-      expect(
-        countLeadingOrphanToolResults([m("toolResult", "a") as any, m("assistant", "b")]),
-      ).toBe(1));
+      expect(countLeadingOrphanToolResults([m("toolResult", "a"), m("assistant", "b")])).toBe(1));
     it("첫 메시지가 고아가 아니면 0을 반환한다", () =>
-      expect(
-        countLeadingOrphanToolResults([m("assistant", "a"), m("toolResult", "b") as any]),
-      ).toBe(0));
+      expect(countLeadingOrphanToolResults([m("assistant", "a"), m("toolResult", "b")])).toBe(0));
   });
 
   describe("truncateContext 컨텍스트 자르기", () => {
     it("메시지 하나면 그대로 반환한다", () => {
-      const ctx = { messages: [m("user", "hi")] } as unknown as Context;
+      const ctx: Context = { messages: [m("user", "hi")] };
       expect(truncateContext(ctx, 0)).toBe(ctx);
     });
     it("빈 메시지 배열이면 그대로 반환한다", () => {
-      const ctx = { messages: [] } as unknown as Context;
+      const ctx: Context = { messages: [] };
       expect(truncateContext(ctx, 10)).toBe(ctx);
     });
     it("제한 이내면 그대로 반환한다", () => {
-      const ctx = { messages: [m("user", "hi"), m("assistant", "hello")] } as unknown as Context;
+      const ctx: Context = { messages: [m("user", "hi"), m("assistant", "hello")] };
       expect(truncateContext(ctx, 1000)).toBe(ctx);
     });
     it("systemPrompt가 제한 이내면 메시지를 유지한다", () => {
-      const ctx = {
+      const ctx: Context = {
         systemPrompt: "sys",
         messages: [m("user", "hi")],
-      } as unknown as Context;
+      };
       // single message + sys still returns as-is per <=1 check
       expect(truncateContext(ctx, 1000).messages.length).toBe(1);
     });
     it("제한에 맞게 가장 오래된 메시지부터 자른다", () => {
       const ctx: Context = {
         systemPrompt: "sys",
-        messages: [
-          m("user", "a".repeat(3000)),
-          m("user", "b".repeat(3000)),
-          m("user", "c"),
-        ] as unknown as Context,
+        messages: [m("user", "a".repeat(3000)), m("user", "b".repeat(3000)), m("user", "c")],
       };
       const truncated = truncateContext(ctx, 10);
       expect(truncated.messages.length).toBeLessThan(ctx.messages.length);
-      expect((truncated.messages[truncated.messages.length - 1] as any).content).toBe("c");
+      expect(truncated.messages[truncated.messages.length - 1]!.content).toBe("c");
     });
     it("user 경계에 맞춰 자른다", () => {
       const ctx: Context = {
-        messages: [
-          m("assistant", "a".repeat(3000)),
-          m("user", "b".repeat(3000)),
-          m("user", "c"),
-        ] as unknown as Context,
+        messages: [m("assistant", "a".repeat(3000)), m("user", "b".repeat(3000)), m("user", "c")],
       };
       const truncated = truncateContext(ctx, 10);
       // should drop leading assistant and align to user
-      expect(truncated.messages[0].role).toBe("user");
+      expect(truncated.messages[0]!.role).toBe("user");
     });
     it("고아 toolResult를 버린다", () => {
       const ctx2: Context = {
-        messages: [
-          m("assistant", "x".repeat(3000)),
-          { role: "toolResult", content: "orphan", toolCallId: "1" } as unknown as Message,
-          m("user", "final"),
-        ] as unknown as Context,
+        messages: [m("assistant", "x".repeat(3000)), m("toolResult", "orphan"), m("user", "final")],
       };
       const truncated = truncateContext(ctx2, 5);
       if (truncated.messages.length > 0) {
-        expect(truncated.messages[0].role).not.toBe("toolResult");
+        expect(truncated.messages[0]!.role).not.toBe("toolResult");
       }
     });
     it("유지 구간에 user가 없으면 앞쪽 고아 toolResult들을 버린다", () => {
       const ctx: Context = {
-        messages: [
-          { role: "toolResult", content: "a", toolCallId: "1" } as unknown as Message,
-          { role: "toolResult", content: "b", toolCallId: "2" } as unknown as Message,
-          m("user", "final"),
-        ] as unknown as Context,
+        messages: [m("toolResult", "a"), m("toolResult", "b"), m("user", "final")],
       };
       // system 0, messages 3 tokens ~1+1+1=3, limit 2 => need to drop first toolResult(s) but keep orphan handling
       const truncated = truncateContext(ctx, 2);
       // should have dropped leading orphans, so first message is final user
-      expect(truncated.messages[0].role).toBe("user");
-      expect((truncated.messages[0] as any).content).toBe("final");
+      expect(truncated.messages[0]!.role).toBe("user");
+      expect(truncated.messages[0]!.content).toBe("final");
     });
     it("orphanCount가 0이면 메시지를 유지한다", () => {
       const ctx: Context = {
         messages: [m("user", "a"), m("assistant", "b"), m("user", "final")],
-      } as unknown as Context;
+      };
       const truncated = truncateContext(ctx, 1000);
       expect(truncated).toBe(ctx); // within limit, no truncation
     });
     it("최신 메시지는 항상 보존한다", () => {
       const ctx: Context = {
         messages: [m("user", "a".repeat(100)), m("user", "b".repeat(100)), m("user", "keep")],
-      } as unknown as Context;
+      };
       const truncated = truncateContext(ctx, 1);
-      expect((truncated.messages[truncated.messages.length - 1] as any).content).toBe("keep");
+      expect(truncated.messages[truncated.messages.length - 1]!.content).toBe("keep");
     });
     it("systemPrompt 토큰을 포함해 계산한다", () => {
       const ctx: Context = {
         systemPrompt: "a".repeat(300),
         messages: [m("user", "a".repeat(100)), m("user", "keep")],
-      } as unknown as Context;
+      };
       // system 100 tokens + messages ~ 34+2, limit 10 should truncate
       const truncated = truncateContext(ctx, 10);
       expect(truncated.messages.length).toBeLessThan(ctx.messages.length);

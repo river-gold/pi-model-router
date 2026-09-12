@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import type { Context } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import {
@@ -7,7 +6,9 @@ import {
   resolveAvailableTier,
   thinkingToTier,
 } from "../src/routing";
-import type { RouterProfile } from "../src/types";
+import type { RouterProfile, RouterTier } from "../src/types";
+
+const unknownTier: RouterTier = JSON.parse('"unknown"');
 
 describe("routing.ts 라우팅은", () => {
   describe("thinkingToTier 변환은", () => {
@@ -47,28 +48,26 @@ describe("routing.ts 라우팅은", () => {
     });
 
     it("profile이 비어 있으면 preferred를 반환한다 (fallback이 최종 반환을 처리한다)", () => {
-      expect(resolveAvailableTier({} as RouterProfile, "medium")).toBe("medium");
+      expect(resolveAvailableTier({}, "medium")).toBe("medium");
     });
 
     it("profile이 비어 있고 preferred가 max이면 preferred를 반환한다 (양쪽 루프 불일치를 처리한다)", () => {
-      expect(resolveAvailableTier({} as RouterProfile, "max")).toBe("max");
+      expect(resolveAvailableTier({}, "max")).toBe("max");
     });
 
     it("profile이 비어 있고 preferred가 minimal이면 preferred를 반환한다", () => {
-      expect(resolveAvailableTier({} as RouterProfile, "minimal")).toBe("minimal");
+      expect(resolveAvailableTier({}, "minimal")).toBe("minimal");
     });
 
     it("startIdx -1을 전체 순서 상위 fallback으로 처리한다", () => {
       const profile: RouterProfile = {
         medium: { models: ["openai/gpt-4o"] },
       };
-      expect(resolveAvailableTier(profile, "unknown" as RouterTier)).toBe("medium");
+      expect(resolveAvailableTier(profile, unknownTier)).toBe("medium");
     });
 
     it("startIdx -1과 빈 profile을 처리한다 (양쪽 루프가 비어 있는 경우를 처리한다)", () => {
-      expect(resolveAvailableTier({} as RouterProfile, "unknown" as RouterTier)).toBe(
-        "unknown" as RouterTier,
-      );
+      expect(resolveAvailableTier({}, unknownTier)).toBe(unknownTier);
     });
 
     it("minimal만 사용 가능하면 minimal로 하위 fallback한다", () => {

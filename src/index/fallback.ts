@@ -26,7 +26,7 @@ export const createTryFallbackByRef = (
     if (slashIndex === -1) return false;
     try {
       const m = ctx.modelRegistry.find(ref.slice(0, slashIndex), ref.slice(slashIndex + 1));
-      if (m) return await setModelInternally(m as NonNullable<ExtensionContext["model"]>);
+      if (m) return await setModelInternally(m);
     } catch {
       // ignore
     }

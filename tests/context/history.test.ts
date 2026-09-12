@@ -9,16 +9,20 @@ import {
   resolveHistoryUserIndices,
 } from "../../src/context/history";
 import type { Context, Message } from "@earendil-works/pi-ai";
+import { fakeMessage } from "../helpers";
 
-const msg = (role: string, content: string): Message => ({ role, content }) as unknown as Message;
-const toolResult = (content: string): Message =>
-  ({
-    role: "toolResult",
-    content,
-    toolCallId: "1",
-    toolName: "t",
-    isError: false,
-  }) as unknown as Message;
+const msg = (role: "user" | "assistant", content: string): Message => {
+  if (role === "user") return { role, content, timestamp: 0 };
+  return fakeMessage({ content: [{ type: "text", text: content }] });
+};
+const toolResult = (content: string): Message => ({
+  role: "toolResult",
+  content: [{ type: "text", text: content }],
+  toolCallId: "1",
+  toolName: "t",
+  isError: false,
+  timestamp: 0,
+});
 
 describe("history 히스토리 조회", () => {
   describe("collectUserIndices user 인덱스 수집", () => {
@@ -118,7 +122,7 @@ describe("history 히스토리 조회", () => {
     it("assistant·toolResult가 아닌 메시지를 건너뛴다", () => {
       const messages = [
         msg("user", "u"),
-        msg("system", "sys") as unknown as Message,
+        msg("user", "sys"),
         msg("assistant", "a"),
         msg("user", "n"),
       ];
@@ -127,8 +131,8 @@ describe("history 히스토리 조회", () => {
     it("assistant가 전혀 없으면 빈 문자열을 반환한다", () => {
       const messages = [
         msg("user", "u"),
-        msg("system", "sys") as unknown as Message,
-        msg("user", "other") as unknown as Message,
+        msg("user", "sys"),
+        msg("user", "other"),
         msg("user", "n"),
       ];
       expect(findFinalTextBetween(messages, 0, 3)).toBe("");
@@ -137,41 +141,33 @@ describe("history 히스토리 조회", () => {
 
   describe("getHistoryPairsText 히스토리 쌍 텍스트 조회", () => {
     it("pairCount 0이면 빈 문자열을 반환한다", () =>
-      expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, 0)).toBe(
-        "",
-      ));
+      expect(getHistoryPairsText({ messages: [msg("user", "hi")] }, 0)).toBe(""));
     it("pairCount가 음수면 빈 문자열을 반환한다", () =>
-      expect(getHistoryPairsText({ messages: [msg("user", "hi")] } as unknown as Context, -1)).toBe(
-        "",
-      ));
+      expect(getHistoryPairsText({ messages: [msg("user", "hi")] }, -1)).toBe(""));
     it("히스토리가 없으면(user 1개) 빈 문자열을 반환한다", () =>
-      expect(
-        getHistoryPairsText({ messages: [msg("user", "hello")] } as unknown as Context, 1),
-      ).toBe(""));
+      expect(getHistoryPairsText({ messages: [msg("user", "hello")] }, 1)).toBe(""));
     it("user가 전혀 없으면 빈 문자열을 반환한다", () =>
-      expect(
-        getHistoryPairsText({ messages: [msg("assistant", "a")] } as unknown as Context, 1),
-      ).toBe(""));
+      expect(getHistoryPairsText({ messages: [msg("assistant", "a")] }, 1)).toBe(""));
     it("user·assistant 쌍을 반환한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [msg("user", "u1"), msg("assistant", "a1"), msg("user", "current")],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 1)).toBe("u1\na1");
     });
     it("finalText가 없으면 user만 반환한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [msg("user", "u1"), msg("user", "current")],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 1)).toBe("u1");
     });
     it("빈 userText를 건너뛴다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [msg("user", "   "), msg("assistant", "a1"), msg("user", "current")],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 1)).toBe("");
     });
     it("빈 userText를 건너뛰고 다음 쌍을 유지한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [
           msg("user", "   "),
           msg("assistant", "a0"),
@@ -179,11 +175,11 @@ describe("history 히스토리 조회", () => {
           msg("assistant", "a1"),
           msg("user", "current"),
         ],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 2)).toBe("u1\na1");
     });
     it("여러 쌍을 구분자로 결합한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [
           msg("user", "u1"),
           msg("assistant", "a1"),
@@ -191,25 +187,25 @@ describe("history 히스토리 조회", () => {
           msg("assistant", "a2"),
           msg("user", "current"),
         ],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 2)).toBe("u1\na1\n---\nu2\na2");
     });
     it("toolResult를 final로 선택한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [msg("user", "u1"), toolResult("out"), msg("user", "current")],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 1)).toBe("u1\nout");
     });
     it("pairCount가 히스토리보다 크면 전부를 반환한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [msg("user", "u1"), msg("assistant", "a1"), msg("user", "current")],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 10)).toBe("u1\na1");
     });
     it("assistant 없이 user만 있으면 user들만 반환한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [msg("user", "u1"), msg("user", "u2"), msg("user", "current")],
-      } as unknown as Context;
+      };
       expect(getHistoryPairsText(ctx, 2)).toBe("u1\n---\nu2");
     });
   });

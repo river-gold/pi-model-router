@@ -5,41 +5,77 @@ import {
   handleTurnEnd,
   handleTurnStart,
 } from "../../src/index/handlers";
+import { createRouterActions } from "../../src/index/actions";
 import { createRouterState } from "../../src/state/create";
+import {
+  makeFakeExtensionContext,
+  makeFakeModel,
+  makeFakePi,
+  makeFakeRegistry,
+  makeFakeSessionManager,
+  makeFakeUi,
+} from "../helpers";
 
 describe("index/handlers 모듈", () => {
   const makeState = () => {
     const s = createRouterState();
-    s.currentConfig = { profiles: { balanced: { medium: { models: ["openai/a"] } } } } as any;
+    s.currentConfig = { profiles: { balanced: { medium: { models: ["openai/a"] } } } };
     return s;
   };
 
-  const makeActions = (over: any = {}) => ({
-    setModelInternally: vi.fn().mockResolvedValue(true),
-    persistState: vi.fn(),
-    reloadConfig: vi.fn(),
-    ensureValidActiveRouterProfile: vi.fn().mockResolvedValue(undefined),
-    tryRestoreFallback: vi.fn().mockResolvedValue(false),
-    recordDebugDecision: vi.fn(),
-    ...over,
-  });
+  const makeActionsFor = (state: ReturnType<typeof createRouterState>) => {
+    const setModelInternally = vi.fn().mockResolvedValue(true);
+    const persistState = vi.fn();
+    const reloadConfig = vi.fn();
+    const ensureValidActiveRouterProfile = vi.fn().mockResolvedValue(undefined);
+    const tryRestoreFallback = vi.fn().mockResolvedValue(false);
+    const recordDebugDecision = vi.fn();
+    const actions = createRouterActions(makeFakePi(), state);
+    Object.assign(actions, {
+      setModelInternally,
+      persistState,
+      reloadConfig,
+      ensureValidActiveRouterProfile,
+      tryRestoreFallback,
+      recordDebugDecision,
+    });
+    return {
+      actions,
+      setModelInternally,
+      persistState,
+      reloadConfig,
+      ensureValidActiveRouterProfile,
+      tryRestoreFallback,
+      recordDebugDecision,
+    };
+  };
+
+  const makeUiMocks = () => {
+    const notify = vi.fn();
+    const setStatus = vi.fn();
+    const setHiddenThinkingLabel = vi.fn();
+    const ui = makeFakeUi({ notify, setStatus, setHiddenThinkingLabel });
+    return { ui, notify, setStatus, setHiddenThinkingLabel };
+  };
+
+  const makeCtx = () => {
+    const { ui, notify, setStatus, setHiddenThinkingLabel } = makeUiMocks();
+    const find = vi.fn().mockReturnValue(makeFakeModel({ provider: "router", id: "balanced" }));
+    const ctx = makeFakeExtensionContext({
+      cwd: "/cwd",
+      modelRegistry: makeFakeRegistry({ find }),
+      model: makeFakeModel({ provider: "router", id: "balanced" }),
+      sessionManager: makeFakeSessionManager({ getBranch: () => [] }),
+      ui,
+    });
+    return { ctx, notify, setStatus, setHiddenThinkingLabel, find };
+  };
 
   describe("handleSessionStart 함수", () => {
     it("초기화 상태를 설정하고 복원한다", async () => {
       const state = makeState();
-      const actions: any = makeActions();
-      const ctx: any = {
-        cwd: "/cwd",
-        modelRegistry: { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }) },
-        model: { provider: "router", id: "balanced" },
-        sessionManager: { getBranch: () => [] },
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-      };
+      const { actions } = makeActionsFor(state);
+      const { ctx } = makeCtx();
       await handleSessionStart({}, ctx, state, actions);
       expect(state.isInitialized).toBe(true);
     });
@@ -47,25 +83,21 @@ describe("index/handlers 모듈", () => {
     it("debugEnabled일 때 알림한다", async () => {
       const state = makeState();
       state.debugEnabled = true;
-      state.currentConfig = { profiles: { balanced: {} } } as any;
-      const actions: any = {
-        setModelInternally: vi.fn(),
-        persistState: vi.fn(),
-        reloadConfig: vi.fn(),
-        ensureValidActiveRouterProfile: vi.fn().mockResolvedValue(undefined),
-      };
-      const ctx: any = {
+      state.currentConfig = { profiles: { balanced: {} } };
+      const bundled = makeActionsFor(state);
+      const tryRestoreFallback = vi.fn().mockResolvedValue(false);
+      Object.assign(bundled.actions, { tryRestoreFallback });
+      const { ui, notify } = makeUiMocks();
+      const find = vi.fn();
+      const ctx = makeFakeExtensionContext({
         cwd: "/cwd",
-        modelRegistry: { find: vi.fn() },
-        sessionManager: { getBranch: () => [] },
-        ui: { notify: vi.fn(), setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-        model: { provider: "router", id: "balanced" },
-      };
-      await handleSessionStart({}, ctx, state, actions);
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
-        expect.stringContaining("Router initialized"),
-        "info",
-      );
+        modelRegistry: makeFakeRegistry({ find }),
+        sessionManager: makeFakeSessionManager({ getBranch: () => [] }),
+        ui,
+        model: makeFakeModel({ provider: "router", id: "balanced" }),
+      });
+      await handleSessionStart({}, ctx, state, bundled.actions);
+      expect(notify).toHaveBeenCalledWith(expect.stringContaining("Router initialized"), "info");
     });
   });
 
@@ -73,71 +105,66 @@ describe("index/handlers 모듈", () => {
     it("초기화 전에는 무시한다", async () => {
       const state = makeState();
       state.isInitialized = false;
-      const actions: any = makeActions();
-      const ctx: any = {
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-        modelRegistry: { find: vi.fn() },
-      };
+      const { actions, persistState } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        ui,
+        modelRegistry: makeFakeRegistry({ find: vi.fn() }),
+      });
       await handleModelSelect(
-        { model: { provider: "router", id: "balanced" } as any },
+        { model: makeFakeModel({ provider: "router", id: "balanced" }) },
         ctx,
         state,
         actions,
       );
-      expect(actions.persistState).not.toHaveBeenCalled();
+      expect(persistState).not.toHaveBeenCalled();
     });
 
     it("isInternalModelSwitch일 때는 무시한다", async () => {
       const state = makeState();
       state.isInitialized = true;
       state.isInternalModelSwitch = 1;
-      const actions: any = makeActions();
-      const ctx: any = {
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-        modelRegistry: { find: vi.fn() },
-      };
+      const { actions, persistState } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        ui,
+        modelRegistry: makeFakeRegistry({ find: vi.fn() }),
+      });
       await handleModelSelect(
-        { model: { provider: "router", id: "balanced" } as any },
+        { model: makeFakeModel({ provider: "router", id: "balanced" }) },
         ctx,
         state,
         actions,
       );
-      expect(actions.persistState).not.toHaveBeenCalled();
+      expect(persistState).not.toHaveBeenCalled();
     });
 
     it("router 유효 profile이다", async () => {
       const state = makeState();
       state.isInitialized = true;
-      const actions: any = makeActions();
-      const ctx: any = {
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-        modelRegistry: {
-          find: vi.fn().mockReturnValue({
+      const { actions, persistState } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        ui,
+        modelRegistry: makeFakeRegistry({
+          find: vi.fn().mockReturnValue(
+            makeFakeModel({
+              provider: "router",
+              id: "balanced",
+              contextWindow: 100,
+              maxTokens: 100,
+            }),
+          ),
+        }),
+      });
+      await handleModelSelect(
+        {
+          model: makeFakeModel({
             provider: "router",
             id: "balanced",
             contextWindow: 100,
             maxTokens: 100,
           }),
-        },
-      };
-      await handleModelSelect(
-        {
-          model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any,
         },
         ctx,
         state,
@@ -145,65 +172,63 @@ describe("index/handlers 모듈", () => {
       );
       expect(state.routerEnabled).toBe(true);
       expect(state.selectedProfile).toBe("balanced");
-      expect(actions.persistState).toHaveBeenCalled();
+      expect(persistState).toHaveBeenCalled();
     });
 
     it("contextWindow가 다르면 setModelInternally를 호출한다", async () => {
       const state = makeState();
       state.isInitialized = true;
-      const actions: any = makeActions();
-      const ctx: any = {
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-        modelRegistry: {
-          find: vi.fn().mockReturnValue({
-            provider: "router",
-            id: "balanced",
-            contextWindow: 200,
-            maxTokens: 200,
-          }),
-        },
-      };
+      const { actions, setModelInternally } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        ui,
+        modelRegistry: makeFakeRegistry({
+          find: vi.fn().mockReturnValue(
+            makeFakeModel({
+              provider: "router",
+              id: "balanced",
+              contextWindow: 200,
+              maxTokens: 200,
+            }),
+          ),
+        }),
+      });
       await handleModelSelect(
         {
-          model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any,
+          model: makeFakeModel({
+            provider: "router",
+            id: "balanced",
+            contextWindow: 100,
+            maxTokens: 100,
+          }),
         },
         ctx,
         state,
         actions,
       );
-      expect(actions.setModelInternally).toHaveBeenCalled();
+      expect(setModelInternally).toHaveBeenCalled();
     });
 
     it("알 수 없는 router profile은 폴백으로 처리한다", async () => {
       const state = makeState();
       state.isInitialized = true;
-      state.currentConfig = { profiles: {} } as any;
-      const actions: any = {
-        ...makeActions(),
-        tryRestoreFallback: vi.fn().mockResolvedValue(true),
-      };
-      const ctx: any = {
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-        modelRegistry: { find: vi.fn() },
-      };
+      state.currentConfig = { profiles: {} };
+      const bundled = makeActionsFor(state);
+      const tryRestoreFallback = vi.fn().mockResolvedValue(true);
+      Object.assign(bundled.actions, { tryRestoreFallback });
+      const { ui, notify } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        ui,
+        modelRegistry: makeFakeRegistry({ find: vi.fn() }),
+      });
       await handleModelSelect(
-        { model: { provider: "router", id: "unknown" } as any },
+        { model: makeFakeModel({ provider: "router", id: "unknown" }) },
         ctx,
         state,
-        actions,
+        bundled.actions,
       );
-      expect(actions.tryRestoreFallback).toHaveBeenCalled();
-      expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect(tryRestoreFallback).toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith(
         expect.stringContaining("Unknown router profile"),
         "error",
       );
@@ -212,51 +237,42 @@ describe("index/handlers 모듈", () => {
     it("알 수 없는 router profile은 폴백 없이 처리한다", async () => {
       const state = makeState();
       state.isInitialized = true;
-      state.currentConfig = { profiles: {} } as any;
-      const actions: any = {
-        ...makeActions(),
-        tryRestoreFallback: vi.fn().mockResolvedValue(false),
-      };
-      const ctx: any = {
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-        modelRegistry: { find: vi.fn() },
-      };
+      state.currentConfig = { profiles: {} };
+      const bundled = makeActionsFor(state);
+      const tryRestoreFallback = vi.fn().mockResolvedValue(false);
+      Object.assign(bundled.actions, { tryRestoreFallback });
+      const { ui, notify } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        ui,
+        modelRegistry: makeFakeRegistry({ find: vi.fn() }),
+      });
       await handleModelSelect(
-        { model: { provider: "router", id: "unknown" } as any },
+        { model: makeFakeModel({ provider: "router", id: "unknown" }) },
         ctx,
         state,
-        actions,
+        bundled.actions,
       );
-      expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("no fallback"), "warning");
+      expect(notify).toHaveBeenCalledWith(expect.stringContaining("no fallback"), "warning");
     });
 
     it("non-router이다", async () => {
       const state = makeState();
       state.isInitialized = true;
-      const actions: any = makeActions();
-      const ctx: any = {
-        ui: {
-          notify: vi.fn(),
-          setHiddenThinkingLabel: vi.fn(),
-          setStatus: vi.fn(),
-          theme: { fg: (_: string, t: string) => t },
-        },
-        modelRegistry: { find: vi.fn() },
-      };
+      const { actions } = makeActionsFor(state);
+      const { ui, setHiddenThinkingLabel } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        ui,
+        modelRegistry: makeFakeRegistry({ find: vi.fn() }),
+      });
       await handleModelSelect(
-        { model: { provider: "openai", id: "gpt-4o" } as any },
+        { model: makeFakeModel({ provider: "openai", id: "gpt-4o" }) },
         ctx,
         state,
         actions,
       );
       expect(state.routerEnabled).toBe(false);
       expect(state.lastNonRouterModel).toBe("openai/gpt-4o");
-      expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
+      expect(setHiddenThinkingLabel).toHaveBeenCalled();
     });
   });
 
@@ -264,20 +280,30 @@ describe("index/handlers 모듈", () => {
     it("registry가 없으면 초기화한다", () => {
       const state = createRouterState();
       state.currentModelRegistry = undefined;
-      const actions: any = { reloadConfig: vi.fn() };
-      const ctx: any = { cwd: "/cwd", modelRegistry: { find: vi.fn() }, ui: {} };
+      const { actions, reloadConfig } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        cwd: "/cwd",
+        modelRegistry: makeFakeRegistry({ find: vi.fn() }),
+        ui,
+      });
       handleTurnStart({}, ctx, state, actions);
       expect(state.currentModelRegistry).toBe(ctx.modelRegistry);
-      expect(actions.reloadConfig).toHaveBeenCalledWith(ctx);
+      expect(reloadConfig).toHaveBeenCalledWith(ctx);
     });
 
     it("이미 초기화되었으면 아무 것도 하지 않는다", () => {
       const state = createRouterState();
-      state.currentModelRegistry = {} as any;
-      const actions: any = { reloadConfig: vi.fn() };
-      const ctx: any = { cwd: "/cwd", modelRegistry: {}, ui: {} };
+      state.currentModelRegistry = makeFakeRegistry();
+      const { actions, reloadConfig } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
+        cwd: "/cwd",
+        modelRegistry: makeFakeRegistry(),
+        ui,
+      });
       handleTurnStart({}, ctx, state, actions);
-      expect(actions.reloadConfig).not.toHaveBeenCalled();
+      expect(reloadConfig).not.toHaveBeenCalled();
     });
   });
 
@@ -285,97 +311,91 @@ describe("index/handlers 모듈", () => {
     it("registry가 없으면 초기화한다", async () => {
       const state = createRouterState();
       state.currentModelRegistry = undefined;
-      const actions: any = { reloadConfig: vi.fn(), persistState: vi.fn() };
-      const ctx: any = {
+      const { actions } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
         cwd: "/cwd",
-        modelRegistry: { find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }) },
-        model: { provider: "openai", id: "gpt" },
-        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-      };
+        modelRegistry: makeFakeRegistry({
+          find: vi.fn().mockReturnValue(makeFakeModel({ provider: "router", id: "balanced" })),
+        }),
+        model: makeFakeModel({ provider: "openai", id: "gpt" }),
+        ui,
+      });
       await handleTurnEnd({}, ctx, state, actions);
       expect(state.currentModelRegistry).toBe(ctx.modelRegistry);
     });
 
     it("활성화되어 있고 router가 아니면 router model을 복원한다", async () => {
       const state = createRouterState();
-      state.currentModelRegistry = {
-        find: vi.fn().mockReturnValue({ provider: "router", id: "balanced" }),
-      } as any;
+      const registry = makeFakeRegistry({
+        find: vi.fn().mockReturnValue(makeFakeModel({ provider: "router", id: "balanced" })),
+      });
+      state.currentModelRegistry = registry;
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
-      const actions: any = {
-        reloadConfig: vi.fn(),
-        persistState: vi.fn(),
-        setModelInternally: vi.fn().mockResolvedValue(true),
-      };
-      const ctx: any = {
+      const { actions, setModelInternally } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
         cwd: "/cwd",
-        modelRegistry: state.currentModelRegistry,
-        model: { provider: "openai", id: "gpt" },
-        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-      };
+        modelRegistry: registry,
+        model: makeFakeModel({ provider: "openai", id: "gpt" }),
+        ui,
+      });
       await handleTurnEnd({}, ctx, state, actions);
-      expect(actions.setModelInternally).toHaveBeenCalled();
+      expect(setModelInternally).toHaveBeenCalled();
     });
 
     it("이미 router이면 복원하지 않는다", async () => {
       const state = createRouterState();
-      state.currentModelRegistry = { find: vi.fn() } as any;
+      state.currentModelRegistry = makeFakeRegistry({ find: vi.fn() });
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
-      const actions: any = {
-        reloadConfig: vi.fn(),
-        persistState: vi.fn(),
-        setModelInternally: vi.fn(),
-      };
-      const ctx: any = {
+      const { actions, setModelInternally } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
         cwd: "/cwd",
         modelRegistry: state.currentModelRegistry,
-        model: { provider: "router", id: "balanced" },
-        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-      };
+        model: makeFakeModel({ provider: "router", id: "balanced" }),
+        ui,
+      });
       await handleTurnEnd({}, ctx, state, actions);
-      expect(actions.setModelInternally).not.toHaveBeenCalled();
+      expect(setModelInternally).not.toHaveBeenCalled();
     });
 
     it("selectedProfile이 없으면 복원하지 않는다", async () => {
       const state = createRouterState();
-      state.currentModelRegistry = { find: vi.fn() } as any;
+      state.currentModelRegistry = makeFakeRegistry({ find: vi.fn() });
       state.routerEnabled = true;
       state.selectedProfile = undefined;
-      const actions: any = {
-        reloadConfig: vi.fn(),
-        persistState: vi.fn(),
-        setModelInternally: vi.fn(),
-      };
-      const ctx: any = {
+      const { actions, setModelInternally } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
         cwd: "/cwd",
         modelRegistry: state.currentModelRegistry,
-        model: { provider: "openai", id: "gpt" },
-        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-      };
+        model: makeFakeModel({ provider: "openai", id: "gpt" }),
+        ui,
+      });
       await handleTurnEnd({}, ctx, state, actions);
-      expect(actions.setModelInternally).not.toHaveBeenCalled();
+      expect(setModelInternally).not.toHaveBeenCalled();
     });
 
     it("find가 undefined를 반환해도 처리한다", async () => {
       const state = createRouterState();
-      state.currentModelRegistry = { find: vi.fn().mockReturnValue(undefined) } as any;
+      state.currentModelRegistry = makeFakeRegistry({
+        find: vi.fn().mockReturnValue(undefined),
+      });
       state.routerEnabled = true;
       state.selectedProfile = "balanced";
-      const actions: any = {
-        reloadConfig: vi.fn(),
-        persistState: vi.fn(),
-        setModelInternally: vi.fn(),
-      };
-      const ctx: any = {
+      const { actions, setModelInternally } = makeActionsFor(state);
+      const { ui } = makeUiMocks();
+      const ctx = makeFakeExtensionContext({
         cwd: "/cwd",
         modelRegistry: state.currentModelRegistry,
-        model: { provider: "openai", id: "gpt" },
-        ui: { setStatus: vi.fn(), theme: { fg: (_: string, t: string) => t } },
-      };
+        model: makeFakeModel({ provider: "openai", id: "gpt" }),
+        ui,
+      });
       await handleTurnEnd({}, ctx, state, actions);
-      expect(actions.setModelInternally).not.toHaveBeenCalled();
+      expect(setModelInternally).not.toHaveBeenCalled();
     });
   });
 });

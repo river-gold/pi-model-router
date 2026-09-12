@@ -16,7 +16,7 @@ describe("profile을 검증함", () => {
     });
     it("빈 입력을 처리함을 검증함", () => expect(profileNames({ profiles: {} })).toEqual([]));
     it("단일 항목을 처리함을 검증함", () =>
-      expect(profileNames({ profiles: { only: {} as any } })).toEqual(["only"]));
+      expect(profileNames({ profiles: { only: {} } })).toEqual(["only"]));
   });
   describe("resolveProfileName 동작을 검증함", () => {
     const config: RouterConfig = {

@@ -1,52 +1,72 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import type { Context } from "@earendil-works/pi-ai";
 import { applyClassifierIfNeeded } from "../../src/provider/classifier";
+import { CLASSIFIER_CHAIN_KEY } from "../../src/failureMemory";
+import type * as ClassifierBranchModule from "../../src/provider/classifierBranch";
+import type * as RoutingModule from "../../src/routing";
+import type { RouterProfile } from "../../src/types";
+import { makeFakeRegistry, makeFakeProviderState, makeFakeDecision } from "../helpers";
 
-vi.mock("../../src/provider/classifierBranch", () => ({
-  runClassifierBranch: vi.fn(),
+const {
+  mockRunClassifierBranch,
+  mockResolveAvailableTier,
+  mockBuildRoutingDecision,
+  mockBuildRoutingDecisionLive,
+} = vi.hoisted(() => ({
+  mockRunClassifierBranch: vi.fn(),
+  mockResolveAvailableTier: vi.fn(),
+  mockBuildRoutingDecision: vi.fn(),
+  mockBuildRoutingDecisionLive: vi.fn(),
 }));
 
-vi.mock("../../src/routing", () => ({
-  resolveAvailableTier: vi.fn((profile, tier) => tier),
-  buildRoutingDecision: vi.fn((modelId, profile, tier, reasoning, isClassifier) => ({
-    profile: modelId,
-    tier,
-    reasoning,
-    isClassifier,
-  })),
-  buildRoutingDecisionLive: vi.fn((profiles, modelId, tier, reasoning, isClassifier) => ({
-    profile: modelId,
-    tier,
-    reasoning,
-    isClassifier,
-  })),
-}));
+vi.mock("../../src/provider/classifierBranch", async () => {
+  const actual = await vi.importActual<typeof ClassifierBranchModule>(
+    "../../src/provider/classifierBranch",
+  );
+  return { ...actual, runClassifierBranch: mockRunClassifierBranch };
+});
 
-import { runClassifierBranch } from "../../src/provider/classifierBranch";
-import {
-  resolveAvailableTier,
-  buildRoutingDecision,
-  buildRoutingDecisionLive,
-} from "../../src/routing";
+vi.mock("../../src/routing", async () => {
+  const actual = await vi.importActual<typeof RoutingModule>("../../src/routing");
+  return {
+    ...actual,
+    resolveAvailableTier: mockResolveAvailableTier,
+    buildRoutingDecision: mockBuildRoutingDecision,
+    buildRoutingDecisionLive: mockBuildRoutingDecisionLive,
+  };
+});
 
 describe("provider/classifier 분류기 적용", () => {
-  const mockDecision = { tier: "medium", reasoning: "orig" } as any;
-  const mockProfile = { medium: { models: ["openai/a"] } } as any;
-  const makeState = (historySize?: number, failedSet?: Set<string>) => ({
-    currentConfig: { historySize, profiles: {} } as any,
-    failedByChain: {
-      get: vi.fn().mockReturnValue(failedSet),
-    } as any,
-  });
+  const mockDecision = makeFakeDecision({ tier: "medium", reasoning: "orig" });
+  const mockProfile: RouterProfile = { medium: { models: ["openai/a"] } };
+  const baseContext: Context = { messages: [{ role: "user", content: "hi", timestamp: 1 }] };
+  const makeState = (historySize?: number, failedSet?: Set<string>) =>
+    makeFakeProviderState({
+      currentConfig: { profiles: {}, historySize },
+      failedByChain: new Map<string, Set<string>>(
+        failedSet === undefined ? [] : [[CLASSIFIER_CHAIN_KEY, failedSet]],
+      ),
+    });
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (resolveAvailableTier as unknown as ReturnType<typeof vi.fn>).mockImplementation((_, t) => t);
-    (buildRoutingDecision as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      (modelId, profile, tier, reasoning) => ({ profile: modelId, tier, reasoning }) as any,
+    mockResolveAvailableTier.mockImplementation((_, t) => t);
+    mockBuildRoutingDecision.mockImplementation((modelId, profile, tier, reasoning) => ({
+      profile: modelId,
+      tier,
+      reasoning,
+    }));
+    mockBuildRoutingDecisionLive.mockImplementation(
+      (profiles, modelId, tier, reasoning, isClassifier) => ({
+        profile: modelId,
+        tier,
+        reasoning,
+        isClassifier,
+      }),
     );
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
-    } as any);
+    });
   });
 
   it("isSingleTier일 때 기존 decision 반환", async () => {
@@ -55,17 +75,17 @@ describe("provider/classifier 분류기 적용", () => {
       mockProfile,
       mockDecision,
       "modelId",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       true,
       false,
-      "off" as any,
+      "off",
       "source",
     );
     expect(result).toBe(mockDecision);
-    expect(runClassifierBranch).not.toHaveBeenCalled();
+    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
   });
 
   it("isToolLoopNow일 때 기존 decision 반환", async () => {
@@ -74,13 +94,13 @@ describe("provider/classifier 분류기 적용", () => {
       mockProfile,
       mockDecision,
       "modelId",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       true,
-      "off" as any,
+      "off",
       "source",
     );
     expect(result).toBe(mockDecision);
@@ -93,13 +113,13 @@ describe("provider/classifier 분류기 적용", () => {
         mockProfile,
         mockDecision,
         "modelId",
-        {} as any,
-        state as any,
-        {} as any,
+        makeFakeRegistry(),
+        state,
+        baseContext,
         undefined,
         false,
         false,
-        lvl as any,
+        lvl,
         "source",
       );
       expect(r).toBe(mockDecision);
@@ -112,16 +132,16 @@ describe("provider/classifier 분류기 적용", () => {
       mockProfile,
       mockDecision,
       "modelId",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
-    expect(runClassifierBranch).toHaveBeenCalledWith(
+    expect(mockRunClassifierBranch).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.anything(),
@@ -140,16 +160,16 @@ describe("provider/classifier 분류기 적용", () => {
       mockProfile,
       mockDecision,
       "modelId",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
-    expect(runClassifierBranch).toHaveBeenCalledWith(
+    expect(mockRunClassifierBranch).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.anything(),
@@ -169,16 +189,16 @@ describe("provider/classifier 분류기 적용", () => {
       mockProfile,
       mockDecision,
       "modelId",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
-    expect(runClassifierBranch).toHaveBeenCalledWith(
+    expect(mockRunClassifierBranch).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.anything(),
@@ -197,17 +217,17 @@ describe("provider/classifier 분류기 적용", () => {
       mockProfile,
       mockDecision,
       "modelId",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
       "sess-7",
     );
-    expect(runClassifierBranch).toHaveBeenCalledWith(
+    expect(mockRunClassifierBranch).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.anything(),
@@ -226,40 +246,40 @@ describe("provider/classifier 분류기 적용", () => {
       mockProfile,
       mockDecision,
       "modelId",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
-    const calledSet = (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][6];
+    const calledSet = mockRunClassifierBranch.mock.calls[0][6];
     expect(calledSet).toBeInstanceOf(Set);
     expect(calledSet.size).toBe(0);
   });
 
   it("tier가 result와 같으면 decision 생성", async () => {
-    (resolveAvailableTier as unknown as ReturnType<typeof vi.fn>).mockReturnValue("high");
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    mockResolveAvailableTier.mockReturnValue("high");
+    mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "r" },
-    } as any);
+    });
     const state = makeState();
     const result = await applyClassifierIfNeeded(
       mockProfile,
       mockDecision,
       "myModel",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
-    expect(buildRoutingDecision).toHaveBeenCalledWith(
+    expect(mockBuildRoutingDecision).toHaveBeenCalledWith(
       "myModel",
       mockProfile,
       "high",
@@ -270,87 +290,83 @@ describe("provider/classifier 분류기 적용", () => {
   });
 
   it("classifier branch가 reject되면 들어온 decision 반환", async () => {
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error("Classifier failed to determine a tier."),
-    );
+    mockRunClassifierBranch.mockRejectedValue(new Error("Classifier failed to determine a tier."));
     const state = makeState();
     const result = await applyClassifierIfNeeded(
       mockProfile,
       mockDecision,
       "myModel",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
     expect(result).toBe(mockDecision);
   });
   it("classifier result가 undefined이면 들어온 decision 반환", async () => {
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    mockRunClassifierBranch.mockResolvedValue({
       result: undefined,
-    } as any);
+    });
     const state = makeState();
     const result = await applyClassifierIfNeeded(
       mockProfile,
       mockDecision,
       "myModel",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
     expect(result).toBe(mockDecision);
   });
   it("abort는 fallback 없이 다시 throw", async () => {
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error("aborted"),
-    );
+    mockRunClassifierBranch.mockRejectedValue(new Error("aborted"));
     const state = makeState();
     await expect(
       applyClassifierIfNeeded(
         mockProfile,
         mockDecision,
         "myModel",
-        {} as any,
-        state as any,
-        {} as any,
+        makeFakeRegistry(),
+        state,
+        baseContext,
         undefined,
         false,
         false,
-        "off" as any,
+        "off",
         "source",
       ),
     ).rejects.toThrow("aborted");
   });
   it("tier가 다르면 resolve하여 반환", async () => {
-    (resolveAvailableTier as unknown as ReturnType<typeof vi.fn>).mockReturnValue("medium");
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    mockResolveAvailableTier.mockReturnValue("medium");
+    mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "r" },
-    } as any);
+    });
     const state = makeState();
     const result = await applyClassifierIfNeeded(
       mockProfile,
       mockDecision,
       "myModel",
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
     );
     expect(result.reasoning).toContain("Resolved from high to medium");
-    expect(buildRoutingDecision).toHaveBeenCalledWith(
+    expect(mockBuildRoutingDecision).toHaveBeenCalledWith(
       "myModel",
       mockProfile,
       "medium",
@@ -361,37 +377,38 @@ describe("provider/classifier 분류기 적용", () => {
 });
 
 describe("provider/classifier 논리적 ref", () => {
-  const liveProfiles = {
+  const liveProfiles: Record<string, RouterProfile> = {
     myModel: { high: { ref: "base#high" } },
     base: { high: { models: ["openai/gpt-base"] } },
-  } as any;
-  const callLive = (profiles: any, modelId = "myModel") => {
-    const state = {
-      currentConfig: { historySize: 0, profiles: {} } as any,
-      failedByChain: { get: vi.fn() } as any,
-    };
+  };
+  const baseContext: Context = { messages: [{ role: "user", content: "hi", timestamp: 1 }] };
+  const callLive = (profiles: Record<string, RouterProfile>, modelId = "myModel") => {
+    const state = makeFakeProviderState({
+      currentConfig: { historySize: 0, profiles: {} },
+      failedByChain: new Map(),
+    });
     return applyClassifierIfNeeded(
-      { high: { ref: "base#high" } } as any,
-      { tier: "medium", reasoning: "orig" } as any,
+      { high: { ref: "base#high" } },
+      makeFakeDecision({ tier: "medium", reasoning: "orig" }),
       modelId,
-      {} as any,
-      state as any,
-      {} as any,
+      makeFakeRegistry(),
+      state,
+      baseContext,
       undefined,
       false,
       false,
-      "off" as any,
+      "off",
       "source",
       undefined,
       profiles,
     );
   };
   it("profiles가 있으면 live 결정으로 반환함", async () => {
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
-    } as any);
+    });
     const result = await callLive(liveProfiles);
-    expect(buildRoutingDecisionLive).toHaveBeenCalledWith(
+    expect(mockBuildRoutingDecisionLive).toHaveBeenCalledWith(
       liveProfiles,
       "myModel",
       "high",
@@ -403,11 +420,11 @@ describe("provider/classifier 논리적 ref", () => {
     );
   });
   it("profiles에 없어도 요청 tier로 live 결정함", async () => {
-    (runClassifierBranch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
-    } as any);
+    });
     const result = await callLive({});
-    expect(buildRoutingDecisionLive).toHaveBeenCalledWith(
+    expect(mockBuildRoutingDecisionLive).toHaveBeenCalledWith(
       {},
       "myModel",
       "high",

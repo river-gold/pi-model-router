@@ -17,7 +17,7 @@ export const parseTierRef = (raw: string): { profile: string; tier: RouterTier }
 };
 
 export const isTierRef = (value: unknown): value is { ref: string } =>
-  isObjectRecord(value) && typeof (value as Record<string, unknown>).ref === "string";
+  isObjectRecord(value) && typeof value.ref === "string";
 
 /**
  * 로드 시점 검증만 수행함. 치환하지 않고 `{ ref }`를 그대로 둬서
@@ -33,11 +33,11 @@ export const resolveProfileTierRefs = (
       continue;
     }
     for (const tier of ROUTER_TIERS) {
-      const tierValue = (profile as Record<string, unknown>)[tier];
+      const tierValue = profile[tier];
       if (!isObjectRecord(tierValue)) {
         continue;
       }
-      const ref = (tierValue as Record<string, unknown>).ref;
+      const ref = tierValue.ref;
       if (typeof ref !== "string") {
         continue;
       }
@@ -47,14 +47,14 @@ export const resolveProfileTierRefs = (
         warnings.push(
           `Profile "${profileName}" ${tier} tier has invalid ref "${ref}": expected "profile#tier". Tier disabled.`,
         );
-        delete (profile as Record<string, unknown>)[tier];
+        delete profile[tier];
         continue;
       }
       if (parsed.profile === profileName && parsed.tier === tier) {
         warnings.push(
           `Profile "${profileName}" ${tier} tier references itself ("${rawRef}"). Tier disabled.`,
         );
-        delete (profile as Record<string, unknown>)[tier];
+        delete profile[tier];
       }
     }
   }
@@ -73,13 +73,12 @@ export interface ResolvedTier {
 
 const MAX_REF_HOPS = ROUTER_TIERS.length * 6;
 
-const asConcrete = (value: unknown): RoutedTierConfig | undefined => {
-  if (!isObjectRecord(value)) return undefined;
-  if (typeof (value as Record<string, unknown>).ref === "string") return undefined;
-  const models = (value as Record<string, unknown>).models;
-  if (!Array.isArray(models) || models.length === 0) return undefined;
-  return value as unknown as RoutedTierConfig;
-};
+const isConcreteTier = (value: unknown): value is RoutedTierConfig =>
+  isObjectRecord(value) &&
+  typeof value.ref !== "string" &&
+  Array.isArray(value.models) &&
+  value.models.length > 0 &&
+  value.models.every((item) => typeof item === "string");
 
 /**
  * `profiles[profileName][tier]`를 실시간으로 추적함.
@@ -108,11 +107,11 @@ export const dereferenceTier = (
     if (!isObjectRecord(targetProfile)) {
       return undefined;
     }
-    const entry = (targetProfile as Record<string, unknown>)[currentTier];
+    const entry = targetProfile[currentTier];
     if (!isObjectRecord(entry)) {
       return nearbyDereference(profiles, currentProfile, currentTier, chain);
     }
-    const ref = (entry as Record<string, unknown>).ref;
+    const ref = entry.ref;
     if (typeof ref === "string") {
       const parsed = parseTierRef(ref.trim());
       if (!parsed) {
@@ -122,11 +121,10 @@ export const dereferenceTier = (
       currentTier = parsed.tier;
       continue;
     }
-    const concrete = asConcrete(entry);
-    if (!concrete) {
+    if (!isConcreteTier(entry)) {
       return undefined;
     }
-    return { profileName: currentProfile, tier: currentTier, config: concrete, chain: [...chain] };
+    return { profileName: currentProfile, tier: currentTier, config: entry, chain: [...chain] };
   }
   return undefined;
 };
@@ -139,22 +137,23 @@ const nearbyDereference = (
   chain: string[],
 ): ResolvedTier | undefined => {
   // 호출 전 currentProfile이 객체임이 확인되므로 직접 인덱싱함.
-  const targetProfile = profiles[targetProfileName] as Record<string, unknown>;
-  const concrete: Partial<Record<RouterTier, unknown>> = {};
+  const targetProfile = profiles[targetProfileName];
+  const concrete: Partial<Record<RouterTier, RoutedTierConfig>> = {};
   for (const t of ROUTER_TIERS) {
-    const value = (targetProfile as Record<string, unknown>)[t];
-    if (asConcrete(value)) {
+    const value = targetProfile[t];
+    if (isConcreteTier(value)) {
       concrete[t] = value;
     }
   }
   const picked = resolveAvailableTier(concrete, wantedTier);
-  if (!concrete[picked]) return undefined;
+  const pickedConfig = concrete[picked];
+  if (!pickedConfig) return undefined;
   const key = `${targetProfileName}#${picked}`;
   chain.push(key);
   return {
     profileName: targetProfileName,
     tier: picked,
-    config: concrete[picked] as RoutedTierConfig,
+    config: pickedConfig,
     chain: [...chain],
   };
 };
@@ -170,9 +169,8 @@ export const resolveAvailableTierLive = (
 ): { tier: RouterTier; resolved: ResolvedTier } | undefined => {
   const profile = profiles[profileName];
   if (!isObjectRecord(profile)) return undefined;
-  const record = profile as Record<string, unknown>;
   for (const t of nearbyTierOrder(preferred)) {
-    if (!isObjectRecord(record[t])) continue;
+    if (!isObjectRecord(profile[t])) continue;
     const resolved = dereferenceTier(profiles, profileName, t);
     if (resolved) return { tier: t, resolved };
   }
@@ -186,8 +184,7 @@ export const resolvableTiers = (
 ): RouterTier[] => {
   const profile = profiles[profileName];
   if (!isObjectRecord(profile)) return [];
-  const record = profile as Record<string, unknown>;
   return ROUTER_TIERS.filter(
-    (t) => isObjectRecord(record[t]) && dereferenceTier(profiles, profileName, t) !== undefined,
+    (t) => isObjectRecord(profile[t]) && dereferenceTier(profiles, profileName, t) !== undefined,
   );
 };

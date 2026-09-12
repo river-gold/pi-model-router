@@ -1,28 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 import { safePersist, safeUpdateStatus } from "../../src/provider/safe";
+import { makeFakeExtensionContext, makeFakeProviderState } from "../helpers";
 
 describe("provider/safe 안전 호출", () => {
   describe("safeUpdateStatus 상태 업데이트", () => {
     it("lastExtensionContext가 있으면 호출", () => {
-      const ctx = { ui: {} } as any;
-      const state = { lastExtensionContext: ctx } as any;
+      const ctx = makeFakeExtensionContext();
+      const state = makeFakeProviderState({ lastExtensionContext: ctx });
       const actions = { updateStatus: vi.fn() };
       safeUpdateStatus(state, actions);
       expect(actions.updateStatus).toHaveBeenCalledWith(ctx);
     });
 
     it("context가 없으면 호출 안 함", () => {
-      const state = { lastExtensionContext: undefined } as any;
+      const state = makeFakeProviderState({ lastExtensionContext: undefined });
       const actions = { updateStatus: vi.fn() };
       safeUpdateStatus(state, actions);
       expect(actions.updateStatus).not.toHaveBeenCalled();
     });
 
     it("updateStatus의 throw 무시", () => {
-      const ctx = {} as any;
-      const state = { lastExtensionContext: ctx } as any;
+      const ctx = makeFakeExtensionContext();
+      const state = makeFakeProviderState({ lastExtensionContext: ctx });
       const actions = {
-        updateStatus: vi.fn().mockImplementation(() => {
+        updateStatus: vi.fn(() => {
           throw new Error("stale");
         }),
       };
@@ -30,9 +31,9 @@ describe("provider/safe 안전 호출", () => {
     });
 
     it("context가 없으면 updateStatus 호출 없이 throw 무시", () => {
-      const state = { lastExtensionContext: null } as any;
+      const state = makeFakeProviderState({ lastExtensionContext: undefined });
       const actions = {
-        updateStatus: vi.fn().mockImplementation(() => {
+        updateStatus: vi.fn(() => {
           throw new Error("x");
         }),
       };
@@ -50,7 +51,7 @@ describe("provider/safe 안전 호출", () => {
 
     it("throw 무시", () => {
       const actions = {
-        persistState: vi.fn().mockImplementation(() => {
+        persistState: vi.fn(() => {
           throw new Error("stale");
         }),
       };

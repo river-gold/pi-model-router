@@ -15,9 +15,9 @@ describe("logger/log 분류 로그 기록", () => {
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const buildLogLine = vi.fn().mockReturnValue("line\n");
     const log = createLogClassifierSync(
-      appendFile as any,
-      ensureLogDir as any,
-      buildLogLine as any,
+      (path, data, encoding) => appendFile(path, data, encoding),
+      () => ensureLogDir(),
+      (entry) => buildLogLine(entry),
       "/tmp/log",
     );
     log(baseEntry);
@@ -30,9 +30,11 @@ describe("logger/log 분류 로그 기록", () => {
 
   it("의존성 없이 기본값으로 동작한다", async () => {
     // This test ensures the default factory works, but we mock fs to avoid actual file
+    const appendFile = vi.fn().mockResolvedValue(undefined);
+    const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const log = createLogClassifierSync(
-      vi.fn().mockResolvedValue(undefined) as any,
-      vi.fn().mockResolvedValue(undefined) as any,
+      (path, data, encoding) => appendFile(path, data, encoding),
+      () => ensureLogDir(),
       (e) => `test ${e.model}\n`,
       "/tmp/log",
     );
@@ -45,9 +47,9 @@ describe("logger/log 분류 로그 기록", () => {
     const appendFile = vi.fn();
     const ensureLogDir = vi.fn().mockRejectedValue(new Error("fail"));
     const log = createLogClassifierSync(
-      appendFile as any,
-      ensureLogDir as any,
-      undefined as any,
+      (path, data, encoding) => appendFile(path, data, encoding),
+      () => ensureLogDir(),
+      undefined,
       "/tmp/log",
     );
     log(baseEntry);
@@ -59,9 +61,9 @@ describe("logger/log 분류 로그 기록", () => {
     const appendFile = vi.fn().mockRejectedValue(new Error("fail"));
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const log = createLogClassifierSync(
-      appendFile as any,
-      ensureLogDir as any,
-      undefined as any,
+      (path, data, encoding) => appendFile(path, data, encoding),
+      () => ensureLogDir(),
+      undefined,
       "/tmp/log",
     );
     log(baseEntry);
@@ -77,9 +79,9 @@ describe("logger/log 분류 로그 기록", () => {
       throw new Error("build fail");
     });
     const log = createLogClassifierSync(
-      appendFile as any,
-      ensureLogDir as any,
-      buildLogLine as any,
+      (path, data, encoding) => appendFile(path, data, encoding),
+      () => ensureLogDir(),
+      (entry) => buildLogLine(entry),
       "/tmp/log",
     );
     log(baseEntry);
@@ -91,9 +93,9 @@ describe("logger/log 분류 로그 기록", () => {
     const appendFile = vi.fn().mockResolvedValue(undefined);
     const ensureLogDir = vi.fn().mockResolvedValue(undefined);
     const log = createLogClassifierSync(
-      appendFile as any,
-      ensureLogDir as any,
-      undefined as any,
+      (path, data, encoding) => appendFile(path, data, encoding),
+      () => ensureLogDir(),
+      undefined,
       "/tmp/log",
     );
     const entry: ClassifierLogEntry = {
@@ -110,7 +112,8 @@ describe("logger/log 분류 로그 기록", () => {
     log(entry);
     await new Promise((r) => setTimeout(r, 10));
     expect(appendFile).toHaveBeenCalled();
-    const line = appendFile.mock.calls[0][1] as string;
+    const line: unknown = appendFile.mock.calls[0]?.[1];
+    if (typeof line !== "string") throw new Error("expected string log line");
     expect(line).toContain("high");
   });
 });

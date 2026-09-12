@@ -2,120 +2,143 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import routerExtension from "../../src/index/extension";
 
 vi.mock("../../src/commands", async () => {
-  const actual = (await vi.importActual("../../src/commands")) as any;
+  const actual = await vi.importActual<typeof CommandsMod>("../../src/commands");
   return {
     ...actual,
-    registerCommands: vi.fn((...args: any[]) => actual.registerCommands(...args)),
+    registerCommands: vi.fn((...args: Parameters<typeof actual.registerCommands>) =>
+      actual.registerCommands(...args),
+    ),
   };
 });
 
+import type * as CommandsMod from "../../src/commands";
+import type * as ConfigMod from "../../src/config";
 import { registerCommands } from "../../src/commands";
+import {
+  makeFakeDecision,
+  makeFakeExtensionContext,
+  makeFakeModel,
+  makeFakePi,
+  makeFakeRegistry,
+  makeFakeSessionManager,
+  makeFakeUi,
+} from "../helpers";
 
 describe("index/extension 모듈", () => {
-  const makePi = () => {
-    const listeners: Record<string, Function> = {};
-    return {
-      pi: {
-        registerProvider: vi.fn(),
-        registerCommand: vi.fn(),
-        setModel: vi.fn().mockResolvedValue(true),
-        appendEntry: vi.fn(),
-        on: vi.fn((e: string, h: Function) => {
-          listeners[e] = h;
-        }),
-        getThinkingLevel: vi.fn().mockReturnValue("off"),
-      } as any,
-      listeners,
-    };
+  const makePiWithListeners = () => {
+    const listeners = new Map<string, (...args: any[]) => unknown>();
+    const on = vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+      listeners.set(event, handler);
+    });
+    const setModel = vi.fn().mockResolvedValue(true);
+    const registerProvider = vi.fn();
+    const registerCommand = vi.fn();
+    const appendEntry = vi.fn();
+    const pi = makeFakePi({ on, setModel, registerProvider, registerCommand, appendEntry });
+    return { pi, listeners, on, setModel, registerProvider, registerCommand, appendEntry };
   };
 
-  const makeCtx = (over: any = {}) => ({
-    cwd: "/cwd",
-    modelRegistry: {
-      find: vi.fn(
-        (p: string, id: string) =>
-          ({ provider: p, id, contextWindow: 100000, maxTokens: 4000 }) as any,
-      ),
-      list: vi.fn(() => []),
-    },
-    model: { provider: "router", id: "balanced" },
-    sessionManager: { getBranch: () => [] },
-    ui: {
-      setStatus: vi.fn(),
-      setHiddenThinkingLabel: vi.fn(),
-      notify: vi.fn(),
-      theme: { fg: (_: string, t: string) => t },
-    },
-    ...over,
-  });
+  const getHandler = (listeners: Map<string, (...args: any[]) => unknown>, name: string) => {
+    const h = listeners.get(name);
+    if (h === undefined) expect.unreachable();
+    return h;
+  };
+
+  const makeCtx = () => {
+    const notify = vi.fn();
+    const setStatus = vi.fn();
+    const setHiddenThinkingLabel = vi.fn();
+    const find = vi
+      .fn()
+      .mockImplementation((p: string, id: string) =>
+        makeFakeModel({ provider: p, id, contextWindow: 100000, maxTokens: 4000 }),
+      );
+    const list = vi.fn(() => []);
+    const ctx = makeFakeExtensionContext({
+      cwd: "/cwd",
+      modelRegistry: makeFakeRegistry({ find, list }),
+      model: makeFakeModel({ provider: "router", id: "balanced" }),
+      sessionManager: makeFakeSessionManager({ getBranch: () => [] }),
+      ui: makeFakeUi({ notify, setStatus, setHiddenThinkingLabel }),
+    });
+    return { ctx, notify, setStatus, setHiddenThinkingLabel, find, list };
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("provider와 commands와 hooks를 등록한다", () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners, on, registerProvider, registerCommand } = makePiWithListeners();
     routerExtension(pi);
-    expect(pi.registerProvider).toHaveBeenCalled();
-    expect(pi.registerCommand).toHaveBeenCalled();
-    expect(pi.on).toHaveBeenCalledWith("session_start", expect.any(Function));
-    expect(pi.on).toHaveBeenCalledWith("turn_start", expect.any(Function));
-    expect(pi.on).toHaveBeenCalledWith("model_select", expect.any(Function));
-    expect(pi.on).toHaveBeenCalledWith("turn_end", expect.any(Function));
-    expect(listeners["session_start"]).toBeDefined();
+    expect(registerProvider).toHaveBeenCalled();
+    expect(registerCommand).toHaveBeenCalled();
+    expect(on).toHaveBeenCalledWith("session_start", expect.any(Function));
+    expect(on).toHaveBeenCalledWith("turn_start", expect.any(Function));
+    expect(on).toHaveBeenCalledWith("model_select", expect.any(Function));
+    expect(on).toHaveBeenCalledWith("turn_end", expect.any(Function));
+    expect(listeners.get("session_start")).toBeDefined();
   });
 
   it("session_start를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
-    expect(ctx.ui.setStatus).toHaveBeenCalled();
+    const { ctx, setStatus } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
+    expect(setStatus).toHaveBeenCalled();
   });
 
   it("turn_start를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["turn_start"]({}, ctx);
+    const { ctx, setStatus } = makeCtx();
+    await getHandler(listeners, "turn_start")({}, ctx);
     // should initialize
-    expect(ctx.ui.setStatus).toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalled();
   });
 
   it("router인 model_select를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
-    await listeners["model_select"]({ model: { provider: "router", id: "balanced" } }, ctx);
-    expect(ctx.ui.setStatus).toHaveBeenCalled();
+    const { ctx, setStatus } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
+    await getHandler(listeners, "model_select")(
+      { model: makeFakeModel({ provider: "router", id: "balanced" }) },
+      ctx,
+    );
+    expect(setStatus).toHaveBeenCalled();
   });
 
   it("non-router인 model_select를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
-    await listeners["model_select"]({ model: { provider: "openai", id: "gpt-4o" } }, ctx);
-    expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
+    const { ctx, setHiddenThinkingLabel } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
+    await getHandler(listeners, "model_select")(
+      { model: makeFakeModel({ provider: "openai", id: "gpt-4o" }) },
+      ctx,
+    );
+    expect(setHiddenThinkingLabel).toHaveBeenCalled();
   });
 
   it("turn_end를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
-    ctx.model = { provider: "openai", id: "gpt-4o" } as any;
-    await listeners["turn_end"]({}, ctx);
-    expect(ctx.ui.setStatus).toHaveBeenCalled();
+    const { ctx, setStatus } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
+    ctx.model = makeFakeModel({ provider: "openai", id: "gpt-4o" });
+    await getHandler(listeners, "turn_end")({}, ctx);
+    expect(setStatus).toHaveBeenCalled();
   });
 
   it("registerCommands의 state getters/setters를 커버한다", async () => {
-    const { pi } = makePi();
+    const { pi } = makePiWithListeners();
     routerExtension(pi);
     const mockedRegisterCommands = vi.mocked(registerCommands);
     expect(mockedRegisterCommands).toHaveBeenCalled();
-    const stateArg = mockedRegisterCommands.mock.calls[0][1] as any;
+    const firstCall = mockedRegisterCommands.mock.calls[0];
+    if (firstCall === undefined) expect.unreachable();
+    const stateArg: any = firstCall[1];
     // Exercise all getters/setters
     expect(stateArg.currentConfig).toEqual(expect.any(Object));
     expect(typeof stateArg.routerEnabled).toBe("boolean");
@@ -136,23 +159,25 @@ describe("index/extension 모듈", () => {
     stateArg.debugEnabled = !origDebug;
     expect(stateArg.debugEnabled).toBe(!origDebug);
     expect(stateArg.debugHistory).toEqual([]);
-    stateArg.debugHistory = [{ profile: "p" } as any];
+    stateArg.debugHistory = [makeFakeDecision({ profile: "p" })];
     expect(stateArg.debugHistory.length).toBe(1);
     expect(stateArg.lastConfigWarnings).toEqual([]);
     expect(stateArg.failedByChain).toBeInstanceOf(Map);
     // Test the actions callbacks via the captured registerCommands call
-    const actionsArg = vi.mocked(registerCommands).mock.calls[0][2] as any;
-    const ctx = makeCtx();
+    const actionsCall = vi.mocked(registerCommands).mock.calls[0];
+    if (actionsCall === undefined) expect.unreachable();
+    const actionsArg: any = actionsCall[2];
+    const { ctx } = makeCtx();
     expect(() => actionsArg.updateStatus(ctx)).not.toThrow();
     expect(() => actionsArg.reloadConfig(ctx)).not.toThrow();
     expect(typeof actionsArg.ensureValidActiveRouterProfile).toBe("function");
   });
 
   it("session_start 시 debugEnabled 알림을 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     // Mock loadRouterConfig to return debug true
     vi.doMock("../../src/config", async () => {
-      const actual = (await vi.importActual("../../src/config")) as any;
+      const actual = await vi.importActual<typeof ConfigMod>("../../src/config");
       return {
         ...actual,
         loadRouterConfig: vi.fn().mockReturnValue({
@@ -162,107 +187,131 @@ describe("index/extension 모듈", () => {
       };
     });
     routerExtension(pi);
-    const ctx = makeCtx();
+    const { ctx } = makeCtx();
     // Need to set debugEnabled true via state, but we can just check that session_start handles it
-    await listeners["session_start"]({}, ctx);
+    await getHandler(listeners, "session_start")({}, ctx);
     // The notify for Router initialized should be called if debugEnabled is true
     // Since we mocked loadRouterConfig to return debug true, it should be true
   });
 
   it("동일한 contextWindow의 router model_select는 setModelInternally를 호출하지 않는다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
-    const registryModel = {
+    const { ctx } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
+    const registryModel = makeFakeModel({
       provider: "router",
       id: "balanced",
       contextWindow: 100000,
       maxTokens: 4000,
-    };
-    ctx.modelRegistry.find = vi.fn().mockReturnValue(registryModel as any);
-    // Use a fresh pi with spy
-    const { pi: pi3, listeners: listeners3 } = makePi();
-    // Override find to return same window as event
-    const ctx3 = makeCtx({
-      modelRegistry: { find: vi.fn().mockReturnValue(registryModel as any), list: vi.fn(() => []) },
     });
-    pi3.setModel = vi.fn().mockResolvedValue(true);
+    ctx.modelRegistry.find = vi.fn().mockReturnValue(registryModel);
+    // Use a fresh pi with spy
+    const fresh = makePiWithListeners();
+    // Override find to return same window as event
+    const notify = vi.fn();
+    const setStatus = vi.fn();
+    const setHiddenThinkingLabel = vi.fn();
+    const ctx3 = makeFakeExtensionContext({
+      cwd: "/cwd",
+      modelRegistry: makeFakeRegistry({
+        find: vi.fn().mockReturnValue(registryModel),
+        list: vi.fn(() => []),
+      }),
+      model: makeFakeModel({ provider: "router", id: "balanced" }),
+      sessionManager: makeFakeSessionManager({ getBranch: () => [] }),
+      ui: makeFakeUi({ notify, setStatus, setHiddenThinkingLabel }),
+    });
     // We need to re-create extension with pi3 to capture setModel calls
-    routerExtension(pi3);
-    await listeners3["session_start"]({}, ctx3);
+    routerExtension(fresh.pi);
+    await getHandler(fresh.listeners, "session_start")({}, ctx3);
     // Clear setModel calls from session_start
-    pi3.setModel.mockClear();
-    await listeners3["model_select"](
+    fresh.setModel.mockClear();
+    await getHandler(fresh.listeners, "model_select")(
       {
-        model: {
+        model: makeFakeModel({
           provider: "router",
           id: "balanced",
           contextWindow: 100000,
           maxTokens: 4000,
-        } as any,
+        }),
       },
       ctx3,
     );
     // Should not have called setModelInternally because windows are equal
-    expect(pi3.setModel).not.toHaveBeenCalled();
+    expect(fresh.setModel).not.toHaveBeenCalled();
   });
 
   it("maxTokens가 다른 router model_select를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
+    const { ctx } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
     // Use a fresh extension instance with a registry that returns different maxTokens
-    const { pi: pi3, listeners: listeners3 } = makePi();
-    const registryModel = {
+    const fresh = makePiWithListeners();
+    const registryModel = makeFakeModel({
       provider: "router",
       id: "balanced",
       contextWindow: 100000,
       maxTokens: 8000,
-    };
-    const ctx3 = makeCtx({
-      modelRegistry: { find: vi.fn().mockReturnValue(registryModel as any), list: vi.fn(() => []) },
     });
-    routerExtension(pi3);
-    await listeners3["session_start"]({}, ctx3);
-    await listeners3["model_select"](
+    const setStatus = vi.fn();
+    const ctx3 = makeFakeExtensionContext({
+      cwd: "/cwd",
+      modelRegistry: makeFakeRegistry({
+        find: vi.fn().mockReturnValue(registryModel),
+        list: vi.fn(() => []),
+      }),
+      model: makeFakeModel({ provider: "router", id: "balanced" }),
+      sessionManager: makeFakeSessionManager({ getBranch: () => [] }),
+      ui: makeFakeUi({ setStatus }),
+    });
+    routerExtension(fresh.pi);
+    await getHandler(fresh.listeners, "session_start")({}, ctx3);
+    await getHandler(fresh.listeners, "model_select")(
       {
-        model: {
+        model: makeFakeModel({
           provider: "router",
           id: "balanced",
           contextWindow: 100000,
           maxTokens: 4000,
-        } as any,
+        }),
       },
       ctx3,
     );
     // Should handle without throwing and set routerEnabled
-    expect(ctx3.ui.setStatus).toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalled();
   });
 
   it("registryModel이 없는 router model_select를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
+    const { ctx, setStatus } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
     ctx.modelRegistry.find = vi.fn().mockReturnValue(undefined);
-    await listeners["model_select"](
-      { model: { provider: "router", id: "balanced", contextWindow: 100, maxTokens: 100 } as any },
+    await getHandler(listeners, "model_select")(
+      {
+        model: makeFakeModel({
+          provider: "router",
+          id: "balanced",
+          contextWindow: 100,
+          maxTokens: 100,
+        }),
+      },
       ctx,
     );
-    expect(ctx.ui.setStatus).toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalled();
   });
 
   it("routerModel이 없는 turn_end를 처리한다", async () => {
-    const { pi, listeners } = makePi();
+    const { pi, listeners } = makePiWithListeners();
     routerExtension(pi);
-    const ctx = makeCtx();
-    await listeners["session_start"]({}, ctx);
+    const { ctx, setStatus } = makeCtx();
+    await getHandler(listeners, "session_start")({}, ctx);
     // Set routerEnabled and selectedProfile, but make find return undefined for turn_end
-    ctx.model = { provider: "openai", id: "gpt-4o" } as any;
+    ctx.model = makeFakeModel({ provider: "openai", id: "gpt-4o" });
     ctx.modelRegistry.find = vi.fn().mockReturnValue(undefined);
-    await listeners["turn_end"]({}, ctx);
-    expect(ctx.ui.setStatus).toHaveBeenCalled();
+    await getHandler(listeners, "turn_end")({}, ctx);
+    expect(setStatus).toHaveBeenCalled();
   });
 });

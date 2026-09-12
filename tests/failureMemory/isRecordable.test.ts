@@ -66,10 +66,10 @@ describe("failureMemory/isRecordable 기록 가능 판별", () => {
 
   describe("isRecordablePreStreamError 스트림 전 에러 기록 판별", () => {
     it("Error가 아니면 false를 반환한다", () => {
-      expect(isRecordablePreStreamError("string" as unknown as Error)).toBe(false);
-      expect(isRecordablePreStreamError(null as unknown as Error)).toBe(false);
-      expect(isRecordablePreStreamError(undefined as unknown as Error)).toBe(false);
-      expect(isRecordablePreStreamError({ message: "hello" } as unknown as Error)).toBe(false);
+      expect(isRecordablePreStreamError("string")).toBe(false);
+      expect(isRecordablePreStreamError(null)).toBe(false);
+      expect(isRecordablePreStreamError(undefined)).toBe(false);
+      expect(isRecordablePreStreamError({ message: "hello" })).toBe(false);
     });
     it("빈 메시지면 false를 반환한다", () => {
       expect(isRecordablePreStreamError(new Error(""))).toBe(false);

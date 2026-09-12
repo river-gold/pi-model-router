@@ -1,22 +1,23 @@
-/* oxlint-disable */
 import { describe, it, expect } from "vitest";
 import { resolveRoutingDecision } from "../../src/provider/routingDecision";
+import type { Context } from "@earendil-works/pi-ai";
 import type { RouterProfile } from "../../src/types";
+import { makeFakeDecision } from "../helpers";
 
-const baseContext = { messages: [{ role: "user", content: "hi", timestamp: 1 }] } as any;
+const baseContext: Context = { messages: [{ role: "user", content: "hi", timestamp: 1 }] };
 
 describe("resolveRoutingDecision 라우팅 결정", () => {
   it("tool loop tier 유지", () => {
-    const profile: RouterProfile = { high: { models: ["openai/gpt"] } as any };
-    const snap: any = { tier: "high", profile: "balanced" };
+    const profile: RouterProfile = { high: { models: ["openai/gpt"] } };
+    const snap = makeFakeDecision({ tier: "high", profile: "balanced" });
     const d = resolveRoutingDecision({
       profileName: "balanced",
       profile,
       context: baseContext,
       snapshotLastDecision: snap,
-      thinkingLevel: "high" as any,
+      thinkingLevel: "high",
       isToolLoop: true,
-      singleTier: "high" as any,
+      singleTier: "high",
       validTierCount: 1,
     });
     expect(d.tier).toBe("high");
@@ -24,15 +25,15 @@ describe("resolveRoutingDecision 라우팅 결정", () => {
   });
 
   it("single tier는 classifier 건너뜀", () => {
-    const profile: RouterProfile = { low: { models: ["openai/gpt"] } as any };
+    const profile: RouterProfile = { low: { models: ["openai/gpt"] } };
     const d = resolveRoutingDecision({
       profileName: "balanced",
       profile,
       context: baseContext,
       snapshotLastDecision: undefined,
-      thinkingLevel: "off" as any,
+      thinkingLevel: "off",
       isToolLoop: false,
-      singleTier: "low" as any,
+      singleTier: "low",
       validTierCount: 1,
     });
     expect(d.tier).toBe("low");
@@ -40,13 +41,13 @@ describe("resolveRoutingDecision 라우팅 결정", () => {
   });
 
   it("thinking level이 가능하면 tier에 매핑", () => {
-    const profile: RouterProfile = { high: { models: ["openai/gpt"] } as any };
+    const profile: RouterProfile = { high: { models: ["openai/gpt"] } };
     const d = resolveRoutingDecision({
       profileName: "balanced",
       profile,
       context: baseContext,
       snapshotLastDecision: undefined,
-      thinkingLevel: "high" as any,
+      thinkingLevel: "high",
       isToolLoop: false,
       singleTier: undefined,
       validTierCount: 2,
@@ -56,13 +57,13 @@ describe("resolveRoutingDecision 라우팅 결정", () => {
   });
 
   it("선호 tier가 없으면 thinking level을 다른 tier로 resolve", () => {
-    const profile: RouterProfile = { low: { models: ["openai/gpt"] } as any };
-    const d = resolveRoutingDecision({
+    const profile: RouterProfile = { low: { models: ["openai/gpt"] } };
+    const _d = resolveRoutingDecision({
       profileName: "balanced",
       profile,
       context: baseContext,
       snapshotLastDecision: undefined,
-      thinkingLevel: "high" as any,
+      thinkingLevel: "high",
       isToolLoop: false,
       singleTier: undefined,
       validTierCount: 1,
@@ -72,13 +73,13 @@ describe("resolveRoutingDecision 라우팅 결정", () => {
     const profile2: RouterProfile = {
       low: { models: ["openai/gpt"] },
       medium: { models: ["openai/gpt2"] },
-    } as any;
+    };
     const d2 = resolveRoutingDecision({
       profileName: "balanced",
       profile: profile2,
       context: baseContext,
       snapshotLastDecision: undefined,
-      thinkingLevel: "max" as any,
+      thinkingLevel: "max",
       isToolLoop: false,
       singleTier: undefined,
       validTierCount: 2,
@@ -89,13 +90,13 @@ describe("resolveRoutingDecision 라우팅 결정", () => {
   });
 
   it("off thinking이고 single tier가 없으면 decideRouting 기본값 반환", () => {
-    const profile: RouterProfile = { medium: { models: ["openai/gpt"] } as any };
+    const profile: RouterProfile = { medium: { models: ["openai/gpt"] } };
     const d = resolveRoutingDecision({
       profileName: "balanced",
       profile,
       context: baseContext,
       snapshotLastDecision: undefined,
-      thinkingLevel: "off" as any,
+      thinkingLevel: "off",
       isToolLoop: false,
       singleTier: undefined,
       validTierCount: 1,
@@ -105,20 +106,20 @@ describe("resolveRoutingDecision 라우팅 결정", () => {
 });
 
 describe("resolveRoutingDecision 논리적 ref", () => {
-  const liveProfiles = {
+  const liveProfiles: Record<string, RouterProfile> = {
     balanced: {
       high: { models: ["openai/gpt-high"] },
       medium: { ref: "base#high" },
     },
     base: { high: { models: ["openai/gpt-base"] } },
-  } as any;
+  };
   it("profiles가 있으면 ref 추적 thinking 매핑", () => {
     const d = resolveRoutingDecision({
       profileName: "balanced",
       profile: liveProfiles.balanced,
       context: baseContext,
       snapshotLastDecision: undefined,
-      thinkingLevel: "medium" as any,
+      thinkingLevel: "medium",
       isToolLoop: false,
       singleTier: undefined,
       validTierCount: 2,
@@ -129,17 +130,20 @@ describe("resolveRoutingDecision 논리적 ref", () => {
     expect(d.reasoning).toContain("[ref:");
   });
   it("profiles가 있어도 해석 불가면 throw", () => {
+    const brokenProfiles: Record<string, RouterProfile> = {
+      broken: { medium: { ref: "missing#high" } },
+    };
     expect(() =>
       resolveRoutingDecision({
         profileName: "broken",
-        profile: { medium: { ref: "missing#high" } } as any,
+        profile: brokenProfiles.broken,
         context: baseContext,
         snapshotLastDecision: undefined,
-        thinkingLevel: "high" as any,
+        thinkingLevel: "high",
         isToolLoop: false,
         singleTier: undefined,
         validTierCount: 1,
-        profiles: { broken: { medium: { ref: "missing#high" } } } as any,
+        profiles: brokenProfiles,
       }),
     ).toThrow(/no resolvable configuration/);
   });

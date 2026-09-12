@@ -58,7 +58,7 @@ describe("논리적 ref 라우팅 결정을 검증함", () => {
   });
   it("profiles를 주면 decideRouting이 live로 동작함을 검증함", () => {
     const ps = profiles();
-    const d = decideRouting({} as never, "auto", ps.auto!, undefined, ps);
+    const d = decideRouting({ messages: [] }, "auto", ps.auto!, undefined, ps);
     expect(d.profile).toBe("auto");
     expect(d.tier).toBe("medium");
     expect(d.targetModelId).toBe("gpt-5.6-sol");

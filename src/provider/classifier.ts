@@ -39,7 +39,7 @@ export const applyClassifierIfNeeded = async (
       sessionId,
     ));
   } catch (e) {
-    if ((e as Error).message === "aborted") throw e;
+    if (e instanceof Error && e.message === "aborted") throw e;
     return decision;
   }
   if (!result) return decision;

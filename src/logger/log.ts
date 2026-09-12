@@ -4,12 +4,12 @@ import { buildLogLine } from "./build";
 import { ensureLogDir } from "./ensure";
 import type { ClassifierLogEntry } from "./types";
 
-export type AppendFile = (path: string, data: string, encoding: string) => Promise<void>;
+export type AppendFile = (path: string, data: string, encoding: BufferEncoding) => Promise<void>;
 export type EnsureLogDirFn = () => Promise<void>;
 export type BuildLogLine = (entry: ClassifierLogEntry) => string;
 
 export const createLogClassifierSync = (
-  appendFileFn: AppendFile = appendFile as unknown as AppendFile,
+  appendFileFn: AppendFile = (path, data, encoding) => appendFile(path, data, encoding),
   ensureLogDirFn: EnsureLogDirFn = ensureLogDir,
   buildLogLineFn: BuildLogLine = buildLogLine,
   logPath: string = LOG_PATH,

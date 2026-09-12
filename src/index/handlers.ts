@@ -94,8 +94,7 @@ export const handleTurnEnd = async (
   }
   if (state.routerEnabled && state.selectedProfile && ctx.model?.provider !== "router") {
     const routerModel = ctx.modelRegistry.find("router", state.selectedProfile);
-    if (routerModel)
-      await actions.setModelInternally(routerModel as NonNullable<ExtensionContext["model"]>);
+    if (routerModel) await actions.setModelInternally(routerModel);
   }
   actions.persistState();
   updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision);

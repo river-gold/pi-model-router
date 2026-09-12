@@ -5,6 +5,7 @@ import {
   normalizeTierConfig,
   resolveAvailableTier,
 } from "../../src/config/tier";
+import type { RouterTier } from "../../src/types";
 
 describe("tier를 검증함", () => {
   describe("nearbyTierOrder 순서 규칙을 검증함", () => {
@@ -19,9 +20,12 @@ describe("tier를 검증함", () => {
       ]);
     });
     it("resolveAvailableTier와 같은 결과를 검증함", () => {
-      const profile = { high: { models: ["a"] }, low: { models: ["b"] } };
+      const profile: Partial<Record<RouterTier, unknown>> = {
+        high: { models: ["a"] },
+        low: { models: ["b"] },
+      };
       expect(resolveAvailableTier(profile, "medium")).toBe(
-        nearbyTierOrder("medium").find((t) => (profile as Record<string, unknown>)[t]),
+        nearbyTierOrder("medium").find((t) => profile[t]),
       );
     });
   });
@@ -34,16 +38,16 @@ describe("tier를 검증함", () => {
     });
     it("next만 있으면 next 반환함을 검증함", () => {
       const n = { models: ["openai/gpt-4o"] };
-      expect(mergeTier(undefined, n as any)).toEqual(n);
+      expect(mergeTier(undefined, n)).toEqual(n);
     });
     it("둘 다 있으면 next가 덮어쓰며 병합함을 검증함", () => {
-      const e = { models: ["openai/gpt-4o"], contextWindow: 1000 } as any;
-      const n = { models: ["google/gemini"] } as any;
+      const e = { models: ["openai/gpt-4o"], contextWindow: 1000 };
+      const n = { models: ["google/gemini"] };
       expect(mergeTier(e, n)).toEqual({ models: ["google/gemini"], contextWindow: 1000 });
     });
     it("겹치면 next가 우선함을 검증함", () => {
-      const e = { models: ["openai/a"], maxTokens: 100 } as any;
-      const n = { models: ["openai/b"], maxTokens: 200 } as any;
+      const e = { models: ["openai/a"], maxTokens: 100 };
+      const n = { models: ["openai/b"], maxTokens: 200 };
       expect(mergeTier(e, n)).toEqual({ models: ["openai/b"], maxTokens: 200 });
     });
   });

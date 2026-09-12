@@ -1,44 +1,69 @@
 import { describe, expect, it, vi } from "vitest";
 import { createReloadConfig } from "../../src/index/reload";
 import { createRouterState } from "../../src/state/create";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ReloadDeps } from "../../src/index/reload";
+import { makeFakeDecision, makeFakeExtensionContext, makeFakePi, makeFakeUi } from "../helpers";
 
 describe("index/reload 모듈", () => {
   const makeState = () => {
     const s = createRouterState();
     s.currentCwd = "/cwd";
-    s.currentConfig = { profiles: {} } as any;
+    s.currentConfig = { profiles: {} };
     s.lastConfigWarnings = [];
     return s;
   };
 
-  const makePi = () => ({ registerProvider: vi.fn() }) as any;
+  const makePi = () => {
+    const registerProvider = vi.fn();
+    const pi = makeFakePi({ registerProvider });
+    return { pi, registerProvider };
+  };
 
-  const makeDeps = (over: any = {}) => ({
-    loadRouterConfig: vi.fn().mockReturnValue({
+  const makeDeps = (over: Partial<ReloadDeps> = {}) => {
+    const loadRouterConfig = vi.fn().mockReturnValue({
       config: { debug: true, profiles: { balanced: { medium: { models: ["openai/a"] } } } },
       warnings: [],
-    }),
-    profileNames: vi.fn().mockReturnValue(["balanced"]),
-    resolveProfileName: vi.fn().mockReturnValue("balanced"),
-    registerRouterProvider: vi.fn(),
-    updateStatus: vi.fn(),
-    ...over,
-  });
+    });
+    const profileNames = vi.fn().mockReturnValue(["balanced"]);
+    const resolveProfileName = vi.fn().mockReturnValue("balanced");
+    const registerRouterProvider = vi.fn();
+    const updateStatus = vi.fn();
+    const deps: ReloadDeps = Object.assign(
+      { loadRouterConfig, profileNames, resolveProfileName, registerRouterProvider, updateStatus },
+      over,
+    );
+    return {
+      deps,
+      loadRouterConfig,
+      profileNames,
+      resolveProfileName,
+      registerRouterProvider,
+      updateStatus,
+    };
+  };
+
+  const makeCtxWithNotify = () => {
+    const notify = vi.fn();
+    const setStatus = vi.fn();
+    const ctx = makeFakeExtensionContext({ ui: makeFakeUi({ notify, setStatus }) });
+    return { ctx, notify, setStatus };
+  };
 
   it("config를 로드하고 state를 업데이트한다", () => {
     const state = makeState();
-    const pi = makePi();
-    const deps = makeDeps();
-    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
+    const { pi } = makePi();
+    const { deps, loadRouterConfig, registerRouterProvider } = makeDeps();
+    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     reload();
-    expect(deps.loadRouterConfig).toHaveBeenCalledWith("/cwd");
+    expect(loadRouterConfig).toHaveBeenCalledWith("/cwd");
     expect(state.currentConfig.debug).toBe(true);
     expect(state.debugEnabled).toBe(true);
     expect(state.selectedProfile).toBe("balanced");
-    expect(deps.registerRouterProvider).toHaveBeenCalled();
+    expect(registerRouterProvider).toHaveBeenCalled();
     // Exercise getters/setters on the state object passed to registerRouterProvider
-    const stateArg = deps.registerRouterProvider.mock.calls[0][1] as any;
+    const firstCall = registerRouterProvider.mock.calls[0];
+    if (firstCall === undefined) expect.unreachable();
+    const stateArg = firstCall[1];
     expect(stateArg.lastRegisteredModels).toBe(state.lastRegisteredModels);
     stateArg.lastRegisteredModels = "new";
     expect(state.lastRegisteredModels).toBe("new");
@@ -52,7 +77,7 @@ describe("index/reload 모듈", () => {
     stateArg.routerEnabled = true;
     expect(state.routerEnabled).toBe(true);
     expect(stateArg.lastDecision).toBe(state.lastDecision);
-    const d = { profile: "p" } as any;
+    const d = makeFakeDecision({ profile: "p" });
     stateArg.lastDecision = d;
     expect(state.lastDecision).toBe(d);
     expect(stateArg.accumulatedCost).toBe(state.accumulatedCost);
@@ -60,21 +85,20 @@ describe("index/reload 모듈", () => {
     expect(state.accumulatedCost).toBe(10);
     expect(stateArg.failedByChain).toBe(state.failedByChain);
     // Test updateStatus callback
-    const ctx = { ui: { setStatus: vi.fn() } } as any;
-    const updateStatusMock = deps.registerRouterProvider.mock.calls[0][2].updateStatus;
+    const updateStatusMock = firstCall[2].updateStatus;
+    const { ctx } = makeCtxWithNotify();
     expect(() => updateStatusMock(ctx)).not.toThrow();
   });
 
   it("preserveDebug가 true이면 debugEnabled를 덮어쓰지 않는다", () => {
     const state = makeState();
     state.debugEnabled = false;
-    const pi = makePi();
-    const deps = makeDeps({
-      loadRouterConfig: vi
-        .fn()
-        .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] }),
-    });
-    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
+    const { pi } = makePi();
+    const loadRouterConfig = vi
+      .fn()
+      .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] });
+    const { deps } = makeDeps({ loadRouterConfig });
+    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     reload(undefined, { preserveDebug: true });
     expect(state.debugEnabled).toBe(false);
   });
@@ -82,56 +106,53 @@ describe("index/reload 모듈", () => {
   it("preserveDebug가 false이면 덮어쓴다", () => {
     const state = makeState();
     state.debugEnabled = false;
-    const pi = makePi();
-    const deps = makeDeps({
-      loadRouterConfig: vi
-        .fn()
-        .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] }),
-    });
-    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
+    const { pi } = makePi();
+    const loadRouterConfig = vi
+      .fn()
+      .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] });
+    const { deps } = makeDeps({ loadRouterConfig });
+    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     reload(undefined, { preserveDebug: false });
     expect(state.debugEnabled).toBe(true);
   });
 
   it("ctx가 있으면 updateStatus를 호출하고 경고를 알림한다", () => {
     const state = makeState();
-    const pi = makePi();
-    const deps = makeDeps({
-      loadRouterConfig: vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: ["warn1"] }),
-    });
-    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
-    const ctx = { ui: { notify: vi.fn() } };
-    const { notify } = ctx.ui;
-    reload(ctx as unknown as ExtensionContext);
-    expect(deps.updateStatus).toHaveBeenCalledWith(ctx, false, "balanced", undefined);
+    const { pi } = makePi();
+    const loadRouterConfig = vi
+      .fn()
+      .mockReturnValue({ config: { profiles: {} }, warnings: ["warn1"] });
+    const { deps, updateStatus } = makeDeps({ loadRouterConfig });
+    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
+    const { ctx, notify } = makeCtxWithNotify();
+    reload(ctx);
+    expect(updateStatus).toHaveBeenCalledWith(ctx, false, "balanced", undefined);
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("warn1"), "warning");
   });
 
   it("ctx가 있어도 경고가 없으면 알림하지 않는다", () => {
     const state = makeState();
-    const pi = makePi();
-    const deps = makeDeps({
-      loadRouterConfig: vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: [] }),
-    });
-    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
-    const ctx = { ui: { notify: vi.fn() } };
-    const { notify } = ctx.ui;
-    reload(ctx as unknown as ExtensionContext);
+    const { pi } = makePi();
+    const loadRouterConfig = vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: [] });
+    const { deps } = makeDeps({ loadRouterConfig });
+    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
+    const { ctx, notify } = makeCtxWithNotify();
+    reload(ctx);
     expect(notify).not.toHaveBeenCalled();
   });
 
   it("ctx가 없으면 updateStatus를 호출하지 않는다", () => {
     const state = makeState();
-    const pi = makePi();
-    const deps = makeDeps();
-    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps as any);
+    const { pi } = makePi();
+    const { deps, updateStatus } = makeDeps();
+    const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     reload();
-    expect(deps.updateStatus).not.toHaveBeenCalled();
+    expect(updateStatus).not.toHaveBeenCalled();
   });
 
   it("미지정 시 기본 deps를 사용한다", () => {
     const state = makeState();
-    const pi = makePi();
+    const { pi } = makePi();
     // This will call real loadRouterConfig which tries to read files, but we mock it via not providing deps? Actually default deps uses real functions, but we can just test that it doesn't throw
     // We will provide a pi and state and not pass deps, it should use defaults
     // To avoid file system, we mock the real loadRouterConfig via vi.mock not possible here, so we just test that createReloadConfig returns a function

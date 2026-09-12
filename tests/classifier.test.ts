@@ -1,23 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseClassifierOutput, runClassifierWithFallbacksDetailed } from "../src/classifier";
 import type { Context } from "@earendil-works/pi-ai";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
+import { makeFakeRegistry, makeFakeModel, makeFakeProvider } from "./helpers";
 const streamSimple = vi.fn();
-const makeRegistry = (over: Record<string, unknown> = {}) =>
-  ({
+const makeRegistry = (
+  over: {
+    find?: ModelRegistry["find"];
+    getApiKeyAndHeaders?: ModelRegistry["getApiKeyAndHeaders"];
+  } = {},
+): ModelRegistry =>
+  makeFakeRegistry({
     find: vi.fn((p: string, m: string) => {
-      const fn = over.find as ((a: string, b: string) => unknown) | undefined;
-      if (fn) return fn(p, m);
-      if (p === "openai" && m === "plain") return { provider: p, id: m, baseUrl: "" } as never;
-      return { provider: p, id: m, reasoning: true, baseUrl: "" } as never;
+      if (over.find) return over.find(p, m);
+      if (p === "openai" && m === "plain")
+        return makeFakeModel({ provider: p, id: m, baseUrl: "" });
+      return makeFakeModel({ provider: p, id: m, reasoning: true, baseUrl: "" });
     }),
-    getApiKeyAndHeaders: vi.fn(async () => {
-      const fn = over.getApiKeyAndHeaders as ((m: unknown) => Promise<unknown>) | undefined;
-      if (fn) return fn({});
+    getApiKeyAndHeaders: vi.fn(async (m) => {
+      if (over.getApiKeyAndHeaders) return over.getApiKeyAndHeaders(m);
       return { ok: true, apiKey: "k", headers: {} };
     }),
-    getProvider: () => ({ streamSimple }),
-  }) as unknown as ExtensionContext["modelRegistry"];
+    getProvider: () => makeFakeProvider({ streamSimple }),
+  });
 const baseCtx: Context = { messages: [{ role: "user", content: "hello", timestamp: 1 }] };
 describe("parseClassifierOutput 함수는", () => {
   it("유효한 tier가 주어지면 tier를 반환한다", () => {
@@ -40,7 +45,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "high" };
-      })() as never,
+      })(),
     );
     expect(
       (await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).result
@@ -52,7 +57,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "bad" };
-      })() as never,
+      })(),
     );
     const failed = new Set<string>();
     const res = await runClassifierWithFallbacksDetailed(
@@ -107,7 +112,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     const s2 = (async function* () {
       yield { type: "text_delta", delta: "low" };
     })();
-    streamSimple.mockReturnValueOnce(s1 as never).mockReturnValueOnce(s2 as never);
+    streamSimple.mockReturnValueOnce(s1).mockReturnValueOnce(s2);
     expect(
       (
         await runClassifierWithFallbacksDetailed(
@@ -168,11 +173,11 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
   it("혼합 이벤트에서는 유효한 delta만 파싱한다", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
-      yield { type: "other" } as never;
-      yield { type: "text_delta", delta: 123 } as never;
-      yield { type: "text_delta", delta: "medium" } as never;
+      yield { type: "other" };
+      yield { type: "text_delta", delta: 123 };
+      yield { type: "text_delta", delta: "medium" };
     })();
-    streamSimple.mockReturnValue(s as never);
+    streamSimple.mockReturnValue(s);
     expect(
       (await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).result
         ?.tier,
@@ -181,10 +186,10 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
   it("null 이벤트는 무시한다", async () => {
     const reg = makeRegistry();
     const s = (async function* () {
-      yield null as never;
-      yield { type: "text_delta", delta: "low" } as never;
+      yield null;
+      yield { type: "text_delta", delta: "low" };
     })();
-    streamSimple.mockReturnValue(s as never);
+    streamSimple.mockReturnValue(s);
     expect(
       (await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).result
         ?.tier,
@@ -205,12 +210,12 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "low" };
-      })() as never,
+      })(),
     );
     expect(
       (
         await runClassifierWithFallbacksDetailed(
-          [{ model: "openai/gpt", thinking: "off" as never }],
+          [{ model: "openai/gpt", thinking: "off" }],
           reg,
           baseCtx,
           0,
@@ -223,19 +228,19 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "low" };
-      })() as never,
+      })(),
     );
     const histCtx: Context = {
       messages: [
         { role: "user", content: "u1", timestamp: 1 },
-        { role: "assistant", content: "a1", timestamp: 2 } as never,
+        { role: "assistant", content: "a1", timestamp: 2 },
         { role: "user", content: "cur", timestamp: 3 },
       ],
     };
     expect(
       (
         await runClassifierWithFallbacksDetailed(
-          [{ model: "openai/gpt", thinking: "high" as never }],
+          [{ model: "openai/gpt", thinking: "high" }],
           reg,
           histCtx,
           1,
@@ -245,13 +250,13 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "low" };
-      })() as never,
+      })(),
     );
     const singleCtx: Context = { messages: [{ role: "user", content: "cur", timestamp: 1 }] };
     expect(
       (
         await runClassifierWithFallbacksDetailed(
-          [{ model: "openai/plain", thinking: "off" as never }],
+          [{ model: "openai/plain", thinking: "off" }],
           reg,
           singleCtx,
           1,
@@ -264,7 +269,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "low" };
-      })() as never,
+      })(),
     );
     const res = await runClassifierWithFallbacksDetailed(
       [{ model: "openai/gpt" }],
@@ -277,7 +282,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
       { low: "custom low guide" },
     );
     expect(res.result?.tier).toBe("low");
-    const sentContext = streamSimple.mock.calls[0][1] as Context;
+    const sentContext: Context = streamSimple.mock.calls[0][1];
     expect(sentContext.systemPrompt).toContain("- low: custom low guide");
     expect(sentContext.systemPrompt).toContain("- high: Local design under uncertainty");
   });
@@ -286,7 +291,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "high" };
-      })() as never,
+      })(),
     );
     const res = await runClassifierWithFallbacksDetailed(
       [{ model: "opencode-go/muse-spark-1.3-contributor" }],
@@ -300,7 +305,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
       "sess-9",
     );
     expect(res.result?.tier).toBe("high");
-    const sentOptions = streamSimple.mock.calls[0][2] as { headers: Record<string, string> };
+    const sentOptions: { headers: Record<string, string> } = streamSimple.mock.calls[0][2];
     expect(sentOptions.headers).toEqual({
       "x-opencode-session": "sess-9",
       "x-opencode-client": "pi",
@@ -311,7 +316,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "high" };
-      })() as never,
+      })(),
     );
     const res = await runClassifierWithFallbacksDetailed(
       [{ model: "opencode-go/muse-spark-1.3-contributor" }],
@@ -320,7 +325,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
       0,
     );
     expect(res.result?.tier).toBe("high");
-    const sentOptions = streamSimple.mock.calls[0][2] as { headers: Record<string, string> };
+    const sentOptions: { headers: Record<string, string> } = streamSimple.mock.calls[0][2];
     expect(sentOptions.headers).not.toHaveProperty("x-opencode-session");
   });
 });

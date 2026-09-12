@@ -73,7 +73,7 @@ const routerExtension = (pi: ExtensionAPI): void => {
 
   pi.on("session_start", (event, ctx) => handleSessionStart(event, ctx, state, actions));
   pi.on("turn_start", (event, ctx) => handleTurnStart(event, ctx, state, actions));
-  pi.on("model_select", (event, ctx) => handleModelSelect(event as any, ctx, state, actions));
+  pi.on("model_select", (event, ctx) => handleModelSelect(event, ctx, state, actions));
   pi.on("turn_end", (event, ctx) => handleTurnEnd(event, ctx, state, actions));
 };
 

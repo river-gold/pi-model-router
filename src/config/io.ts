@@ -9,7 +9,7 @@ import { normalizeConfig } from "./normalize";
 
 export type FileSystem = {
   existsSync: (path: string) => boolean;
-  readFileSync: (path: string, encoding: string) => string;
+  readFileSync: (path: string, encoding: BufferEncoding) => string;
 };
 
 export type AgentDirProvider = () => string;
@@ -48,8 +48,13 @@ export const createParseConfigFile =
     }
   };
 
+const nodeFs: FileSystem = {
+  existsSync: (path) => existsSync(path),
+  readFileSync: (path, encoding) => readFileSync(path, encoding),
+};
+
 export const parseConfigFile = createParseConfigFile({
-  fs: { existsSync, readFileSync } as FileSystem,
+  fs: nodeFs,
   stripJsonc,
 });
 
@@ -115,7 +120,7 @@ export const createLoadRouterConfig =
   };
 
 export const loadRouterConfig = createLoadRouterConfig({
-  fs: { existsSync, readFileSync } as FileSystem,
+  fs: nodeFs,
   getAgentDir,
   join,
   parseConfigFile,

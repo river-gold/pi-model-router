@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import { describe, it, expect } from "vitest";
 import {
   extractTextFromContent,
@@ -7,7 +6,8 @@ import {
   estimateTokens,
   truncateContext,
 } from "../src/context";
-import type { Context, Message } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/pi-ai";
+import { fakeMessage } from "./helpers";
 
 describe("context.ts 컨텍스트는", () => {
   describe("extractTextFromContent 텍스트 추출은", () => {
@@ -15,7 +15,7 @@ describe("context.ts 컨텍스트는", () => {
       expect(extractTextFromContent("hello")).toBe("hello");
     });
     it("text, thinking, toolCall 파트를 결합한다", () => {
-      const content: Message["content"] = [
+      const content = [
         { type: "text" as const, text: "t1" },
         { type: "thinking" as const, thinking: "th" },
         { type: "toolCall" as const, id: "1", name: "fn", arguments: { a: 1 } },
@@ -35,11 +35,7 @@ describe("context.ts 컨텍스트는", () => {
       const ctx: Context = {
         messages: [
           { role: "user", content: "first", timestamp: 1 },
-          {
-            role: "assistant",
-            content: "a",
-            timestamp: 2,
-          } as unknown as Message,
+          fakeMessage({ content: [{ type: "text", text: "a" }], timestamp: 2 }),
           { role: "user", content: "second", timestamp: 3 },
         ],
       };
@@ -59,17 +55,9 @@ describe("context.ts 컨텍스트는", () => {
       const ctx: Context = {
         messages: [
           { role: "user", content: "u1", timestamp: 1 },
-          {
-            role: "assistant",
-            content: "a1",
-            timestamp: 2,
-          } as unknown as Message,
+          fakeMessage({ content: [{ type: "text", text: "a1" }], timestamp: 2 }),
           { role: "user", content: "u2", timestamp: 3 },
-          {
-            role: "assistant",
-            content: "a2",
-            timestamp: 4,
-          } as unknown as Message,
+          fakeMessage({ content: [{ type: "text", text: "a2" }], timestamp: 4 }),
           { role: "user", content: "current", timestamp: 5 },
         ],
       };
@@ -84,10 +72,10 @@ describe("context.ts 컨텍스트는", () => {
             role: "toolResult",
             toolCallId: "1",
             toolName: "t",
-            content: "tool out",
+            content: [{ type: "text", text: "tool out" }],
             isError: false,
             timestamp: 2,
-          } as unknown as Message,
+          },
           { role: "user", content: "current", timestamp: 3 },
         ],
       };
@@ -107,33 +95,19 @@ describe("context.ts 컨텍스트는", () => {
       const ctx: Context = {
         systemPrompt: "sys",
         messages: [
-          {
-            role: "user",
-            content: "a".repeat(3000),
-            timestamp: 1,
-          } as unknown as Message,
-          {
-            role: "user",
-            content: "b".repeat(3000),
-            timestamp: 2,
-          } as unknown as Message,
-          { role: "user", content: "c", timestamp: 3 } as unknown as Message,
+          { role: "user", content: "a".repeat(3000), timestamp: 1 },
+          { role: "user", content: "b".repeat(3000), timestamp: 2 },
+          { role: "user", content: "c", timestamp: 3 },
         ],
       };
       const truncated = truncateContext(ctx, 10);
       expect(truncated.messages.length).toBeLessThan(ctx.messages.length);
-      expect(
-        (
-          truncated.messages[truncated.messages.length - 1] as unknown as {
-            content: string;
-          }
-        ).content,
-      ).toBe("c");
+      expect(truncated.messages[truncated.messages.length - 1]!.content).toBe("c");
     });
     it("limit 이내이면 그대로 반환한다", () => {
-      const ctx = {
+      const ctx: Context = {
         messages: [{ role: "user", content: "hi", timestamp: 1 }],
-      } as unknown as Context;
+      };
       expect(truncateContext(ctx, 1000).messages.length).toBe(1);
     });
   });

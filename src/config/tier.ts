@@ -7,6 +7,9 @@ import { parseCanonicalModelRef } from "./modelRef";
 
 const NEARBY_TIER_ORDER: RouterTier[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
+const isThinkingLevel = (value: string): value is ThinkingLevel =>
+  (ALLOWED_THINKING as readonly string[]).includes(value);
+
 /**
  * 선호 tier부터 가까운 순서(선호 → 위쪽 → 아래쪽) 목록.
  * resolveAvailableTier와 ref 실시간 추적(src/config/ref.ts)이 공유하는 단일 순서 규칙임.
@@ -14,11 +17,11 @@ const NEARBY_TIER_ORDER: RouterTier[] = ["minimal", "low", "medium", "high", "xh
 export const nearbyTierOrder = (preferred: RouterTier): RouterTier[] => {
   const order: RouterTier[] = [preferred];
   const startIdx = NEARBY_TIER_ORDER.indexOf(preferred);
-  for (let i = startIdx + 1; i < NEARBY_TIER_ORDER.length; i++) {
-    order.push(NEARBY_TIER_ORDER[i] as RouterTier);
+  for (const tier of NEARBY_TIER_ORDER.slice(startIdx + 1)) {
+    order.push(tier);
   }
-  for (let i = startIdx - 1; i >= 0; i--) {
-    order.push(NEARBY_TIER_ORDER[i] as RouterTier);
+  for (const tier of NEARBY_TIER_ORDER.slice(0, startIdx).reverse()) {
+    order.push(tier);
   }
   return order;
 };
@@ -43,9 +46,9 @@ export const mergeTier = (
 ): RoutedTierConfig | undefined => {
   if (!existing && !next) return undefined;
   if (!next) return existing;
-  if (!existing) return next as RoutedTierConfig;
-  if (isObjectRecord(next) && typeof (next as Record<string, unknown>).ref === "string") {
-    return { ...next } as RoutedTierConfig;
+  if (!existing) return next;
+  if (typeof next.ref === "string") {
+    return { ...next };
   }
   return { ...existing, ...next };
 };
@@ -88,7 +91,7 @@ export const normalizeTierConfig = (
     return undefined;
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   const rawRef = record.ref;
   if (typeof rawRef === "string") {
     const trimmed = rawRef.trim();
@@ -138,10 +141,10 @@ export const normalizeTierConfig = (
       return invalidTierDefault(key, raw);
     }
     const v = raw.trim();
-    if (!(ALLOWED_THINKING as readonly string[]).includes(v)) {
+    if (!isThinkingLevel(v)) {
       return invalidTierDefault(key, raw);
     }
-    return v as ThinkingLevel;
+    return v;
   };
   const tierThinking = parseTierDefault(record.thinking, "thinking");
   const tierEffort = parseTierDefault(record.effort, "effort");

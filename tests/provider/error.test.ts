@@ -4,21 +4,12 @@ import {
   normalizeDelegateError,
   pushStreamError,
 } from "../../src/provider/error";
-import type { Model, Api } from "@earendil-works/pi-ai";
-
-const makeModel = (): Model<Api> =>
-  ({ provider: "openai", id: "gpt-4o", api: "openai" as Api }) as unknown as Model<Api>;
-
-const makeStream = () => {
-  const push = vi.fn();
-  const end = vi.fn();
-  return { push, end } as unknown as { push: (e: unknown) => void; end: () => void };
-};
+import { makeFakeModel, makeStreamSpy } from "../helpers";
 
 describe("provider/error 에러 처리", () => {
   describe("createErrorMessage 에러 메시지 생성", () => {
     it("message와 timestamp로 생성", () => {
-      const m = makeModel();
+      const m = makeFakeModel({ id: "gpt-4o" });
       const msg = createErrorMessage(m, "fail");
       expect(msg.errorMessage).toBe("fail");
       expect(msg.provider).toBe("openai");
@@ -55,9 +46,9 @@ describe("provider/error 에러 처리", () => {
 
   describe("pushStreamError 스트림 에러 전송", () => {
     it("aborted 처리", () => {
-      const s = makeStream();
-      const { push, end } = s;
-      pushStreamError(s, makeModel(), new Error("aborted"));
+      const { stream, push } = makeStreamSpy();
+      const endSpy = vi.spyOn(stream, "end");
+      pushStreamError(stream, makeFakeModel({ id: "gpt-4o" }), new Error("aborted"));
       expect(push).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "done",
@@ -65,13 +56,13 @@ describe("provider/error 에러 처리", () => {
           message: expect.objectContaining({ errorMessage: "aborted" }),
         }),
       );
-      expect(end).toHaveBeenCalled();
+      expect(endSpy).toHaveBeenCalled();
     });
 
     it("stale 처리", () => {
-      const s = makeStream();
-      const { push, end } = s;
-      pushStreamError(s, makeModel(), new Error("stale context"));
+      const { stream, push } = makeStreamSpy();
+      const endSpy = vi.spyOn(stream, "end");
+      pushStreamError(stream, makeFakeModel({ id: "gpt-4o" }), new Error("stale context"));
       expect(push).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "done",
@@ -79,20 +70,19 @@ describe("provider/error 에러 처리", () => {
           message: expect.objectContaining({ errorMessage: "" }),
         }),
       );
-      expect(end).toHaveBeenCalled();
+      expect(endSpy).toHaveBeenCalled();
     });
 
     it("stale 포함 처리", () => {
-      const s = makeStream();
-      const { push } = s;
-      pushStreamError(s, makeModel(), new Error("something stale inside"));
+      const { stream, push } = makeStreamSpy();
+      pushStreamError(stream, makeFakeModel({ id: "gpt-4o" }), new Error("something stale inside"));
       expect(push).toHaveBeenCalledWith(expect.objectContaining({ type: "done" }));
     });
 
     it("기타 Error 처리", () => {
-      const s = makeStream();
-      const { push, end } = s;
-      pushStreamError(s, makeModel(), new Error("other fail"));
+      const { stream, push } = makeStreamSpy();
+      const endSpy = vi.spyOn(stream, "end");
+      pushStreamError(stream, makeFakeModel({ id: "gpt-4o" }), new Error("other fail"));
       expect(push).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
@@ -100,13 +90,12 @@ describe("provider/error 에러 처리", () => {
           error: expect.objectContaining({ errorMessage: "other fail" }),
         }),
       );
-      expect(end).toHaveBeenCalled();
+      expect(endSpy).toHaveBeenCalled();
     });
 
     it("non-Error string 처리", () => {
-      const s = makeStream();
-      const { push } = s;
-      pushStreamError(s, makeModel(), "string error");
+      const { stream, push } = makeStreamSpy();
+      pushStreamError(stream, makeFakeModel({ id: "gpt-4o" }), "string error");
       expect(push).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
@@ -116,18 +105,16 @@ describe("provider/error 에러 처리", () => {
     });
 
     it("non-Error number 처리", () => {
-      const s = makeStream();
-      const { push } = s;
-      pushStreamError(s, makeModel(), 123);
+      const { stream, push } = makeStreamSpy();
+      pushStreamError(stream, makeFakeModel({ id: "gpt-4o" }), 123);
       expect(push).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.objectContaining({ errorMessage: "123" }) }),
       );
     });
 
     it("non-Error undefined 처리", () => {
-      const s = makeStream();
-      const { push } = s;
-      pushStreamError(s, makeModel(), undefined);
+      const { stream, push } = makeStreamSpy();
+      pushStreamError(stream, makeFakeModel({ id: "gpt-4o" }), undefined);
       expect(push).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.objectContaining({ errorMessage: "undefined" }) }),
       );

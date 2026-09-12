@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import {
   createAssistantMessageEventStream,
   type Api,
@@ -9,7 +8,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RoutingDecision, RouterTier } from "./types";
-import { profileNames, resolveEffectiveClassifier, resolvableTiers } from "./config";
+import { resolveEffectiveClassifier, resolvableTiers } from "./config";
 import { decideInitialDecision } from "./provider/routing";
 import { delegateToTierModels } from "./provider/delegate";
 import { validateProviderState } from "./provider/validation";
@@ -57,17 +56,14 @@ export const registerRouterProvider = (
       options?: SimpleStreamOptions,
     ): AssistantMessageEventStream {
       const stream = createAssistantMessageEventStream();
-      (async () => {
+      void (async () => {
         try {
           const registry: ExtensionContext["modelRegistry"] | undefined =
             state.currentModelRegistry;
           const profile: RouterProfile | undefined = state.currentConfig.profiles[model.id];
           // @ts-ignore TS2775 non-null assertion requires explicit type, already provided
-          validateProviderState(
-            registry as ExtensionContext["modelRegistry"] | undefined,
-            profile,
-            model.id,
-          );
+          // 아래 registry! 가 안전함: validateProviderState가 !registry에서 throw함.
+          validateProviderState(registry, profile, model.id);
           const snap = state.lastDecision;
           await withCommitMutex(async () => {
             state.selectedProfile = model.id;
@@ -103,7 +99,7 @@ export const registerRouterProvider = (
             profile as RouterProfile,
             decision,
             model.id,
-            registry as ExtensionContext["modelRegistry"],
+            registry!,
             state,
             context,
             options?.signal,
@@ -120,7 +116,7 @@ export const registerRouterProvider = (
           actions.recordDebugDecision(decision);
           safeUpdateStatus(state, actions);
           const res = await delegateToTierModels({
-            registry: registry as ExtensionContext["modelRegistry"],
+            registry: registry!,
             profile: profile as RouterProfile,
             profiles,
             decision,

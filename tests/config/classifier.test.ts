@@ -4,6 +4,7 @@ import {
   normalizeClassifierModels,
   resolveEffectiveClassifier,
 } from "../../src/config/classifier";
+import type { RouterProfile } from "../../src/types";
 
 describe("classifier를 검증함", () => {
   describe("normalizeClassifierConfig 동작을 검증함", () => {
@@ -118,8 +119,8 @@ describe("classifier를 검증함", () => {
       expect(r.source).toBe("profile");
     });
     it("global만 있는 경우를 처리함을 검증함", () => {
-      const profile = {};
-      const r = resolveEffectiveClassifier(profile as any, [
+      const profile: RouterProfile = {};
+      const r = resolveEffectiveClassifier(profile, [
         { model: "openai/gpt-4o", thinking: "high" as const },
       ]);
       expect(r.classifiers).toEqual([
@@ -128,20 +129,20 @@ describe("classifier를 검증함", () => {
       expect(r.source).toBe("global");
     });
     it("low만 있는 경우를 처리함을 검증함", () => {
-      const profile = { low: { models: ["google/gemini#low"] } };
-      const r = resolveEffectiveClassifier(profile as any, undefined);
+      const profile: RouterProfile = { low: { models: ["google/gemini#low"] } };
+      const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.classifiers).toEqual([
         { model: "google/gemini", thinking: "low", source: "low tier" },
       ]);
       expect(r.source).toBe("low tier");
     });
     it("profile+global+low 조합을 처리함을 검증함", () => {
-      const profile = {
+      const profile: RouterProfile = {
         classifierModels: [{ model: "openai/a", thinking: "low" as const }],
         low: { models: ["google/gemini#high"] },
       };
       const global = [{ model: "openai/b", thinking: "medium" as const }];
-      const r = resolveEffectiveClassifier(profile as any, global);
+      const r = resolveEffectiveClassifier(profile, global);
       expect(r.classifiers).toEqual([
         { model: "openai/a", thinking: "low", source: "profile" },
         { model: "openai/b", thinking: "medium", source: "global" },
@@ -150,41 +151,46 @@ describe("classifier를 검증함", () => {
       expect(r.source).toBe("profile → global → low tier");
     });
     it("profile+low 조합을 처리함을 검증함", () => {
-      const profile = {
+      const profile: RouterProfile = {
         classifierModels: [{ model: "openai/gpt-4o", thinking: "low" as const }],
         low: { models: ["google/gemini#low"] },
       };
-      const r = resolveEffectiveClassifier(profile as any, undefined);
+      const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.source).toBe("profile → low tier");
       expect(r.classifiers?.length).toBe(2);
     });
     it("없으면 classifiers는 undefined, source는 none임을 검증함", () => {
-      const profile = { high: { models: ["openai/gpt-4o"] } };
-      const r = resolveEffectiveClassifier(profile as any, undefined);
+      const profile: RouterProfile = { high: { models: ["openai/gpt-4o"] } };
+      const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.classifiers).toBeUndefined();
       expect(r.source).toBe("none");
     });
     it("여러 모델과 thinking이 있는 low를 처리함을 검증함", () => {
-      const profile = { low: { models: ["google/gemini#high", "openai/gpt-4o-mini#off"] } };
-      const r = resolveEffectiveClassifier(profile as any, undefined);
+      const profile: RouterProfile = {
+        low: { models: ["google/gemini#high", "openai/gpt-4o-mini#off"] },
+      };
+      const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.classifiers).toEqual([
         { model: "google/gemini", thinking: "high", source: "low tier" },
         { model: "openai/gpt-4o-mini", thinking: "off", source: "low tier" },
       ]);
     });
     it("빈 low는 무시함을 검증함", () => {
-      const profile = { low: { models: [] } };
-      const r = resolveEffectiveClassifier(profile as any, undefined);
+      const profile: RouterProfile = { low: { models: [] } };
+      const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.classifiers).toBeUndefined();
     });
     it("빈 profile classifier는 무시함을 검증함", () => {
-      const profile = { classifierModels: [] as any, low: { models: ["google/gemini#low"] } };
-      const r = resolveEffectiveClassifier(profile as any, undefined);
+      const profile: RouterProfile = {
+        classifierModels: [],
+        low: { models: ["google/gemini#low"] },
+      };
+      const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.source).toBe("low tier");
     });
     it("빈 global은 무시함을 검증함", () => {
-      const profile = { low: { models: ["google/gemini#low"] } };
-      const r = resolveEffectiveClassifier(profile as any, []);
+      const profile: RouterProfile = { low: { models: ["google/gemini#low"] } };
+      const r = resolveEffectiveClassifier(profile, []);
       expect(r.source).toBe("low tier");
     });
   });

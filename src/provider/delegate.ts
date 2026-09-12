@@ -1,7 +1,13 @@
-import type { Api, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
+import type {
+  Api,
+  AssistantMessageEvent,
+  Context,
+  Model,
+  SimpleStreamOptions,
+} from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RoutingDecision } from "../types";
-import { dereferenceTier } from "../config";
+import { dereferenceTier, isObjectRecord } from "../config";
 import {
   parseCanonicalModelRef,
   formatModelRef,
@@ -126,11 +132,21 @@ export const buildEffectiveContext = (
     ? truncateContext(context, targetLimit)
     : context;
 
-export const isContentEvent = (type: string): boolean =>
+export const isContentEvent = (type: unknown): boolean =>
   type === "text_delta" ||
   type === "thinking_delta" ||
   type === "toolcall_delta" ||
   type === "toolcall_end";
+
+/** 중첩 경로를 안전하게 읽는다. 중간이 객체가 아니면 undefined를 반환한다. */
+const readPath = (root: unknown, keys: readonly string[]): unknown => {
+  let current: unknown = root;
+  for (const key of keys) {
+    if (!isObjectRecord(current)) return undefined;
+    current = current[key];
+  }
+  return current;
+};
 
 export const collectBufferedResult = (
   bufferedEvents: unknown[],
@@ -147,16 +163,15 @@ export const collectBufferedResult = (
   let pendingCostDelta = 0;
   let contentReceived = false;
   for (const event of bufferedEvents) {
-    const type = (event as { type: string }).type;
+    const type = readPath(event, ["type"]);
     if (type === "done") {
       gotDone = true;
-      pendingCostDelta =
-        (event as { message?: { usage?: { cost?: { total?: number } } } }).message?.usage?.cost
-          ?.total ?? 0;
+      const total = readPath(event, ["message", "usage", "cost", "total"]);
+      pendingCostDelta = typeof total === "number" ? total : 0;
     } else if (type === "error") {
       gotError = true;
-      const errObj = (event as { error?: unknown }).error as { errorMessage?: unknown } | undefined;
-      if (typeof errObj?.errorMessage === "string") bufferedErrorMessage = errObj.errorMessage;
+      const errorMessage = readPath(event, ["error", "errorMessage"]);
+      if (typeof errorMessage === "string") bufferedErrorMessage = errorMessage;
     }
     if (isContentEvent(type)) contentReceived = true;
   }
@@ -187,7 +202,7 @@ export const buildFallbackDecision = (decision: RoutingDecision, modelRef: strin
 
 type AttemptResult =
   | { status: "success"; costDelta: number }
-  | { status: "retry"; error: Error }
+  | { status: "retry"; error: unknown }
   | { status: "nonRetryable"; error: Error }
   | { status: "skip" };
 
@@ -224,11 +239,7 @@ export const attemptSingleModel = async (
   }
   const auth = await registry.getApiKeyAndHeaders(targetModel);
   if (!auth.ok || !auth.apiKey) {
-    const err = resolveAuthError(
-      auth as { ok: boolean; apiKey?: string; error?: string },
-      provider,
-      modelId,
-    );
+    const err = resolveAuthError(auth, provider, modelId);
     remember(err);
     return { status: "retry", error: err };
   }
@@ -243,9 +254,7 @@ export const attemptSingleModel = async (
     params.profiles,
   );
   const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
-  const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking) as
-    | SimpleStreamOptions["reasoning"]
-    | undefined;
+  const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking);
   try {
     const label = `Thinking (${provider}/${modelId})...`;
     if (delegatedReasoning) state.lastExtensionContext?.ui.setHiddenThinkingLabel?.(label);
@@ -256,11 +265,11 @@ export const attemptSingleModel = async (
     transformHeaders: _routerTransformHeaders,
     ...delegationOptions
   } = (options ?? {}) as SimpleStreamOptions & { transformHeaders?: unknown };
-  let delegatedStream: AsyncIterable<unknown>;
+  let delegatedStream: AsyncIterable<AssistantMessageEvent>;
   try {
     delegatedStream = streamDelegated(
       registry,
-      modelWithAuthBaseUrl(targetModel, auth as { baseUrl?: string }),
+      modelWithAuthBaseUrl(targetModel, auth),
       effectiveContext,
       {
         ...delegationOptions,
@@ -275,32 +284,31 @@ export const attemptSingleModel = async (
       },
     );
   } catch (e) {
-    const err = e as Error;
-    remember(err);
-    return { status: "retry", error: err };
+    remember(e);
+    return { status: "retry", error: e };
   }
   if (!delegatedStream) {
     const err = new Error("No delegated stream available");
     remember(err);
     return { status: "retry", error: err };
   }
-  const bufferedEvents: unknown[] = [];
+  const bufferedEvents: AssistantMessageEvent[] = [];
   let contentReceivedForTry = false;
   try {
     for await (const event of delegatedStream) {
       if (options?.signal?.aborted) throw new Error("aborted");
       bufferedEvents.push(event);
-      if (isContentEvent((event as { type: string }).type)) contentReceivedForTry = true;
+      if (isContentEvent(event.type)) contentReceivedForTry = true;
     }
   } catch (e) {
-    if ((e as Error).message === "aborted")
+    if (e instanceof Error && e.message === "aborted")
       return { status: "nonRetryable", error: new Error("aborted") };
     throw e;
   }
   const collected = collectBufferedResult(bufferedEvents);
   contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
   if (collected.gotDone) {
-    for (const ev of bufferedEvents) stream.push(ev as never);
+    for (const ev of bufferedEvents) stream.push(ev);
     if (collected.pendingCostDelta)
       await withCommitMutex(async () => {
         state.accumulatedCost += collected.pendingCostDelta;
@@ -317,7 +325,7 @@ export const attemptSingleModel = async (
   }
   if (collected.gotError) {
     if (contentReceivedForTry) {
-      for (const ev of bufferedEvents) stream.push(ev as never);
+      for (const ev of bufferedEvents) stream.push(ev);
       return {
         status: "nonRetryable",
         error: new Error(

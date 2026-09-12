@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import { describe, it, expect } from "vitest";
 import {
   isRecordablePreStreamError,
@@ -41,6 +40,6 @@ describe("failureMemory 실패 기억은", () => {
   });
   it("non-error나 일반 메시지는 isRecordable이 false이다", () => {
     expect(isRecordablePreStreamError(new Error("some random error"))).toBe(false);
-    expect(isRecordablePreStreamError("string" as unknown as Error)).toBe(false);
+    expect(isRecordablePreStreamError("string")).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ describe("io를 검증함", () => {
   describe("createParseConfigFile 동작을 검증함", () => {
     it("파일 없으면 빈 설정을 반환함을 검증함", () => {
       const fs = { existsSync: () => false, readFileSync: vi.fn() };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
       expect(parse("/no/file")).toEqual({ config: {}, warnings: [] });
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
@@ -20,7 +20,7 @@ describe("io를 검증함", () => {
         existsSync: () => true,
         readFileSync: () => JSON.stringify({ debug: true, profiles: {} }),
       };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
       const r = parse("/exists.json");
       expect(r.config).toEqual({ debug: true, profiles: {} });
       expect(r.warnings).toEqual([]);
@@ -31,21 +31,21 @@ describe("io를 검증함", () => {
         readFileSync: () => '{ "a": 1, // comment\n}',
       };
       const strip = vi.fn().mockReturnValue('{"a":1}');
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: strip });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: strip });
       const r = parse("/f");
       expect(strip).toHaveBeenCalledWith('{ "a": 1, // comment\n}');
-      expect(r.config).toEqual({ a: 1 } as any);
+      expect(r.config).toEqual({ a: 1 });
     });
     it("object가 아니면 warning 남김을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "123" };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
       const r = parse("/f");
       expect(r.config).toEqual({});
       expect(r.warnings[0]).toMatch(/expected a JSON object/);
     });
     it("배열이면 object가 아니라고 warning 남김을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "[]" };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/expected a JSON object/);
     });
     it("readFileSync 에러를 포착함을 검증함", () => {
@@ -55,12 +55,12 @@ describe("io를 검증함", () => {
           throw new Error("read fail");
         },
       };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/Failed to parse.*read fail/);
     });
     it("JSON 파싱 에러를 포착함을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "{invalid" };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/Failed to parse/);
     });
     it("non-Error throw를 포착함을 검증함", () => {
@@ -70,7 +70,7 @@ describe("io를 검증함", () => {
           throw "string error";
         },
       };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
       expect(parse("/f").warnings[0]).toMatch(/string error/);
     });
     it("stripJsonc throw를 포착함을 검증함", () => {
@@ -78,7 +78,7 @@ describe("io를 검증함", () => {
       const strip = () => {
         throw new Error("strip fail");
       };
-      const parse = createParseConfigFile({ fs: fs as any, stripJsonc: strip });
+      const parse = createParseConfigFile({ fs: fs, stripJsonc: strip });
       expect(parse("/f").warnings[0]).toMatch(/strip fail/);
     });
   });
@@ -98,7 +98,7 @@ describe("io를 검증함", () => {
   describe("createLoadRouterConfig 동작을 검증함", () => {
     it("네 개 파일을 로드·병합하고 warnings를 집계함을 검증함", () => {
       const deps = {
-        fs: { existsSync: () => true, readFileSync: () => "{}" } as any,
+        fs: { existsSync: () => true, readFileSync: () => "{}" },
         getAgentDir: () => "/agent",
         join: (...parts: string[]) => parts.join("/"),
         parseConfigFile: vi
@@ -107,35 +107,32 @@ describe("io를 검증함", () => {
             config: {
               debug: true,
               profiles: { a: { medium: { models: ["openai/a"] } } },
-            } as Partial<RouterConfig>,
+            },
             warnings: ["w1"],
           })
           .mockReturnValueOnce({
             config: {
               profiles: { b: { high: { models: ["openai/b"] } } },
-            } as Partial<RouterConfig>,
+            },
             warnings: ["w2"],
           })
           .mockReturnValueOnce({
-            config: { profiles: { c: { low: { models: ["openai/c"] } } } } as Partial<RouterConfig>,
+            config: { profiles: { c: { low: { models: ["openai/c"] } } } },
             warnings: [],
           })
           .mockReturnValueOnce({
             config: {
               profiles: { d: { minimal: { models: ["openai/d"] } } },
-            } as Partial<RouterConfig>,
+            },
             warnings: ["w4"],
           }),
-        mergeConfig: vi.fn(
-          (base, override) =>
-            ({
-              profiles: { ...base.profiles, ...override.profiles },
-              debug: override.debug ?? base.debug,
-            }) as RouterConfig,
-        ),
-        normalizeConfig: vi.fn((c) => ({ config: c as RouterConfig, warnings: ["norm"] })),
+        mergeConfig: vi.fn((base: RouterConfig, override: Partial<RouterConfig>) => ({
+          profiles: { ...base.profiles, ...override.profiles },
+          debug: override.debug ?? base.debug,
+        })),
+        normalizeConfig: vi.fn((c: RouterConfig) => ({ config: c, warnings: ["norm"] })),
       };
-      const load = createLoadRouterConfig(deps as any);
+      const load = createLoadRouterConfig(deps);
       const result = load("/cwd");
       expect(deps.parseConfigFile).toHaveBeenCalledTimes(4);
       expect(deps.mergeConfig).toHaveBeenCalledTimes(4);
@@ -146,32 +143,35 @@ describe("io를 검증함", () => {
     });
     it("빈 설정을 처리함을 검증함", () => {
       const deps = {
-        fs: { existsSync: () => true, readFileSync: () => "{}" } as any,
+        fs: { existsSync: () => true, readFileSync: () => "{}" },
         getAgentDir: () => "/agent",
         join: (...p: string[]) => p.join("/"),
         parseConfigFile: vi.fn().mockReturnValue({ config: {}, warnings: [] }),
-        mergeConfig: (b: any, o: any) =>
-          ({ ...b, ...o, profiles: { ...b.profiles, ...o.profiles } }) as RouterConfig,
+        mergeConfig: (b: RouterConfig, o: Partial<RouterConfig>) => ({
+          ...b,
+          ...o,
+          profiles: { ...b.profiles, ...o.profiles },
+        }),
         normalizeConfig: (c: any) => ({ config: c, warnings: [] }),
       };
-      const load = createLoadRouterConfig(deps as any);
+      const load = createLoadRouterConfig(deps);
       const r = load("/cwd");
       expect(r.warnings).toEqual([]);
     });
     it("기본 설정이 빈 상태로 시작함을 검증함", () => {
       let firstBase: any = null;
       const deps = {
-        fs: {} as any,
+        fs: {},
         getAgentDir: () => "/a",
         join: (...p: string[]) => p.join("/"),
         parseConfigFile: vi.fn().mockReturnValue({ config: {}, warnings: [] }),
-        mergeConfig: vi.fn((base, override) => {
+        mergeConfig: vi.fn((base: RouterConfig, override: Partial<RouterConfig>) => {
           if (firstBase === null) firstBase = base;
-          return { ...base, ...override } as any;
+          return { ...base, ...override };
         }),
         normalizeConfig: (c: any) => ({ config: c, warnings: [] }),
       };
-      createLoadRouterConfig(deps as any)("/cwd");
+      createLoadRouterConfig(deps)("/cwd");
       expect(firstBase).toEqual({ profiles: {} });
     });
   });

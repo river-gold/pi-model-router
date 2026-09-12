@@ -1,11 +1,11 @@
 import type { RouterPersistedState } from "../types";
+import { isObjectRecord } from "../config/guards";
 
 export const isRouterPersistedState = (value: unknown): value is RouterPersistedState => {
-  if (typeof value !== "object" || value === null) return false;
-  const v = value as Record<string, unknown>;
+  if (!isObjectRecord(value)) return false;
   return (
-    typeof v.enabled === "boolean" &&
-    typeof v.selectedProfile === "string" &&
-    typeof v.timestamp === "number"
+    typeof value.enabled === "boolean" &&
+    typeof value.selectedProfile === "string" &&
+    typeof value.timestamp === "number"
   );
 };
