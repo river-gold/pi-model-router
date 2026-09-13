@@ -23,7 +23,7 @@ const HELP_LINES = [
   "Router Subcommands:",
   "  status                           Show current status, profile, cost, and last decision.",
   "  debug <on|off|toggle|show|clear> Control routing debug logging to notifications and history.",
-  "  reload                           Hot-reload the configuration JSON from .pi/model-router.json.",
+  "  reload                           Hot-reload the configuration JSON from .pi/pi-model-router.json.",
   "  reset-failures                 Clear session failure memory (in-memory, chain-local).",
   "  help, ?                          Show this help message.",
 ];

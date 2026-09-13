@@ -18,17 +18,20 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 }));
 
 vi.mock("node:fs", () => ({
-  existsSync: (path: string) => path.includes("exists") || path.includes("model-router.json"),
+  existsSync: (path: string) => path.includes("exists") || path.includes("pi-model-router.json"),
   readFileSync: (path: string) => {
     if (path.includes("invalid-json")) return "{invalid";
     if (path.includes("not-object")) return "123";
-    if (path.includes("global") || (path.endsWith("model-router.json") && !path.includes(".pi"))) {
+    if (
+      path.includes("global") ||
+      (path.endsWith("pi-model-router.json") && !path.includes(".pi"))
+    ) {
       return JSON.stringify({
         debug: true,
         profiles: { globalProfile: { medium: { models: ["openai/gpt-4o"] } } },
       });
     }
-    if (path.includes("project") || path.includes(".pi/model-router.json")) {
+    if (path.includes("project") || path.includes(".pi/pi-model-router.json")) {
       return JSON.stringify({
         profiles: {
           projectProfile: { high: { models: ["google/gemini-1.5-pro"] } },

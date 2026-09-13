@@ -68,10 +68,10 @@ export type LoadRouterConfigDeps = {
 };
 
 export const CONFIG_FILE_NAMES = {
-  globalJson: "model-router.json",
-  globalJsonc: "model-router.jsonc",
-  projectJson: "model-router.json",
-  projectJsonc: "model-router.jsonc",
+  globalJson: "pi-model-router.json",
+  globalJsonc: "pi-model-router.jsonc",
+  projectJson: "pi-model-router.json",
+  projectJsonc: "pi-model-router.jsonc",
 } as const;
 
 export const resolveConfigPaths = (
