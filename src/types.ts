@@ -8,7 +8,12 @@ export interface ClassifierConfig {
 }
 
 export interface RoutedTierConfig {
-  /** 논리적 참조. 있으면 models 대신 "profile#tier"를 라우팅 시점에 실시간 추적함. */
+  /**
+   * 논리적 참조. 있으면 models 대신 라우팅 시점에 실시간 추적함.
+   * - `"profile#tier"`: 대상 tier의 모델과 effort 사용.
+   * - `"profile##effort"`: 요청 tier를 따라가고 선택된 모델에 effort를 직접 지정.
+   * - `"profile#tier##effort"`: 대상 tier의 모델에 effort를 직접 지정.
+   */
   ref?: string;
   models?: string[];
   thinking?: ThinkingLevel; // 티어 기본값: `#` 없는 모델에 적용 (primary `#`가 있으면 우선)

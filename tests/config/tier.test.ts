@@ -60,8 +60,28 @@ describe("tier를 검증함", () => {
       });
       expect(w).toEqual([]);
     });
+    it("## effort ref는 논리적 참조로 유지함을 검증함", () => {
+      for (const ref of ["deepseek-flash##off", "deepseek-flash#medium##low"]) {
+        const w: string[] = [];
+        expect(normalizeTierConfig({ ref }, "p", "low", w)).toEqual({ ref });
+        expect(w).toEqual([]);
+      }
+    });
     it("무효한 ref는 warning 남기고 undefined 반환함을 검증함", () => {
-      for (const ref of ["bad", "#high", "p#", "p#unknown", "a#b#c"]) {
+      for (const ref of [
+        "bad",
+        "#high",
+        "p#",
+        "p#unknown",
+        "a#b#c",
+        "p##",
+        "##off",
+        "p##bogus",
+        "p#bad##off",
+        "#medium##off",
+        "a#b#c##off",
+        "#m##off",
+      ]) {
         const w: string[] = [];
         expect(normalizeTierConfig({ ref }, "p", "high", w)).toBeUndefined();
         expect(w.some((x) => x.includes("invalid ref"))).toBe(true);

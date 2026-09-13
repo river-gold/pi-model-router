@@ -377,6 +377,9 @@ describe("provider/classifier 분류기 적용", () => {
 });
 
 describe("provider/classifier 논리적 ref", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   const liveProfiles: Record<string, RouterProfile> = {
     myModel: { high: { ref: "base#high" } },
     base: { high: { models: ["openai/gpt-base"] } },
@@ -432,5 +435,66 @@ describe("provider/classifier 논리적 ref", () => {
       true,
     );
     expect(result).toEqual(expect.objectContaining({ profile: "myModel" }));
+  });
+  it("기본 tier 자리에 ## 강제 지정이 있으면 분류기를 건너뜀", async () => {
+    mockRunClassifierBranch.mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    });
+    const profiles: Record<string, RouterProfile> = {
+      myModel: { medium: { ref: "deepseek##off" } },
+      deepseek: { medium: { models: ["openai/gpt-deep"] } },
+    };
+    const incoming = makeFakeDecision({ profile: "myModel", tier: "medium", reasoning: "orig" });
+    const state = makeFakeProviderState({
+      currentConfig: { historySize: 0, profiles: {} },
+      failedByChain: new Map(),
+    });
+    const result = await applyClassifierIfNeeded(
+      profiles.myModel,
+      incoming,
+      "myModel",
+      makeFakeRegistry(),
+      state,
+      baseContext,
+      undefined,
+      false,
+      false,
+      "off",
+      "source",
+      undefined,
+      profiles,
+    );
+    expect(result).toBe(incoming);
+    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
+    expect(mockBuildRoutingDecisionLive).not.toHaveBeenCalled();
+  });
+  it("기본 tier 자리가 일반 ref면 분류기를 실행함", async () => {
+    mockRunClassifierBranch.mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    });
+    const profiles: Record<string, RouterProfile> = {
+      myModel: { medium: { ref: "base#medium" } },
+      base: { medium: { models: ["openai/gpt-base"] } },
+    };
+    const state = makeFakeProviderState({
+      currentConfig: { historySize: 0, profiles: {} },
+      failedByChain: new Map(),
+    });
+    await applyClassifierIfNeeded(
+      profiles.myModel,
+      makeFakeDecision({ profile: "myModel", tier: "medium", reasoning: "orig" }),
+      "myModel",
+      makeFakeRegistry(),
+      state,
+      baseContext,
+      undefined,
+      false,
+      false,
+      "off",
+      "source",
+      undefined,
+      profiles,
+    );
+    expect(mockRunClassifierBranch).toHaveBeenCalled();
   });
 });

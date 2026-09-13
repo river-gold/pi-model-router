@@ -4,10 +4,15 @@ import {
   resolveAvailableTier,
   resolveAvailableTier as resolveAvailableTierFromConfig,
 } from "../../src/config/tier";
-import { resolveAvailableTier as resolveAvailableTierFromRouting } from "../../src/routing";
+import {
+  buildRoutingDecisionLive,
+  resolveAvailableTier as resolveAvailableTierFromRouting,
+} from "../../src/routing";
 import { normalizeConfig } from "../../src/config/normalize";
 import {
   dereferenceTier,
+  isDirectEffortRef,
+  parseTierRef,
   resolveAvailableTierLive,
   resolvableTiers,
   resolveProfileTierRefs,
@@ -338,6 +343,230 @@ describe("논리적 tier ref를 검증함", () => {
       } finally {
         vi.unstubAllGlobals();
       }
+    });
+  });
+
+  describe("## effort 직접 지정을 검증함", () => {
+    describe("parseTierRef ## 파싱을 검증함", () => {
+      it("profile##effort를 파싱함을 검증함", () => {
+        expect(parseTierRef("deepseek-flash##off")).toEqual({
+          profile: "deepseek-flash",
+          effort: "off",
+        });
+      });
+      it("profile#tier##effort를 파싱함을 검증함", () => {
+        expect(parseTierRef("deepseek-flash#medium##low")).toEqual({
+          profile: "deepseek-flash",
+          tier: "medium",
+          effort: "low",
+        });
+      });
+      it("기존 profile#tier를 그대로 파싱함을 검증함", () => {
+        expect(parseTierRef("copilot#high")).toEqual({ profile: "copilot", tier: "high" });
+      });
+      it("공백을 제거하고 파싱함을 검증함", () => {
+        expect(parseTierRef(" deepseek-flash ## off ")).toEqual({
+          profile: "deepseek-flash",
+          effort: "off",
+        });
+      });
+      it("잘못된 ## ref는 undefined를 검증함", () => {
+        const cases = [
+          "##off",
+          "p##",
+          "p##bogus",
+          "p#bad##off",
+          "#medium##off",
+          "a#b#c##off",
+          "p##off##high",
+          "p#m#x##off",
+        ];
+        for (const ref of cases) {
+          expect(parseTierRef(ref)).toBeUndefined();
+        }
+      });
+    });
+
+    describe("resolveProfileTierRefs ## 검증을 검증함", () => {
+      it("## ref를 치환하지 않고 그대로 둠을 검증함", () => {
+        const profiles = {
+          auto: { low: { ref: "deepseek-flash##off" } },
+          "deepseek-flash": { low: { models: ["x/m"] } },
+        };
+        const warnings: string[] = [];
+        resolveProfileTierRefs(profiles, warnings);
+        expect(profiles.auto.low).toEqual({ ref: "deepseek-flash##off" });
+        expect(warnings).toEqual([]);
+      });
+      it("같은 profile 다른 tier ##는 유지함을 검증함", () => {
+        const profiles = {
+          auto: {
+            low: { ref: "auto#medium##off" },
+            medium: { models: ["x/m"] },
+          },
+        };
+        const warnings: string[] = [];
+        resolveProfileTierRefs(profiles, warnings);
+        expect(profiles.auto.low).toEqual({ ref: "auto#medium##off" });
+        expect(warnings).toEqual([]);
+      });
+      it("profile##effort 자기참조는 tier를 비활성화함을 검증함", () => {
+        const profiles = { auto: { low: { ref: "auto##off" } } };
+        const warnings: string[] = [];
+        resolveProfileTierRefs(profiles, warnings);
+        expect(profiles.auto.low).toBeUndefined();
+        expect(warnings.some((w) => w.includes("itself"))).toBe(true);
+      });
+      it("profile#tier##effort 자기참조는 tier를 비활성화함을 검증함", () => {
+        const profiles = { auto: { low: { ref: "auto#low##off" } } };
+        const warnings: string[] = [];
+        resolveProfileTierRefs(profiles, warnings);
+        expect(profiles.auto.low).toBeUndefined();
+        expect(warnings.some((w) => w.includes("itself"))).toBe(true);
+      });
+      it("잘못된 ## ref는 tier를 비활성화함을 검증함", () => {
+        const profiles = { auto: { low: { ref: "deepseek##bogus" } } };
+        const warnings: string[] = [];
+        resolveProfileTierRefs(profiles, warnings);
+        expect(profiles.auto.low).toBeUndefined();
+        expect(warnings.some((w) => w.includes("invalid ref"))).toBe(true);
+      });
+    });
+
+    describe("dereferenceTier ## 추적을 검증함", () => {
+      const doubleProfiles = (): Record<string, RouterProfile> => ({
+        auto: { low: { ref: "deepseek##off" } },
+        deepseek: {
+          low: { models: ["x/m1", "x/m2#high"], thinking: "max" },
+          medium: { models: ["x/m3"] },
+        },
+      });
+      it("요청 tier를 따라가 effort를 직접 지정함을 검증함", () => {
+        const resolved = dereferenceTier(doubleProfiles(), "auto", "low");
+        expect(resolved?.profileName).toBe("deepseek");
+        expect(resolved?.tier).toBe("low");
+        expect(resolved?.config.models).toEqual(["x/m1#off", "x/m2#off"]);
+        expect(resolved?.config.thinking).toBe("off");
+        expect(resolved?.chain).toEqual(["auto#low##off", "deepseek#low"]);
+      });
+      it("모델별 #와 tier effort보다 ##가 우선함을 검증함", () => {
+        const resolved = dereferenceTier(doubleProfiles(), "auto", "low");
+        expect(resolved?.config.models).not.toContain("x/m2#high");
+        expect(resolved?.config.thinking).not.toBe("max");
+      });
+      it("profile#tier##effort는 지정 tier에 effort를 지정함을 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { ref: "deepseek#medium##low" } },
+          deepseek: { medium: { models: ["x/m3"] } },
+        };
+        const resolved = dereferenceTier(profiles, "auto", "low");
+        expect(resolved?.profileName).toBe("deepseek");
+        expect(resolved?.tier).toBe("medium");
+        expect(resolved?.config.models).toEqual(["x/m3#low"]);
+        expect(resolved?.chain).toEqual(["auto#low##low", "deepseek#medium"]);
+      });
+      it("대상 tier가 없으면 가까운 tier에 ##를 적용함을 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { ref: "deepseek##off" } },
+          deepseek: { high: { models: ["x/h#high"] } },
+        };
+        const resolved = dereferenceTier(profiles, "auto", "low");
+        expect(resolved?.tier).toBe("high");
+        expect(resolved?.config.models).toEqual(["x/h#off"]);
+        expect(resolved?.config.thinking).toBe("off");
+      });
+      it("체인에서 요청 측 ## 지정을 유지함을 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          a: { low: { ref: "b##off" } },
+          b: { low: { ref: "c##max" } },
+          c: { low: { models: ["x/m"] } },
+        };
+        const resolved = dereferenceTier(profiles, "a", "low");
+        expect(resolved?.config.models).toEqual(["x/m#off"]);
+        expect(resolved?.chain).toEqual(["a#low##off", "b#low##max", "c#low"]);
+      });
+      it("## 체인이 일반 ref를 거쳐도 effort를 유지함을 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          a: { low: { ref: "b##off" } },
+          b: { low: { ref: "c#high" } },
+          c: { high: { models: ["x/m"] } },
+        };
+        const resolved = dereferenceTier(profiles, "a", "low");
+        expect(resolved?.config.models).toEqual(["x/m#off"]);
+        expect(resolved?.chain).toEqual(["a#low##off", "b#low", "c#high"]);
+      });
+      it("## 자기참조는 live 추적에서 undefined를 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          a: { low: { ref: "a##off" } },
+        };
+        expect(dereferenceTier(profiles, "a", "low")).toBeUndefined();
+      });
+    });
+
+    describe("isDirectEffortRef ## 판정을 검증함", () => {
+      it("profile##effort 자리면 true를 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { ref: "deepseek##off" } },
+        };
+        expect(isDirectEffortRef(profiles, "auto", "low")).toBe(true);
+      });
+      it("profile#tier##effort 자리면 true를 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { ref: "deepseek#medium##off" } },
+        };
+        expect(isDirectEffortRef(profiles, "auto", "low")).toBe(true);
+      });
+      it("일반 ref 자리면 false를 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { ref: "deepseek#medium" } },
+        };
+        expect(isDirectEffortRef(profiles, "auto", "low")).toBe(false);
+      });
+      it("구체 tier 자리면 false를 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { models: ["x/m"] } },
+        };
+        expect(isDirectEffortRef(profiles, "auto", "low")).toBe(false);
+      });
+      it("없는 tier 자리면 false를 검증함", () => {
+        const profiles: Record<string, RouterProfile> = { auto: {} };
+        expect(isDirectEffortRef(profiles, "auto", "low")).toBe(false);
+      });
+      it("없는 profile이면 false를 검증함", () => {
+        expect(isDirectEffortRef({}, "ghost", "low")).toBe(false);
+      });
+      it("형식 오류 ref 자리면 false를 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { ref: "badformat" } },
+        };
+        expect(isDirectEffortRef(profiles, "auto", "low")).toBe(false);
+      });
+    });
+
+    describe("## 라우팅 결정을 검증함", () => {
+      it("buildRoutingDecisionLive가 ## effort를 thinking으로 사용함을 검증함", () => {
+        const profiles: Record<string, RouterProfile> = {
+          auto: { low: { ref: "deepseek-flash##off" } },
+          "deepseek-flash": { low: { models: ["ollama-cloud/deepseek-v4.1-flash"] } },
+        };
+        const decision = buildRoutingDecisionLive(profiles, "auto", "low", "test");
+        expect(decision.targetProvider).toBe("ollama-cloud");
+        expect(decision.targetModelId).toBe("deepseek-v4.1-flash");
+        expect(decision.targetLabel).toBe("ollama-cloud/deepseek-v4.1-flash");
+        expect(decision.thinking).toBe("off");
+        expect(decision.reasoning).toContain("[ref: auto#low##off -> deepseek-flash#low]");
+      });
+      it("normalizeConfig 통합으로 ## ref가 로드됨을 검증함", () => {
+        const { config, warnings } = normalizeConfig({
+          profiles: {
+            auto: { low: { ref: "deepseek##off" } },
+            deepseek: { low: { models: ["x/m"] } },
+          },
+        });
+        expect(warnings).toEqual([]);
+        expect(config.profiles.auto!.low).toEqual({ ref: "deepseek##off" });
+        expect(dereferenceTier(config.profiles, "auto", "low")?.config.models).toEqual(["x/m#off"]);
+      });
     });
   });
 });

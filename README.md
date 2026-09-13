@@ -108,7 +108,7 @@ Copy the example config to one of:
 ## Documentation
 
 - [Architecture Guide](docs/ARCHITECTURE.md): Deep dive into the routing logic and modular design.
-- [Sample Configuration](docs/model-router.example.json): Diverse profile examples (`cheap`, `deep`, `balanced`).
+- [Sample Configuration](docs/model-router.example.jsonc): Diverse profile examples (`cheap`, `deep`, `balanced`, `refTier` for `profile#tier` refs, `refEffort` for `profile##effort` refs, `refTierEffort` for `profile#tier##effort` refs).
 
 ## Credits
 

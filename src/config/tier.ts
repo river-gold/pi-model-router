@@ -11,6 +11,32 @@ const isThinkingLevel = (value: string): value is ThinkingLevel =>
   (ALLOWED_THINKING as readonly string[]).includes(value);
 
 /**
+ * tier ref 형식 검사. `profile#tier`, `profile##effort`, `profile#tier##effort`를 허용함.
+ * 실제 파싱은 src/config/ref.ts의 parseTierRef가 담당함.
+ */
+const isValidTierRef = (ref: string): boolean => {
+  const doubleHash = ref.indexOf("##");
+  if (doubleHash !== -1) {
+    const left = ref.slice(0, doubleHash).trim();
+    const effort = ref.slice(doubleHash + 2).trim();
+    if (!left || !isThinkingLevel(effort)) return false;
+    if (!left.includes("#")) return true;
+    const parts = left.split("#");
+    return (
+      parts.length === 2 &&
+      parts[0]!.trim().length > 0 &&
+      (ROUTER_TIERS as readonly string[]).includes(parts[1]!.trim())
+    );
+  }
+  const parts = ref.split("#");
+  return (
+    parts.length === 2 &&
+    parts[0]!.trim().length > 0 &&
+    (ROUTER_TIERS as readonly string[]).includes(parts[1]!.trim())
+  );
+};
+
+/**
  * 선호 tier부터 가까운 순서(선호 → 위쪽 → 아래쪽) 목록.
  * resolveAvailableTier와 ref 실시간 추적(src/config/ref.ts)이 공유하는 단일 순서 규칙임.
  */
@@ -95,14 +121,9 @@ export const normalizeTierConfig = (
   const rawRef = record.ref;
   if (typeof rawRef === "string") {
     const trimmed = rawRef.trim();
-    const parts = trimmed.split("#");
-    const ok =
-      parts.length === 2 &&
-      parts[0]!.trim().length > 0 &&
-      (ROUTER_TIERS as readonly string[]).includes(parts[1]!.trim());
-    if (!ok) {
+    if (!isValidTierRef(trimmed)) {
       warnings.push(
-        `Profile "${profileName}" ${tier} tier has invalid ref "${String(rawRef)}": expected "profile#tier". Tier disabled.`,
+        `Profile "${profileName}" ${tier} tier has invalid ref "${String(rawRef)}": expected "profile#tier", "profile##effort", or "profile#tier##effort". Tier disabled.`,
       );
       return undefined;
     }

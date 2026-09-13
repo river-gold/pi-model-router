@@ -26,7 +26,7 @@
     "!src/*.test.ts",
     "!index.test.ts",
     "LICENSE",
-    "docs/model-router.example.json",
+    "docs/model-router.example.jsonc",
     "README.md"
   ],
   "type": "module",

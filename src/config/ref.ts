@@ -1,9 +1,40 @@
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RoutedTierConfig, RouterProfile, RouterTier } from "../types";
-import { ROUTER_TIERS } from "./constants";
+import { ALLOWED_THINKING, ROUTER_TIERS } from "./constants";
 import { isObjectRecord, isRouterTier } from "./guards";
+import { formatModelRef, parseCanonicalModelRef } from "./modelRef";
 import { nearbyTierOrder, resolveAvailableTier } from "./tier";
 
-export const parseTierRef = (raw: string): { profile: string; tier: RouterTier } | undefined => {
+export interface ParsedTierRef {
+  profile: string;
+  /** 없으면 요청 tier를 따라감 (`profile##effort` 형식). */
+  tier?: RouterTier;
+  /** `##`로 직접 지정한 effort. tier/model의 `#`보다 우선함. */
+  effort?: ThinkingLevel;
+}
+
+const isThinkingLevel = (value: string): value is ThinkingLevel =>
+  (ALLOWED_THINKING as readonly string[]).includes(value);
+
+export const parseTierRef = (raw: string): ParsedTierRef | undefined => {
+  const doubleHash = raw.indexOf("##");
+  if (doubleHash !== -1) {
+    const left = raw.slice(0, doubleHash).trim();
+    const effortRaw = raw.slice(doubleHash + 2).trim();
+    if (!left || !isThinkingLevel(effortRaw)) {
+      return undefined;
+    }
+    const singleHash = left.indexOf("#");
+    if (singleHash === -1) {
+      return { profile: left, effort: effortRaw };
+    }
+    const profile = left.slice(0, singleHash).trim();
+    const tier = left.slice(singleHash + 1).trim();
+    if (!profile || !isRouterTier(tier)) {
+      return undefined;
+    }
+    return { profile, tier, effort: effortRaw };
+  }
   const parts = raw.split("#");
   if (parts.length !== 2) {
     return undefined;
@@ -18,6 +49,22 @@ export const parseTierRef = (raw: string): { profile: string; tier: RouterTier }
 
 export const isTierRef = (value: unknown): value is { ref: string } =>
   isObjectRecord(value) && typeof value.ref === "string";
+
+/**
+ * 요청 tier 자리에 적힌 ref가 `##effort` 직접 지정인지.
+ * 분류기 스킵 판단용: 기본 tier가 강제 지정이면 분류기를 돌릴 의미가 없음.
+ */
+export const isDirectEffortRef = (
+  profiles: Record<string, RouterProfile>,
+  profileName: string,
+  tier: RouterTier,
+): boolean => {
+  const profile = profiles[profileName];
+  if (!isObjectRecord(profile)) return false;
+  const entry = profile[tier];
+  if (!isTierRef(entry)) return false;
+  return parseTierRef(entry.ref.trim())?.effort !== undefined;
+};
 
 /**
  * 로드 시점 검증만 수행함. 치환하지 않고 `{ ref }`를 그대로 둬서
@@ -45,12 +92,14 @@ export const resolveProfileTierRefs = (
       const parsed = parseTierRef(rawRef);
       if (!parsed) {
         warnings.push(
-          `Profile "${profileName}" ${tier} tier has invalid ref "${ref}": expected "profile#tier". Tier disabled.`,
+          `Profile "${profileName}" ${tier} tier has invalid ref "${ref}": expected "profile#tier", "profile##effort", or "profile#tier##effort". Tier disabled.`,
         );
         delete profile[tier];
         continue;
       }
-      if (parsed.profile === profileName && parsed.tier === tier) {
+      const isSelfRef =
+        parsed.profile === profileName && (parsed.tier === undefined || parsed.tier === tier);
+      if (isSelfRef) {
         warnings.push(
           `Profile "${profileName}" ${tier} tier references itself ("${rawRef}"). Tier disabled.`,
         );
@@ -81,9 +130,30 @@ const isConcreteTier = (value: unknown): value is RoutedTierConfig =>
   value.models.every((item) => typeof item === "string");
 
 /**
+ * `##effort` 직접 지정을 최종 모델 목록에 적용함.
+ * 모델별 `#`와 tier 기본값보다 우선해서 `provider/model#effort`로 다시 씀.
+ */
+const applyEffortOverride = (
+  config: RoutedTierConfig,
+  effort: ThinkingLevel | undefined,
+): RoutedTierConfig => {
+  if (!effort) return config;
+  return {
+    ...config,
+    models: config.models!.map((model) => {
+      const { provider, modelId } = parseCanonicalModelRef(model);
+      return formatModelRef(provider, modelId, effort);
+    }),
+    thinking: effort,
+  };
+};
+
+/**
  * `profiles[profileName][tier]`를 실시간으로 추적함.
  * ref 체인을 끝까지 따라가고(순환 방지), 대상 tier가 없으면 대상 profile 안에서
  * 가까운 tier(resolveAvailableTier 순서)로 폴백함. 모두 실패하면 undefined.
+ * `##effort`가 있으면 tier 없이 요청 tier를 따라가고, 최종 모델에 effort를 직접 지정함.
+ * 체인에 `##`가 여러 개면 요청 측에 가장 가까운(첫 번째) 지정을 유지함.
  */
 export const dereferenceTier = (
   profiles: Record<string, RouterProfile>,
@@ -94,6 +164,7 @@ export const dereferenceTier = (
   const chain: string[] = [];
   let currentProfile = profileName;
   let currentTier = tier;
+  let effortOverride: ThinkingLevel | undefined;
 
   for (let hop = 0; hop < MAX_REF_HOPS; hop++) {
     const key = `${currentProfile}#${currentTier}`;
@@ -101,7 +172,6 @@ export const dereferenceTier = (
       return undefined;
     }
     visited.add(key);
-    chain.push(key);
 
     const targetProfile = profiles[currentProfile];
     if (!isObjectRecord(targetProfile)) {
@@ -109,7 +179,8 @@ export const dereferenceTier = (
     }
     const entry = targetProfile[currentTier];
     if (!isObjectRecord(entry)) {
-      return nearbyDereference(profiles, currentProfile, currentTier, chain);
+      chain.push(key);
+      return nearbyDereference(profiles, currentProfile, currentTier, chain, effortOverride);
     }
     const ref = entry.ref;
     if (typeof ref === "string") {
@@ -117,14 +188,24 @@ export const dereferenceTier = (
       if (!parsed) {
         return undefined;
       }
+      chain.push(parsed.effort ? `${key}##${parsed.effort}` : key);
+      if (parsed.effort && effortOverride === undefined) {
+        effortOverride = parsed.effort;
+      }
       currentProfile = parsed.profile;
-      currentTier = parsed.tier;
+      currentTier = parsed.tier ?? currentTier;
       continue;
     }
     if (!isConcreteTier(entry)) {
       return undefined;
     }
-    return { profileName: currentProfile, tier: currentTier, config: entry, chain: [...chain] };
+    chain.push(key);
+    return {
+      profileName: currentProfile,
+      tier: currentTier,
+      config: applyEffortOverride(entry, effortOverride),
+      chain: [...chain],
+    };
   }
   return undefined;
 };
@@ -135,6 +216,7 @@ const nearbyDereference = (
   targetProfileName: string,
   wantedTier: RouterTier,
   chain: string[],
+  effortOverride: ThinkingLevel | undefined,
 ): ResolvedTier | undefined => {
   // 호출 전 currentProfile이 객체임이 확인되므로 직접 인덱싱함.
   const targetProfile = profiles[targetProfileName];
@@ -153,7 +235,7 @@ const nearbyDereference = (
   return {
     profileName: targetProfileName,
     tier: picked,
-    config: pickedConfig,
+    config: applyEffortOverride(pickedConfig, effortOverride),
     chain: [...chain],
   };
 };

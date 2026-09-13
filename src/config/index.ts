@@ -18,6 +18,7 @@ export {
   resolveProfileTierRefs,
   parseTierRef,
   isTierRef,
+  isDirectEffortRef,
   dereferenceTier,
   resolveAvailableTierLive,
   resolvableTiers,
