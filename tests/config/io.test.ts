@@ -11,7 +11,7 @@ describe("io를 검증함", () => {
   describe("createParseConfigFile 동작을 검증함", () => {
     it("파일 없으면 빈 설정을 반환함을 검증함", () => {
       const fs = { existsSync: () => false, readFileSync: vi.fn() };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       expect(parse("/no/file")).toEqual({ config: {}, warnings: [] });
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
@@ -20,32 +20,32 @@ describe("io를 검증함", () => {
         existsSync: () => true,
         readFileSync: () => JSON.stringify({ debug: true, profiles: {} }),
       };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       const r = parse("/exists.json");
       expect(r.config).toEqual({ debug: true, profiles: {} });
       expect(r.warnings).toEqual([]);
     });
-    it("stripJsonc를 사용함을 검증함", () => {
+    it("parseJsonc를 사용함을 검증함", () => {
       const fs = {
         existsSync: () => true,
         readFileSync: () => '{ "a": 1, // comment\n}',
       };
-      const strip = vi.fn().mockReturnValue('{"a":1}');
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: strip });
+      const parseJsonc = vi.fn().mockReturnValue({ a: 1 });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: parseJsonc });
       const r = parse("/f");
-      expect(strip).toHaveBeenCalledWith('{ "a": 1, // comment\n}');
+      expect(parseJsonc).toHaveBeenCalledWith('{ "a": 1, // comment\n}');
       expect(r.config).toEqual({ a: 1 });
     });
     it("object가 아니면 warning 남김을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "123" };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       const r = parse("/f");
       expect(r.config).toEqual({});
       expect(r.warnings[0]).toMatch(/expected a JSON object/);
     });
     it("배열이면 object가 아니라고 warning 남김을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "[]" };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       expect(parse("/f").warnings[0]).toMatch(/expected a JSON object/);
     });
     it("readFileSync 에러를 포착함을 검증함", () => {
@@ -55,12 +55,12 @@ describe("io를 검증함", () => {
           throw new Error("read fail");
         },
       };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       expect(parse("/f").warnings[0]).toMatch(/Failed to parse.*read fail/);
     });
     it("JSON 파싱 에러를 포착함을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "{invalid" };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       expect(parse("/f").warnings[0]).toMatch(/Failed to parse/);
     });
     it("non-Error throw를 포착함을 검증함", () => {
@@ -70,16 +70,16 @@ describe("io를 검증함", () => {
           throw "string error";
         },
       };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: (s) => s });
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       expect(parse("/f").warnings[0]).toMatch(/string error/);
     });
-    it("stripJsonc throw를 포착함을 검증함", () => {
+    it("parseJsonc throw를 포착함을 검증함", () => {
       const fs = { existsSync: () => true, readFileSync: () => "{}" };
-      const strip = () => {
-        throw new Error("strip fail");
+      const parseJsonc = () => {
+        throw new Error("parse fail");
       };
-      const parse = createParseConfigFile({ fs: fs, stripJsonc: strip });
-      expect(parse("/f").warnings[0]).toMatch(/strip fail/);
+      const parse = createParseConfigFile({ fs: fs, parseJsonc: parseJsonc });
+      expect(parse("/f").warnings[0]).toMatch(/parse fail/);
     });
   });
 

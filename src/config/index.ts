@@ -5,7 +5,7 @@ export {
   MAX_HISTORY_SIZE,
 } from "./constants";
 export { isObjectRecord, isRouterTier } from "./guards";
-export { stripJsonc, stripComments, stripTrailingCommas } from "./jsonc";
+export { parseJsonc } from "./parse-jsonc";
 export { parseCanonicalModelRef, formatModelRef } from "./modelRef";
 export {
   mergeTier,

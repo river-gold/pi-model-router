@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ConfigLoadResult, ParsedConfigFile, RouterConfig } from "../types";
 import { isObjectRecord } from "./guards";
-import { stripJsonc } from "./jsonc";
+import { parseJsonc } from "./parse-jsonc";
 import { mergeConfig } from "./merge";
 import { normalizeConfig } from "./normalize";
 
@@ -18,7 +18,7 @@ export type PathJoin = (...parts: string[]) => string;
 
 export type ParseConfigFileDeps = {
   fs: FileSystem;
-  stripJsonc: (text: string) => string;
+  parseJsonc: (text: string) => unknown;
 };
 
 export const createParseConfigFile =
@@ -30,7 +30,7 @@ export const createParseConfigFile =
 
     try {
       const raw = deps.fs.readFileSync(path, "utf-8");
-      const parsed = JSON.parse(deps.stripJsonc(raw)) as unknown;
+      const parsed = deps.parseJsonc(raw);
       if (!isObjectRecord(parsed)) {
         return {
           config: {},
@@ -55,7 +55,7 @@ const nodeFs: FileSystem = {
 
 export const parseConfigFile = createParseConfigFile({
   fs: nodeFs,
-  stripJsonc,
+  parseJsonc,
 });
 
 export type LoadRouterConfigDeps = {
