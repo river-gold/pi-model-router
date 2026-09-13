@@ -82,5 +82,14 @@
       // → xai/grok-4.6#off (grok medium tier 모델에 off 강제 지정)
       "low": { "ref": "grok#medium##off" },
     },
+    // 케이스 4: classifierModels ref — 분류기 후보 모델을 다른 프로필에서 가져옴.
+    // 배열 대신 { ref } 하나로 지정. low tier를 따라가므로 저비용 모델이 분류에 쓰임.
+    "refClassifier": {
+      // 분류기 후보: xai/grok-4.6#off, commandcode/xai/grok-4.6#off, opencode-go/grok-4.6#off
+      "classifierModels": { "ref": "grok##off" },
+      "high": { "ref": "grok#high" },
+      "medium": { "ref": "grok#medium" },
+      "low": { "ref": "grok#low" },
+    },
   },
 }

@@ -39,6 +39,8 @@ export const applyClassifierIfNeeded = async (
       failedSet,
       classifierSource,
       sessionId,
+      modelId,
+      profiles,
     ));
   } catch (e) {
     if (e instanceof Error && e.message === "aborted") throw e;

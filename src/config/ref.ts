@@ -133,7 +133,7 @@ const isConcreteTier = (value: unknown): value is RoutedTierConfig =>
  * `##effort` 직접 지정을 최종 모델 목록에 적용함.
  * 모델별 `#`와 tier 기본값보다 우선해서 `provider/model#effort`로 다시 씀.
  */
-const applyEffortOverride = (
+export const applyEffortOverride = (
   config: RoutedTierConfig,
   effort: ThinkingLevel | undefined,
 ): RoutedTierConfig => {

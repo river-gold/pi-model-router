@@ -279,4 +279,40 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     );
     expect(res.result).toBeDefined();
   });
+
+  it("profileName과 profiles를 resolveEffectiveClassifier에 전달함", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [{ model: "openai/gpt", source: "profile" }],
+      source: "profile",
+    });
+    vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
+      result: { tier: "low", reasoning: "r" },
+      attempts: [],
+    });
+    const profiles: Record<string, RouterProfile> = {
+      myModel: { classifierModels: { ref: "base##off" } },
+      base: { low: { models: ["openai/gpt"] } },
+    };
+    const state = makeState();
+    const res = await runClassifierBranch(
+      mockRegistry,
+      profiles.myModel!,
+      state,
+      ctx,
+      undefined,
+      0,
+      new Set(),
+      "src",
+      undefined,
+      "myModel",
+      profiles,
+    );
+    expect(res.result?.tier).toBe("low");
+    expect(resolveEffectiveClassifier).toHaveBeenCalledWith(
+      profiles.myModel,
+      state.currentConfig.classifierModels,
+      profiles,
+      "myModel",
+    );
+  });
 });

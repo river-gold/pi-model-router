@@ -1,6 +1,12 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterProfile, ClassifierConfig, RouterTier, TierGuides } from "../types";
+import type {
+  RouterProfile,
+  ClassifierConfig,
+  ClassifierModelsRef,
+  RouterTier,
+  TierGuides,
+} from "../types";
 import { resolveEffectiveClassifier } from "../config";
 import { runClassifierWithFallbacksDetailed, type ClassifierAttempt } from "../classifier";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
@@ -11,7 +17,7 @@ export const runClassifierBranch = async (
   profile: RouterProfile,
   state: {
     currentConfig: {
-      classifierModels?: ClassifierConfig[];
+      classifierModels?: ClassifierConfig[] | ClassifierModelsRef;
       historySize?: number;
       tierGuides?: TierGuides;
     };
@@ -24,6 +30,8 @@ export const runClassifierBranch = async (
   failedSet: Set<string>,
   classifierSource: string,
   sessionId?: string,
+  profileName?: string,
+  profiles?: Record<string, RouterProfile>,
 ): Promise<{
   result: { tier: RouterTier; reasoning: string } | undefined;
   attempts: ClassifierAttempt[];
@@ -31,6 +39,8 @@ export const runClassifierBranch = async (
   const { classifiers: effectiveClassifiers } = resolveEffectiveClassifier(
     profile,
     state.currentConfig.classifierModels,
+    profiles,
+    profileName,
   );
   if (!effectiveClassifiers) {
     throw new Error(

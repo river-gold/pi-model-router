@@ -151,6 +151,8 @@ describe("provider/classifier 분류기 적용", () => {
       expect.any(Set),
       "source",
       undefined,
+      "modelId",
+      undefined,
     );
   });
 
@@ -178,6 +180,8 @@ describe("provider/classifier 분류기 적용", () => {
       5,
       expect.any(Set),
       "source",
+      undefined,
+      "modelId",
       undefined,
     );
   });
@@ -208,6 +212,8 @@ describe("provider/classifier 분류기 적용", () => {
       set,
       "source",
       undefined,
+      "modelId",
+      undefined,
     );
   });
 
@@ -237,6 +243,8 @@ describe("provider/classifier 분류기 적용", () => {
       expect.any(Set),
       "source",
       "sess-7",
+      "modelId",
+      undefined,
     );
   });
 
@@ -496,5 +504,46 @@ describe("provider/classifier 논리적 ref", () => {
       profiles,
     );
     expect(mockRunClassifierBranch).toHaveBeenCalled();
+  });
+  it("profileName과 profiles를 branch에 전달함을 검증함", async () => {
+    mockRunClassifierBranch.mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    });
+    const profiles: Record<string, RouterProfile> = {
+      myModel: { medium: { ref: "base#medium" } },
+      base: { medium: { models: ["openai/gpt-base"] } },
+    };
+    const state = makeFakeProviderState({
+      currentConfig: { historySize: 0, profiles: {} },
+      failedByChain: new Map(),
+    });
+    await applyClassifierIfNeeded(
+      profiles.myModel,
+      makeFakeDecision({ profile: "myModel", tier: "medium", reasoning: "orig" }),
+      "myModel",
+      makeFakeRegistry(),
+      state,
+      baseContext,
+      undefined,
+      false,
+      false,
+      "off",
+      "source",
+      undefined,
+      profiles,
+    );
+    expect(mockRunClassifierBranch).toHaveBeenCalledWith(
+      expect.anything(),
+      profiles.myModel,
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      0,
+      expect.any(Set),
+      "source",
+      undefined,
+      "myModel",
+      profiles,
+    );
   });
 });

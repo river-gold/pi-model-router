@@ -90,6 +90,8 @@ export const registerRouterProvider = (
           const { source } = resolveEffectiveClassifier(
             profile as RouterProfile,
             state.currentConfig.classifierModels,
+            profiles,
+            model.id,
           );
           const isSingleTier = liveTiers.length === 1;
           const isToolLoopNow =

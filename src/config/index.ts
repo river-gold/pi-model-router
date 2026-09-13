@@ -19,6 +19,7 @@ export {
   parseTierRef,
   isTierRef,
   isDirectEffortRef,
+  applyEffortOverride,
   dereferenceTier,
   resolveAvailableTierLive,
   resolvableTiers,
@@ -34,6 +35,7 @@ export {
 export {
   normalizeClassifierConfig,
   normalizeClassifierModels,
+  resolveClassifierRefModels,
   resolveEffectiveClassifier,
 } from "./classifier";
 export type { ClassifierSource, ClassifierEntry } from "./classifier";
