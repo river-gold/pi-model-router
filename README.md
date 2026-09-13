@@ -11,7 +11,7 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 - **Advanced Controls**: Includes built-in support for:
   - **LLM Intent Classifier**: Optionally use a fast model to categorize intent.
   - **Fallback Chains**: Automatic retry with alternative models if the primary choice fails.
-- **Thinking Control**: Per-tier `thinking` from `model-router.json#thinking` is applied; delegated reasoning is clamped per target model.
+- **Thinking Control**: Per-tier `thinking` from `pi-model-router.json#thinking` is applied; delegated reasoning is clamped per target model.
 - **Persistent State**: Profiles, costs, and debug history are remembered across agent restarts and conversation branches.
 
 ## Installation
@@ -42,8 +42,8 @@ pi -e ./index.ts
 
 Copy the example config to one of:
 
-- `~/.pi/agent/model-router.json` (Global)
-- `.pi/model-router.json` (Project-specific)
+- `~/.pi/agent/pi-model-router.json` (Global)
+- `.pi/pi-model-router.json` (Project-specific)
 
 ### Basic Config Shape
 
