@@ -66,7 +66,9 @@ export const getInitialModelsToTry = (
   const tierModels = router[decision.tier]?.models;
   if (!tierModels?.length)
     return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.effort)];
-  return [...new Set(tierModels)];
+  // 라이브 추적 실패 시 원본 목록으로 폴백하는데, `@` 위임은 routers 없이는 해석 불가라 제외함.
+  const local = tierModels.filter((m) => !m.trim().startsWith("@"));
+  return local.length > 0 ? [...new Set(local)] : [...new Set(tierModels)];
 };
 
 export const filterByFailureMemory = (

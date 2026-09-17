@@ -177,17 +177,26 @@ export const resolveEffectiveClassifier = (
     chain.push(...globalEntries.map((c) => ({ ...c, source: "global" as const })));
     sources.push("global");
   }
-  const lowModels = router.low?.models;
-  if (lowModels && lowModels.length > 0) {
+  const lowTier = router.low;
+  if (lowTier?.models && lowTier.models.length > 0) {
+    const lowEntries: ClassifierConfig[] = [];
+    for (const m of lowTier.models) {
+      const trimmed = m.trim();
+      // low tier의 `@` 위임 항목은 라우팅 시점에 실시간으로 펼침.
+      if (trimmed.startsWith("@")) {
+        if (routers) lowEntries.push(...(resolveClassifierRefModels(trimmed.slice(1), routers) ?? []));
+        continue;
+      }
+      const { provider, modelId, effort } = parseCanonicalModelRef(trimmed);
+      lowEntries.push({ model: formatModelRef(provider, modelId), effort });
+    }
+    // low tier의 강제 effort가 펼쳐진 후보 전체에 우선함.
     chain.push(
-      ...lowModels.map((m) => {
-        const { provider, modelId, effort } = parseCanonicalModelRef(m);
-        return {
-          model: formatModelRef(provider, modelId),
-          effort,
-          source: "low tier" as const,
-        };
-      }),
+      ...lowEntries.map((c) => ({
+        model: c.model,
+        effort: lowTier.effort ?? c.effort,
+        source: "low tier" as const,
+      })),
     );
     sources.push("low tier");
   }

@@ -234,6 +234,36 @@ describe("classifier를 검증함", () => {
         { model: "openai/gpt-4o-mini", effort: "off", source: "low tier" },
       ]);
     });
+    it("low tier의 @ 위임 항목을 실시간으로 펼침을 검증함", () => {
+      const router: Router = { low: { models: ["@cheap#low", "openai/gpt"] } };
+      const routers: Record<string, Router> = {
+        cheap: { low: { models: ["c/m1", "c/m2#high"] } },
+      };
+      const r = resolveEffectiveClassifier(router, undefined, routers);
+      expect(r.classifiers).toEqual([
+        { model: "c/m1", effort: undefined, source: "low tier" },
+        { model: "c/m2", effort: "high", source: "low tier" },
+        { model: "openai/gpt", effort: undefined, source: "low tier" },
+      ]);
+    });
+    it("low tier 위임 중 해석 불가 항목은 건너뜀을 검증함", () => {
+      const router: Router = { low: { models: ["@ghost#low", "openai/gpt"] } };
+      const r = resolveEffectiveClassifier(router, undefined, {});
+      expect(r.classifiers).toEqual([{ model: "openai/gpt", effort: undefined, source: "low tier" }]);
+    });
+    it("low tier의 강제 effort가 위임으로 펼친 후보에도 우선함을 검증함", () => {
+      const router: Router = { low: { models: ["@cheap#low"], effort: "off" } };
+      const routers: Record<string, Router> = {
+        cheap: { low: { models: ["c/m1#high"] } },
+      };
+      const r = resolveEffectiveClassifier(router, undefined, routers);
+      expect(r.classifiers).toEqual([{ model: "c/m1", effort: "off", source: "low tier" }]);
+    });
+    it("routers 없이는 low tier 위임을 펼치지 않음을 검증함", () => {
+      const router: Router = { low: { models: ["@cheap#low"] } };
+      const r = resolveEffectiveClassifier(router, undefined);
+      expect(r.classifiers).toBeUndefined();
+    });
     it("빈 low는 무시함을 검증함", () => {
       const router: Router = { low: { models: [] } };
       const r = resolveEffectiveClassifier(router, undefined);
