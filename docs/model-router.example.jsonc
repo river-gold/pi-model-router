@@ -2,6 +2,11 @@
   "debug": false,
   "historySize": 0,
   "classifierModels": ["google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
+  // TypeSafe System One 분류기 사용 (TYPESAFE_API_KEY 필요).
+  // "TYPESAFE_CLASSIFIER"면 위 classifierModels 대신 TypeSafe를 쓰고, 낮은 confidence는 한 단계 위 tier로 승격함.
+  // 프로필별 classifierModels가 있으면 그 프로필은 이 전역 설정 대신 프로필 설정을 씀.
+  "classifierModels": "TYPESAFE_CLASSIFIER",
+  "typesafeConfidenceThreshold": 0.5,
   "tierGuides": {
     "low": "Quick, cheap answers: one-paragraph summaries, commit messages, tiny edits.",
     "high": "Needs real design judgment: tradeoffs, planning, risky refactors in this repo.",

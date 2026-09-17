@@ -1,6 +1,13 @@
-import type { ClassifierConfig, ClassifierModelsRef, RouterProfile, RouterTier } from "../types";
+import type {
+  ClassifierConfig,
+  ClassifierModelsSetting,
+  RouterProfile,
+  RouterTier,
+} from "../types";
+import { TYPESAFE_CLASSIFIER_REF } from "./constants";
 import { formatModelRef, parseCanonicalModelRef } from "./modelRef";
 import { dereferenceTier, isTierRef, parseTierRef, applyEffortOverride } from "./ref";
+import { isTypesafeClassifierRef } from "./guards";
 
 export const normalizeClassifierConfig = (
   raw: unknown,
@@ -24,8 +31,11 @@ export const normalizeClassifierModels = (
   raw: unknown,
   warnings: string[],
   contextLabel: string,
-): ClassifierConfig[] | ClassifierModelsRef | undefined => {
+): ClassifierModelsSetting | undefined => {
   if (raw === undefined) return undefined;
+  if (typeof raw === "string" && raw.trim() === TYPESAFE_CLASSIFIER_REF) {
+    return { typesafe: true };
+  }
   if (isTierRef(raw)) {
     const trimmed = raw.ref.trim();
     if (!parseTierRef(trimmed)) {
@@ -88,20 +98,32 @@ export const resolveClassifierRefModels = (
 };
 
 const expandClassifierModels = (
-  value: ClassifierConfig[] | ClassifierModelsRef | undefined,
+  value: ClassifierModelsSetting | undefined,
   profiles: Record<string, RouterProfile> | undefined,
   profileName: string | undefined,
 ): ClassifierConfig[] => {
   if (Array.isArray(value)) return value;
+  if (isTypesafeClassifierRef(value)) return [];
   if (value && profiles && profileName) {
     return resolveClassifierRefModels(value.ref, profiles) ?? [];
   }
   return [];
 };
 
+/**
+ * TypeSafe System One 분류기를 쓸지 결정함.
+ * 프로필 설정이 전역 설정보다 우선함 (기존 classifierModels 우선순위와 동일).
+ */
+export const resolveTypesafeClassifier = (
+  profile: RouterProfile,
+  globalClassifiers: ClassifierModelsSetting | undefined,
+): boolean =>
+  isTypesafeClassifierRef(profile.classifierModels) ||
+  (profile.classifierModels === undefined && isTypesafeClassifierRef(globalClassifiers));
+
 export const resolveEffectiveClassifier = (
   profile: RouterProfile,
-  globalClassifiers: ClassifierConfig[] | ClassifierModelsRef | undefined,
+  globalClassifiers: ClassifierModelsSetting | undefined,
   profiles?: Record<string, RouterProfile>,
   profileName?: string,
 ): { classifiers: ClassifierEntry[] | undefined; source: string } => {

@@ -18,6 +18,48 @@ describe("normalizeConfig 동작을 검증함", () => {
     expect(normalizeConfig({ debug: false, profiles: {} }).config.debug).toBe(false);
     expect(normalizeConfig({ debug: "yes", profiles: {} }).config.debug).toBe(false);
   });
+
+  it("classifierModels에 TYPESAFE_CLASSIFIER를 쓰면 TypeSafe 참조로 정규화함을 검증함", () => {
+    const { config, warnings } = normalizeConfig({
+      classifierModels: "TYPESAFE_CLASSIFIER",
+      profiles: {},
+    });
+    expect(config.classifierModels).toEqual({ typesafe: true });
+    expect(warnings).toEqual([]);
+  });
+
+  it("프로필 classifierModels의 TYPESAFE_CLASSIFIER도 처리함을 검증함", () => {
+    const { config, warnings } = normalizeConfig({
+      profiles: {
+        p: { medium: { models: ["openai/a"] }, classifierModels: "TYPESAFE_CLASSIFIER" },
+      },
+    });
+    expect(config.profiles.p.classifierModels).toEqual({ typesafe: true });
+    expect(warnings).toEqual([]);
+  });
+
+  it("typesafeConfidenceThreshold 값을 처리함을 검증함", () => {
+    expect(
+      normalizeConfig({ typesafeConfidenceThreshold: 0.7, profiles: {} }).config
+        .typesafeConfidenceThreshold,
+    ).toBe(0.7);
+    expect(
+      normalizeConfig({ typesafeConfidenceThreshold: 0, profiles: {} }).config
+        .typesafeConfidenceThreshold,
+    ).toBe(0);
+    expect(normalizeConfig({ profiles: {} }).config.typesafeConfidenceThreshold).toBeUndefined();
+  });
+
+  it("잘못된 typesafeConfidenceThreshold는 warning 후 무시함을 검증함", () => {
+    for (const invalid of [1.5, -0.1, "0.5", Number.NaN]) {
+      const { config, warnings } = normalizeConfig({
+        typesafeConfidenceThreshold: invalid,
+        profiles: {},
+      });
+      expect(config.typesafeConfidenceThreshold).toBeUndefined();
+      expect(warnings.some((w) => w.includes("Invalid typesafeConfidenceThreshold"))).toBe(true);
+    }
+  });
   it("object가 아닌 profile은 건너뜀을 검증함", () => {
     const { warnings, config } = normalizeConfig({
       profiles: { bad: "not-object" },

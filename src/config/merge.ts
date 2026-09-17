@@ -24,6 +24,8 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
   return {
     debug: override.debug ?? base.debug,
     classifierModels: override.classifierModels ?? base.classifierModels,
+    typesafeConfidenceThreshold:
+      override.typesafeConfidenceThreshold ?? base.typesafeConfidenceThreshold,
     historySize:
       typeof override.historySize === "number"
         ? override.historySize

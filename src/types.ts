@@ -18,6 +18,20 @@ export interface ClassifierModelsRef {
   ref: string;
 }
 
+/**
+ * `classifierModels: "TYPESAFE_CLASSIFIER"`를 정규화한 형태.
+ * 로컬 LLM 분류기 대신 TypeSafe System One API를 분류기로 씀.
+ */
+export interface TypesafeClassifierRef {
+  typesafe: true;
+}
+
+/** classifierModels에 허용되는 설정 전체. */
+export type ClassifierModelsSetting =
+  | ClassifierConfig[]
+  | ClassifierModelsRef
+  | TypesafeClassifierRef;
+
 export interface RoutedTierConfig {
   /**
    * 논리적 참조. 있으면 models 대신 라우팅 시점에 실시간 추적함.
@@ -46,14 +60,20 @@ export interface RouterProfile {
   medium?: RoutedTierConfig;
   low?: RoutedTierConfig;
   minimal?: RoutedTierConfig;
-  classifierModels?: ClassifierConfig[] | ClassifierModelsRef;
+  classifierModels?: ClassifierModelsSetting;
 }
 
 export type TierGuides = Partial<Record<RouterTier, string>>;
 
 export interface RouterConfig {
   debug?: boolean;
-  classifierModels?: ClassifierConfig[] | ClassifierModelsRef;
+  /**
+   * 분류기 후보. `"TYPESAFE_CLASSIFIER"` 문자열이면 TypeSafe System One API를 분류기로 씀
+   * (이 때 classifierModels/low tier 폴백은 쓰지 않고, 실패하면 기본 tier를 유지함).
+   */
+  classifierModels?: ClassifierModelsSetting;
+  /** TypeSafe Choice confidence 임계값 (0~1). 이 값보다 낮으면 한 단계 위 tier로 승격함. 기본 0.5. */
+  typesafeConfidenceThreshold?: number;
   historySize?: number;
   tierGuides?: TierGuides;
   profiles: Record<string, RouterProfile>;

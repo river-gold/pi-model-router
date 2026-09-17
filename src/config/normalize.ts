@@ -13,6 +13,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     const allowedKeys = new Set([
       "debug",
       "classifierModels",
+      "typesafeConfidenceThreshold",
       "historySize",
       "tierGuides",
       "profiles",
@@ -105,10 +106,28 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 
   const tierGuides = normalizeTierGuides(raw.tierGuides);
 
+  let typesafeConfidenceThreshold: number | undefined = undefined;
+  const rawTypesafeThreshold: unknown = raw.typesafeConfidenceThreshold;
+  if (rawTypesafeThreshold !== undefined) {
+    if (
+      typeof rawTypesafeThreshold === "number" &&
+      Number.isFinite(rawTypesafeThreshold) &&
+      rawTypesafeThreshold >= 0 &&
+      rawTypesafeThreshold <= 1
+    ) {
+      typesafeConfidenceThreshold = rawTypesafeThreshold;
+    } else {
+      warnings.push(
+        `Invalid typesafeConfidenceThreshold "${JSON.stringify(rawTypesafeThreshold)}": expected number between 0 and 1. Ignored.`,
+      );
+    }
+  }
+
   return {
     config: {
       debug: typeof raw.debug === "boolean" ? raw.debug : false,
       classifierModels,
+      ...(typesafeConfidenceThreshold !== undefined ? { typesafeConfidenceThreshold } : {}),
       historySize: historySize ?? DEFAULT_HISTORY_SIZE,
       ...(tierGuides ? { tierGuides } : {}),
       profiles: normalizedProfiles,

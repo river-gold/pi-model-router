@@ -4,6 +4,7 @@ import {
   normalizeClassifierModels,
   resolveClassifierRefModels,
   resolveEffectiveClassifier,
+  resolveTypesafeClassifier,
 } from "../../src/config/classifier";
 import { normalizeConfig } from "../../src/config/normalize";
 import type { RouterProfile } from "../../src/types";
@@ -98,6 +99,16 @@ describe("classifier를 검증함", () => {
     it("모두 무효한 배열은 undefined 반환함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels(["bad", "also/bad#invalid"], w, "ctx")).toBeUndefined();
+    });
+    it("TYPESAFE_CLASSIFIER 문자열은 TypeSafe 참조로 정규화함을 검증함", () => {
+      const w: string[] = [];
+      expect(normalizeClassifierModels("TYPESAFE_CLASSIFIER", w, "ctx")).toEqual({
+        typesafe: true,
+      });
+      expect(normalizeClassifierModels("  TYPESAFE_CLASSIFIER  ", w, "ctx")).toEqual({
+        typesafe: true,
+      });
+      expect(w).toEqual([]);
     });
     it("잘못된 number 타입은 warning 남기고 undefined 반환함을 검증함", () => {
       const w: string[] = [];
@@ -218,6 +229,42 @@ describe("classifier를 검증함", () => {
       const profile: RouterProfile = { low: { models: ["google/gemini#low"] } };
       const r = resolveEffectiveClassifier(profile, []);
       expect(r.source).toBe("low tier");
+    });
+    it("TypeSafe 참조는 LLM 분류기 후보에서 제외함을 검증함", () => {
+      const profile: RouterProfile = {
+        classifierModels: { typesafe: true },
+        low: { models: ["google/gemini#low"] },
+      };
+      const r = resolveEffectiveClassifier(profile, { typesafe: true });
+      expect(r.source).toBe("low tier");
+      expect(r.classifiers).toEqual([
+        { model: "google/gemini", thinking: "low", source: "low tier" },
+      ]);
+    });
+  });
+
+  describe("resolveTypesafeClassifier 동작을 검증함", () => {
+    it("profile이 TypeSafe 참조면 true임을 검증함", () => {
+      expect(resolveTypesafeClassifier({ classifierModels: { typesafe: true } }, undefined)).toBe(
+        true,
+      );
+    });
+    it("profile이 없고 global이 TypeSafe 참조면 true임을 검증함", () => {
+      expect(resolveTypesafeClassifier({}, { typesafe: true })).toBe(true);
+    });
+    it("profile 설정이 있으면 global TypeSafe 참조를 무시함을 검증함", () => {
+      expect(
+        resolveTypesafeClassifier(
+          { classifierModels: [{ model: "openai/a" }] },
+          { typesafe: true },
+        ),
+      ).toBe(false);
+    });
+    it("TypeSafe 참조가 없으면 false임을 검증함", () => {
+      expect(resolveTypesafeClassifier({}, undefined)).toBe(false);
+      expect(resolveTypesafeClassifier({}, [{ model: "openai/a" }])).toBe(false);
+      expect(resolveTypesafeClassifier({}, { ref: "cheap#low" })).toBe(false);
+      expect(resolveTypesafeClassifier({}, { ref: 123 })).toBe(false);
     });
   });
 

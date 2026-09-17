@@ -13,3 +13,6 @@ export const ALLOWED_THINKING = [
 ] as const;
 
 export const MAX_HISTORY_SIZE = 20;
+
+/** classifierModels에 이 문자열을 쓰면 TypeSafe System One 분류기를 씀. */
+export const TYPESAFE_CLASSIFIER_REF = "TYPESAFE_CLASSIFIER";

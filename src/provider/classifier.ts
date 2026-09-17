@@ -2,9 +2,10 @@ import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RouterTier, RoutingDecision } from "../types";
 import { resolveAvailableTier, buildRoutingDecision, buildRoutingDecisionLive } from "../routing";
-import { resolveAvailableTierLive, isDirectEffortRef } from "../config";
+import { resolveAvailableTierLive, isDirectEffortRef, resolveTypesafeClassifier } from "../config";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
 import { runClassifierBranch } from "./classifierBranch";
+import { runTypesafeBranch } from "./typesafeBranch";
 import type { RouterProviderState } from "./state";
 
 export const applyClassifierIfNeeded = async (
@@ -29,19 +30,24 @@ export const applyClassifierIfNeeded = async (
   const failedSet = state.failedByChain.get(CLASSIFIER_CHAIN_KEY) ?? new Set<string>();
   let result: { tier: RouterTier; reasoning: string } | undefined;
   try {
-    ({ result } = await runClassifierBranch(
-      registry,
-      profile,
-      state,
-      context,
-      signal,
-      effectiveHistorySize,
-      failedSet,
-      classifierSource,
-      sessionId,
-      modelId,
-      profiles,
-    ));
+    if (resolveTypesafeClassifier(profile, state.currentConfig.classifierModels)) {
+      // TypeSafe 전용: classifierModels/저장된 failureSet을 쓰지 않음.
+      result = await runTypesafeBranch(state, context, signal);
+    } else {
+      ({ result } = await runClassifierBranch(
+        registry,
+        profile,
+        state,
+        context,
+        signal,
+        effectiveHistorySize,
+        failedSet,
+        classifierSource,
+        sessionId,
+        modelId,
+        profiles,
+      ));
+    }
   } catch (e) {
     if (e instanceof Error && e.message === "aborted") throw e;
     return decision;

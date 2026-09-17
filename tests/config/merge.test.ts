@@ -117,5 +117,26 @@ describe("merge를 검증함", () => {
       expect(merged.profiles.p.xhigh?.models).toEqual(["openai/xhigh"]);
       expect(merged.profiles.p.minimal?.models).toEqual(["openai/min"]);
     });
+    it("typesafeConfidenceThreshold를 override에서 가져옴을 검증함", () => {
+      const base: RouterConfig = {
+        profiles: {},
+        typesafeConfidenceThreshold: 0.3,
+      };
+      const merged = mergeConfig(base, { typesafeConfidenceThreshold: 0.9 });
+      expect(merged.typesafeConfidenceThreshold).toBe(0.9);
+    });
+    it("override가 없으면 typesafeConfidenceThreshold는 base를 유지함을 검증함", () => {
+      const base: RouterConfig = {
+        profiles: {},
+        typesafeConfidenceThreshold: 0.4,
+      };
+      const merged = mergeConfig(base, {});
+      expect(merged.typesafeConfidenceThreshold).toBe(0.4);
+    });
+    it("classifierModels TypeSafe 참조를 override에서 가져옴을 검증함", () => {
+      const base: RouterConfig = { profiles: {}, classifierModels: { typesafe: true } };
+      const merged = mergeConfig(base, {});
+      expect(merged.classifierModels).toEqual({ typesafe: true });
+    });
   });
 });

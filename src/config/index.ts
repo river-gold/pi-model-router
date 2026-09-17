@@ -3,8 +3,9 @@ export {
   DEFAULT_HISTORY_SIZE,
   ALLOWED_THINKING,
   MAX_HISTORY_SIZE,
+  TYPESAFE_CLASSIFIER_REF,
 } from "./constants";
-export { isObjectRecord, isRouterTier } from "./guards";
+export { isObjectRecord, isRouterTier, isTypesafeClassifierRef } from "./guards";
 export { parseJsonc } from "./parse-jsonc";
 export { parseCanonicalModelRef, formatModelRef } from "./modelRef";
 export {
@@ -37,6 +38,7 @@ export {
   normalizeClassifierModels,
   resolveClassifierRefModels,
   resolveEffectiveClassifier,
+  resolveTypesafeClassifier,
 } from "./classifier";
 export type { ClassifierSource, ClassifierEntry } from "./classifier";
 export { mergeConfig } from "./merge";

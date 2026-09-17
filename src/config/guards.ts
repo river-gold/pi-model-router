@@ -1,4 +1,4 @@
-import type { RouterTier } from "../types";
+import type { RouterTier, TypesafeClassifierRef } from "../types";
 import { ROUTER_TIERS } from "./constants";
 
 export const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
@@ -6,3 +6,6 @@ export const isObjectRecord = (value: unknown): value is Record<string, unknown>
 
 export const isRouterTier = (value: unknown): value is RouterTier =>
   typeof value === "string" && (ROUTER_TIERS as readonly string[]).includes(value);
+
+export const isTypesafeClassifierRef = (value: unknown): value is TypesafeClassifierRef =>
+  isObjectRecord(value) && value.typesafe === true;

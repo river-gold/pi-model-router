@@ -3,21 +3,29 @@ import type { Context } from "@earendil-works/pi-ai";
 import { applyClassifierIfNeeded } from "../../src/provider/classifier";
 import { CLASSIFIER_CHAIN_KEY } from "../../src/failureMemory";
 import type * as ClassifierBranchModule from "../../src/provider/classifierBranch";
+import type * as TypesafeBranchModule from "../../src/provider/typesafeBranch";
 import type * as RoutingModule from "../../src/routing";
 import type { RouterProfile } from "../../src/types";
 import { makeFakeRegistry, makeFakeProviderState, makeFakeDecision } from "../helpers";
 
 const {
   mockRunClassifierBranch,
+  mockRunTypesafeBranch,
   mockResolveAvailableTier,
   mockBuildRoutingDecision,
   mockBuildRoutingDecisionLive,
 } = vi.hoisted(() => ({
   mockRunClassifierBranch: vi.fn(),
+  mockRunTypesafeBranch: vi.fn(),
   mockResolveAvailableTier: vi.fn(),
   mockBuildRoutingDecision: vi.fn(),
   mockBuildRoutingDecisionLive: vi.fn(),
 }));
+
+vi.mock("../../src/provider/typesafeBranch", async () => {
+  const actual = await vi.importActual<TypesafeBranchModule>("../../src/provider/typesafeBranch");
+  return { ...actual, runTypesafeBranch: mockRunTypesafeBranch };
+});
 
 vi.mock("../../src/provider/classifierBranch", async () => {
   const actual = await vi.importActual<typeof ClassifierBranchModule>(
@@ -381,6 +389,146 @@ describe("provider/classifier 분류기 적용", () => {
       expect.stringContaining("Resolved from high"),
       true,
     );
+  });
+});
+
+describe("provider/classifier TypeSafe 분류기", () => {
+  const decision = makeFakeDecision({ tier: "medium", reasoning: "orig" });
+  const profile: RouterProfile = { medium: { models: ["openai/a"] } };
+  const context: Context = { messages: [{ role: "user", content: "hi", timestamp: 1 }] };
+  const makeTypesafeState = (
+    threshold?: number,
+    classifierModels?: RouterProfile["classifierModels"],
+  ) =>
+    makeFakeProviderState({
+      currentConfig: {
+        profiles: {},
+        historySize: 0,
+        ...(classifierModels === undefined ? {} : { classifierModels }),
+        ...(threshold === undefined ? {} : { typesafeConfidenceThreshold: threshold }),
+      },
+      failedByChain: new Map(),
+    });
+  const sentinel = { typesafe: true } as const;
+  const callWithProfile = (
+    state: ReturnType<typeof makeFakeProviderState>,
+    profileOverride: RouterProfile,
+  ) =>
+    applyClassifierIfNeeded(
+      profileOverride,
+      decision,
+      "modelId",
+      makeFakeRegistry(),
+      state,
+      context,
+      undefined,
+      false,
+      false,
+      "off",
+      "source",
+    );
+  const call = (state: ReturnType<typeof makeFakeProviderState>) =>
+    applyClassifierIfNeeded(
+      profile,
+      decision,
+      "modelId",
+      makeFakeRegistry(),
+      state,
+      context,
+      undefined,
+      false,
+      false,
+      "off",
+      "source",
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockResolveAvailableTier.mockImplementation((_, t) => t);
+    mockBuildRoutingDecision.mockImplementation(
+      (modelId, _profile, tier, reasoning, isClassifier) => ({
+        profile: modelId,
+        tier,
+        reasoning,
+        isClassifier,
+      }),
+    );
+  });
+
+  it("classifierModels가 TypeSafe 참조면 TypeSafe 분기만 쓰고 LLM 분류기는 건너뜀을 검증함", async () => {
+    mockRunTypesafeBranch.mockResolvedValue({
+      tier: "high",
+      reasoning: "TypeSafe chose high (confidence 0.80).",
+    });
+    const result = await call(makeTypesafeState(undefined, sentinel));
+    expect(mockRunTypesafeBranch).toHaveBeenCalledTimes(1);
+    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
+    expect(mockBuildRoutingDecision).toHaveBeenCalledWith(
+      "modelId",
+      profile,
+      "high",
+      "Classifier: TypeSafe chose high (confidence 0.80).",
+      true,
+    );
+    expect(result.tier).toBe("high");
+  });
+
+  it("TypeSafe 분기가 undefined를 반환하면 들어온 decision을 유지함을 검증함", async () => {
+    mockRunTypesafeBranch.mockResolvedValue(undefined);
+    const result = await call(makeTypesafeState(undefined, sentinel));
+    expect(result).toBe(decision);
+    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
+  });
+
+  it("TypeSafe 분기가 예외를 던지면 들어온 decision을 유지함을 검증함", async () => {
+    mockRunTypesafeBranch.mockRejectedValue(new Error("TypeSafe request failed (401): nope"));
+    const result = await call(makeTypesafeState(0.7, sentinel));
+    expect(result).toBe(decision);
+  });
+
+  it("TypeSafe 분기의 abort는 다시 throw함을 검증함", async () => {
+    mockRunTypesafeBranch.mockRejectedValue(new Error("aborted"));
+    await expect(call(makeTypesafeState(undefined, sentinel))).rejects.toThrow("aborted");
+  });
+
+  it("전역 TypeSafe 참조는 프로필 classifierModels가 없을 때만 적용됨을 검증함", async () => {
+    mockRunTypesafeBranch.mockResolvedValue({ tier: "high", reasoning: "typesafe" });
+    mockRunClassifierBranch.mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    });
+    await call(makeTypesafeState(undefined, sentinel));
+    expect(mockRunTypesafeBranch).toHaveBeenCalledTimes(1);
+    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    mockRunClassifierBranch.mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    });
+    await callWithProfile(makeTypesafeState(undefined, sentinel), {
+      medium: { models: ["openai/a"] },
+      classifierModels: [{ model: "openai/c" }],
+    });
+    expect(mockRunTypesafeBranch).not.toHaveBeenCalled();
+    expect(mockRunClassifierBranch).toHaveBeenCalledTimes(1);
+  });
+
+  it("프로필 classifierModels가 TypeSafe 참조면 전역 LLM 설정을 무시함을 검증함", async () => {
+    mockRunTypesafeBranch.mockResolvedValue({ tier: "high", reasoning: "typesafe" });
+    await callWithProfile(makeTypesafeState(undefined, [{ model: "openai/c" }]), {
+      medium: { models: ["openai/a"] },
+      classifierModels: sentinel,
+    });
+    expect(mockRunTypesafeBranch).toHaveBeenCalledTimes(1);
+    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
+  });
+
+  it("TypeSafe 참조가 없으면 LLM 분류기를 씀을 검증함", async () => {
+    mockRunClassifierBranch.mockResolvedValue({
+      result: { tier: "high", reasoning: "classifier reason" },
+    });
+    await call(makeTypesafeState());
+    expect(mockRunTypesafeBranch).not.toHaveBeenCalled();
+    expect(mockRunClassifierBranch).toHaveBeenCalledTimes(1);
   });
 });
 
