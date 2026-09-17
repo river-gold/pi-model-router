@@ -53,39 +53,35 @@ describe("tier를 검증함", () => {
   });
 
   describe("normalizeTierConfig 동작을 검증함", () => {
-    it("유효한 ref는 논리적 참조로 유지함을 검증함", () => {
+    it("제거된 ref 필드는 경고하고 tier를 비활성화함을 검증함", () => {
       const w: string[] = [];
-      expect(normalizeTierConfig({ ref: "copilot#high" }, "p", "high", w)).toEqual({
-        ref: "copilot#high",
-      });
-      expect(w).toEqual([]);
+      expect(normalizeTierConfig({ ref: "copilot#high" }, "p", "high", w)).toBeUndefined();
+      expect(w[0]).toMatch(/removed "ref"/);
     });
-    it("## effort ref는 논리적 참조로 유지함을 검증함", () => {
-      for (const ref of ["deepseek-flash##off", "deepseek-flash#medium##low"]) {
+    it("@ 위임 모델 항목은 유효함을 검증함", () => {
+      for (const entry of ["@copilot", "@copilot#high", "@copilot#high#off"]) {
         const w: string[] = [];
-        expect(normalizeTierConfig({ ref }, "p", "low", w)).toEqual({ ref });
+        expect(normalizeTierConfig({ models: [entry] }, "p", "high", w)?.models).toEqual([entry]);
         expect(w).toEqual([]);
       }
     });
-    it("무효한 ref는 warning 남기고 undefined 반환함을 검증함", () => {
-      for (const ref of [
-        "bad",
-        "#high",
-        "p#",
-        "p#unknown",
-        "a#b#c",
-        "p##",
-        "##off",
-        "p##bogus",
-        "p#bad##off",
-        "#medium##off",
-        "a#b#c##off",
-        "#m##off",
-      ]) {
+    it("무효한 모델 항목은 warning 남기고 제외함을 검증함", () => {
+      for (const entry of ["bad", "@p#bad", "@#high", "@p#h#bogus", "@p#a#b#c"]) {
         const w: string[] = [];
-        expect(normalizeTierConfig({ ref }, "p", "high", w)).toBeUndefined();
-        expect(w.some((x) => x.includes("invalid ref"))).toBe(true);
+        expect(normalizeTierConfig({ models: [entry] }, "p", "high", w)).toBeUndefined();
+        expect(w.some((x) => x.includes("Invalid model"))).toBe(true);
       }
+    });
+    it("@@typesafe 항목은 classifierModels 전용임을 warning으로 알림을 검증함", () => {
+      const w: string[] = [];
+      const r = normalizeTierConfig(
+        { models: ["@@typesafe/jev-latest", "openai/gpt"] },
+        "p",
+        "high",
+        w,
+      );
+      expect(r?.models).toEqual(["openai/gpt"]);
+      expect(w[0]).toContain('"@@typesafe/" entries are only supported in "classifierModels"');
     });
     it("object가 아니면 undefined 반환함을 검증함", () => {
       expect(normalizeTierConfig("string", "p", "high", [])).toBeUndefined();
@@ -124,10 +120,10 @@ describe("tier를 검증함", () => {
       expect(r).toBeUndefined();
       expect(w.some((x) => x.includes("no valid models"))).toBe(true);
     });
-    it("유효한 입력에서 thinking을 추출함을 검증함", () => {
+    it("모델별 #는 tier 강제값으로 승격하지 않음을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig({ models: ["openai/gpt-4o#high"] }, "p", "high", w);
-      expect(r?.thinking).toBe("high");
+      expect(r?.thinking).toBeUndefined();
       expect(r?.models).toEqual(["openai/gpt-4o#high"]);
     });
     it("thinking 없는 유효한 입력을 처리함을 검증함", () => {

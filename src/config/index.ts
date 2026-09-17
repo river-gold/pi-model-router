@@ -8,7 +8,8 @@ export {
 } from "./constants";
 export { isObjectRecord, isRouterTier, isTypesafeClassifierConfig } from "./guards";
 export { parseJsonc } from "./parse-jsonc";
-export { parseCanonicalModelRef, formatModelRef } from "./modelRef";
+export { parseCanonicalModelRef, formatModelRef, parseDelegatedRef } from "./modelRef";
+export type { ParsedDelegatedRef } from "./modelRef";
 export {
   mergeTier,
   normalizeModelList,
@@ -17,10 +18,6 @@ export {
   nearbyTierOrder,
 } from "./tier";
 export {
-  resolveProfileTierRefs,
-  parseTierRef,
-  isTierRef,
-  isDirectEffortRef,
   applyEffortOverride,
   dereferenceTier,
   resolveAvailableTierLive,

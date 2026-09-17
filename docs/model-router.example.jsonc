@@ -1,11 +1,10 @@
 {
   "debug": false,
   "historySize": 0,
-  "classifierModels": ["google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
+  "classifierModels": ["@@typesafe/jev-latest", "google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
   // @@typesafe/<model> 항목은 TypeSafe System One 분류기를 씀 (TYPESAFE_API_KEY 필요).
   // <model>은 API model 필드로 그대로 전달됨 (jev-latest, jev-1.13.0 등. `jev`는 400).
   // 체인 순서대로 시도하고 실패하면 다음 항목으로 폴백하므로 뒤에 LLM 모델/low tier를 두면 됨.
-  "classifierModels": ["@@typesafe/jev-latest"],
   "typesafeConfidenceThreshold": 0.5,
   "tierGuides": {
     "low": "Quick, cheap answers: one-paragraph summaries, commit messages, tiny edits.",
@@ -58,44 +57,40 @@
       "low": { "effort": "low" },
       "minimal": { "effort": "minimal" },
     },
-    // 케이스 1: profile#tier — 대상 tier의 모델과 effort를 그대로 사용. 분류기는 정상 동작.
+    // 케이스 1: `@profile#tier` — models 안에서 대상 tier의 모델을 실시간으로 펼침. 분류기는 정상 동작.
     "refTier": {
-      // → xai/grok-4.6 (effort high, grok high tier의 effort 사용)
-      "high": { "ref": "grok#high" },
+      // → xai/grok-4.6 (effort high, grok high tier의 모델 사용)
+      "high": { "models": ["@grok#high"] },
       // → xai/grok-4.6 (effort medium)
-      "medium": { "ref": "grok#medium" },
+      "medium": { "models": ["@grok#medium"] },
       // → xai/grok-4.6 (effort low)
-      "low": { "ref": "grok#low" },
+      "low": { "models": ["@grok#low"] },
     },
-    // 케이스 2: profile##effort — 요청 tier를 따라가고 effort를 직접 지정.
-    // 모델별 `#`와 tier effort는 무시됨. 기본 tier(medium) 자리에 있으면 분류기를 건너뜀.
+    // 케이스 2: tier effort는 강제값 — 위임으로 펼친 모델과 모델별 `#effort`까지 덮어씀.
     "refEffort": {
       // → xai/grok-4.6#high (grok high tier 모델에 high 강제 지정)
-      "high": { "ref": "grok#high##high" },
-      // → xai/grok-4.6#medium (분류기 스킵, medium 고정)
-      "medium": { "ref": "grok##medium" },
+      "high": { "models": ["@grok#high"], "effort": "high" },
+      // → xai/grok-4.6#medium (grok medium tier 모델에 medium 강제 지정, 분류기 대상 tier 아님)
+      "medium": { "models": ["@grok#medium#medium"] },
       // → xai/grok-4.6#off (grok low tier 모델에 off 강제 지정)
-      "low": { "ref": "grok##off" },
+      "low": { "models": ["@grok#low#off"] },
     },
-    // 케이스 3: profile#tier##effort — 지정 tier의 모델에 effort를 직접 지정.
-    // 요청 tier와 다른 tier를 가리킬 수 있음. 기본 tier(medium) 자리에 있으면 분류기를 건너뜀.
-    "refTierEffort": {
-      // → xai/grok-4.6#high (grok medium tier 모델에 high 강제 지정)
-      "high": { "ref": "grok#medium##high" },
-      // → xai/grok-4.6#medium (grok low tier 모델에 medium 강제 지정, 분류기 스킵)
-      "medium": { "ref": "grok#low##medium" },
-      // → xai/grok-4.6#off (grok medium tier 모델에 off 강제 지정)
-      "low": { "ref": "grok#medium##off" },
+    // 케이스 3: 일반 모델과 위임을 섞을 수 있음. tier 생략 시 기본 티어(medium)로 위임하며
+    // 위임 대상에서는 분류기를 다시 실행하지 않음.
+    "refMixed": {
+      "models": ["@grok", "@deepseek-flash#low", "openai/gpt-5.4-nano#low"],
+      "high": { "models": ["@deepseek-flash#medium", "@grok", "openai/gpt-5.4-nano", "xai/grok-4.6#low"], "effort": "high" },
+      "low": { "models": ["@deepseek-flash#low", "@grok", "openai/gpt-5.4-nano", "xai/grok-4.6#medium"] },
     },
     // 케이스 4: classifierModels ref — 분류기 후보 모델을 다른 프로필에서 가져옴.
-    // 배열 항목 앞에 `@`를 붙임. low tier를 따라가므로 저비용 모델이 분류에 쓰임.
-    // 일반 모델과 섞을 수도 있음: ["@grok##off", "openai/gpt-5.4-nano#low"]
+    // 배열 항목 앞에 `@`를 붙임. 지정 tier 모델이 분류에 쓰임 (tier 생략 시 medium).
+    // 일반 모델과 섞을 수도 있음: ["@grok#low#off", "openai/gpt-5.4-nano#low"]
     "refClassifier": {
       // 분류기 후보: xai/grok-4.6#off, commandcode/xai/grok-4.6#off, opencode-go/grok-4.6#off
-      "classifierModels": ["@grok##off"],
-      "high": { "ref": "grok#high" },
-      "medium": { "ref": "grok#medium" },
-      "low": { "ref": "grok#low" },
+      "classifierModels": ["@grok#low#off"],
+      "high": { "models": ["@grok#high"] },
+      "medium": { "models": ["@grok#medium"] },
+      "low": { "models": ["@grok#low"] },
     },
   },
 }

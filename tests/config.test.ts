@@ -160,7 +160,7 @@ describe("config.ts 설정은", () => {
         "medium",
         w,
       );
-      expect(r?.thinking).toBe("low");
+      expect(r?.thinking).toBeUndefined();
       expect(w.some((x) => x.includes("invalid effort"))).toBe(true);
 
       const w2: string[] = [];
@@ -170,7 +170,7 @@ describe("config.ts 설정은", () => {
         "medium",
         w2,
       );
-      expect(r2?.thinking).toBe("low");
+      expect(r2?.thinking).toBeUndefined();
       expect(w2.some((x) => x.includes("invalid effort"))).toBe(true);
     });
     it("세부 정보를 resolve하고 정규화한다", () => {
@@ -182,7 +182,8 @@ describe("config.ts 설정은", () => {
       };
       const r = normalizeTierConfig(raw, "p", "high", w);
       expect(r?.models).toEqual(["openai/gpt-4o#high", "google/gemini-1.5-flash#low"]);
-      expect(r?.thinking).toBe("high");
+      // 모델별 `#`는 tier 강제값으로 승격되지 않음.
+      expect(r?.thinking).toBeUndefined();
       expect(w.some((x) => x.includes("Invalid model"))).toBe(true);
     });
   });

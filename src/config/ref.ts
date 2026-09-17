@@ -1,137 +1,17 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RoutedTierConfig, RouterProfile, RouterTier } from "../types";
-import { ALLOWED_THINKING, ROUTER_TIERS } from "./constants";
-import { isObjectRecord, isRouterTier } from "./guards";
-import { formatModelRef, parseCanonicalModelRef } from "./modelRef";
+import { ROUTER_TIERS } from "./constants";
+import { isObjectRecord } from "./guards";
+import { formatModelRef, parseCanonicalModelRef, parseDelegatedRef } from "./modelRef";
 import { nearbyTierOrder, resolveAvailableTier } from "./tier";
 
-export interface ParsedTierRef {
-  profile: string;
-  /** 없으면 요청 tier를 따라감 (`profile##effort` 형식). */
-  tier?: RouterTier;
-  /** `##`로 직접 지정한 effort. tier/model의 `#`보다 우선함. */
-  effort?: ThinkingLevel;
-}
-
-const isThinkingLevel = (value: string): value is ThinkingLevel =>
-  (ALLOWED_THINKING as readonly string[]).includes(value);
-
-export const parseTierRef = (raw: string): ParsedTierRef | undefined => {
-  const doubleHash = raw.indexOf("##");
-  if (doubleHash !== -1) {
-    const left = raw.slice(0, doubleHash).trim();
-    const effortRaw = raw.slice(doubleHash + 2).trim();
-    if (!left || !isThinkingLevel(effortRaw)) {
-      return undefined;
-    }
-    const singleHash = left.indexOf("#");
-    if (singleHash === -1) {
-      return { profile: left, effort: effortRaw };
-    }
-    const profile = left.slice(0, singleHash).trim();
-    const tier = left.slice(singleHash + 1).trim();
-    if (!profile || !isRouterTier(tier)) {
-      return undefined;
-    }
-    return { profile, tier, effort: effortRaw };
-  }
-  const parts = raw.split("#");
-  if (parts.length !== 2) {
-    return undefined;
-  }
-  const profile = parts[0]!.trim();
-  const tier = parts[1]!.trim();
-  if (!profile || !tier || !isRouterTier(tier)) {
-    return undefined;
-  }
-  return { profile, tier };
-};
-
-export const isTierRef = (value: unknown): value is { ref: string } =>
-  isObjectRecord(value) && typeof value.ref === "string";
+/** tier의 강제 effort. 로드 시점에 thinking/effort가 통합되어 thinking에 저장됨. */
+export const tierForcing = (config: RoutedTierConfig): ThinkingLevel | undefined =>
+  config.thinking ?? config.effort;
 
 /**
- * 요청 tier 자리에 적힌 ref가 `##effort` 직접 지정인지.
- * 분류기 스킵 판단용: 기본 tier가 강제 지정이면 분류기를 돌릴 의미가 없음.
- */
-export const isDirectEffortRef = (
-  profiles: Record<string, RouterProfile>,
-  profileName: string,
-  tier: RouterTier,
-): boolean => {
-  const profile = profiles[profileName];
-  if (!isObjectRecord(profile)) return false;
-  const entry = profile[tier];
-  if (!isTierRef(entry)) return false;
-  return parseTierRef(entry.ref.trim())?.effort !== undefined;
-};
-
-/**
- * 로드 시점 검증만 수행함. 치환하지 않고 `{ ref }`를 그대로 둬서
- * 라우팅 시점에 실시간으로 추적(dereferenceTier)하도록 함.
- * 형식이 깨졌거나 자기참조인 tier만 비활성화하고 삭제함.
- */
-export const resolveProfileTierRefs = (
-  profiles: Record<string, Record<string, unknown>>,
-  warnings: string[],
-): void => {
-  for (const [profileName, profile] of Object.entries(profiles)) {
-    if (!isObjectRecord(profile)) {
-      continue;
-    }
-    for (const tier of ROUTER_TIERS) {
-      const tierValue = profile[tier];
-      if (!isObjectRecord(tierValue)) {
-        continue;
-      }
-      const ref = tierValue.ref;
-      if (typeof ref !== "string") {
-        continue;
-      }
-      const rawRef = ref.trim();
-      const parsed = parseTierRef(rawRef);
-      if (!parsed) {
-        warnings.push(
-          `Profile "${profileName}" ${tier} tier has invalid ref "${ref}": expected "profile#tier", "profile##effort", or "profile#tier##effort". Tier disabled.`,
-        );
-        delete profile[tier];
-        continue;
-      }
-      const isSelfRef =
-        parsed.profile === profileName && (parsed.tier === undefined || parsed.tier === tier);
-      if (isSelfRef) {
-        warnings.push(
-          `Profile "${profileName}" ${tier} tier references itself ("${rawRef}"). Tier disabled.`,
-        );
-        delete profile[tier];
-      }
-    }
-  }
-};
-
-export interface ResolvedTier {
-  /** 실제 설정이 있는 profile */
-  profileName: string;
-  /** 실제 설정이 있는 tier */
-  tier: RouterTier;
-  /** 참조 추적 후 도달한 구체 설정 */
-  config: RoutedTierConfig;
-  /** 거친 참조 경로 ("a#medium -> b#high") */
-  chain: string[];
-}
-
-const MAX_REF_HOPS = ROUTER_TIERS.length * 6;
-
-const isConcreteTier = (value: unknown): value is RoutedTierConfig =>
-  isObjectRecord(value) &&
-  typeof value.ref !== "string" &&
-  Array.isArray(value.models) &&
-  value.models.length > 0 &&
-  value.models.every((item) => typeof item === "string");
-
-/**
- * `##effort` 직접 지정을 최종 모델 목록에 적용함.
- * 모델별 `#`와 tier 기본값보다 우선해서 `provider/model#effort`로 다시 씀.
+ * 강제 effort를 최종 모델 목록에 적용함.
+ * 모델별 `#`와 위임 대상 tier의 강제값보다 우선해서 `provider/model#effort`로 다시 씀.
  */
 export const applyEffortOverride = (
   config: RoutedTierConfig,
@@ -148,95 +28,132 @@ export const applyEffortOverride = (
   };
 };
 
+export interface ResolvedTier {
+  /** 요청한 원본 profile */
+  profileName: string;
+  /** 요청한 원본 tier (가까운 tier로 폴백되면 폴백된 tier) */
+  tier: RouterTier;
+  /** models는 위임을 실시간으로 펼친 최종 모델 목록 */
+  config: RoutedTierConfig;
+  /** 거친 위임 경로 ("cheap#low -> glm-flash#medium") */
+  chain: string[];
+}
+
+const isConcreteTier = (value: unknown): value is RoutedTierConfig =>
+  isObjectRecord(value) && Array.isArray(value.models) && value.models.length > 0;
+
 /**
- * `profiles[profileName][tier]`를 실시간으로 추적함.
- * ref 체인을 끝까지 따라가고(순환 방지), 대상 tier가 없으면 대상 profile 안에서
- * 가까운 tier(resolveAvailableTier 순서)로 폴백함. 모두 실패하면 undefined.
- * `##effort`가 있으면 tier 없이 요청 tier를 따라가고, 최종 모델에 effort를 직접 지정함.
- * 체인에 `##`가 여러 개면 요청 측에 가장 가까운(첫 번째) 지정을 유지함.
+ * profile의 tier 원본 설정을 찾음. 해당 tier가 없으면
+ * 같은 profile 안의 가까운 tier(resolveAvailableTier 순서)로 폴백함.
+ */
+const tierEntryOf = (
+  profiles: Record<string, RouterProfile>,
+  profileName: string,
+  tier: RouterTier,
+): { entry: RoutedTierConfig; tier: RouterTier } | undefined => {
+  const profile = profiles[profileName];
+  if (!isObjectRecord(profile)) return undefined;
+  const entry = profile[tier];
+  if (isConcreteTier(entry)) return { entry, tier };
+  const concrete: Partial<Record<RouterTier, RoutedTierConfig>> = {};
+  for (const t of ROUTER_TIERS) {
+    const value = profile[t];
+    if (isConcreteTier(value)) concrete[t] = value;
+  }
+  const picked = resolveAvailableTier(concrete, tier);
+  const pickedEntry = concrete[picked];
+  return pickedEntry ? { entry: pickedEntry, tier: picked } : undefined;
+};
+
+/** 펼침 대기 중인 모델 항목. override는 바깥에서 누적된 강제 effort (first-wins). */
+interface ModelNode {
+  raw: string;
+  override: ThinkingLevel | undefined;
+  visited: ReadonlySet<string>;
+}
+
+interface ExpansionContext {
+  profiles: Record<string, RouterProfile>;
+  hopsLeft: number;
+  chain: string[];
+  out: string[];
+}
+
+/** 위임 경로 기록. 연속 중복은 합침. */
+const pushChain = (ctx: ExpansionContext, key: string): void => {
+  if (ctx.chain[ctx.chain.length - 1] !== key) ctx.chain.push(key);
+};
+
+/**
+ * 큐의 맨 앞 모델을 처리하고 나머지로 꼬리 재귀함.
+ * - 일반 모델: 강제 effort가 있으면 덮어써서 출력함.
+ * - `@` 위임: 대상 tier 설정을 찾아(없으면 가까운 tier) 자식 모델 노드를 큐 맨 앞에 넣어 확장함.
+ *   순환하거나 해석 불가인 위임 항목은 건너뜀.
+ */
+const expandQueue = (ctx: ExpansionContext, queue: ModelNode[]): void => {
+  const head = queue[0];
+  if (head === undefined || ctx.hopsLeft <= 0) return;
+  ctx.hopsLeft -= 1;
+  const rest = queue.slice(1);
+  const trimmed = head.raw.trim();
+  if (trimmed.startsWith("@")) {
+    const parsed = parseDelegatedRef(trimmed.slice(1).trim());
+    const found = parsed ? tierEntryOf(ctx.profiles, parsed.profile, parsed.tier) : undefined;
+    if (!parsed || !found || head.visited.has(`${parsed.profile}#${found.tier}`)) {
+      expandQueue(ctx, rest);
+      return;
+    }
+    pushChain(ctx, `${parsed.profile}#${found.tier}`);
+    const override = head.override ?? parsed.effort ?? tierForcing(found.entry);
+    const nextVisited = new Set(head.visited);
+    nextVisited.add(`${parsed.profile}#${found.tier}`);
+    expandQueue(ctx, [
+      ...found.entry.models!.map((raw) => ({ raw, override, visited: nextVisited })),
+      ...rest,
+    ]);
+    return;
+  }
+  try {
+    const { provider, modelId, thinking } = parseCanonicalModelRef(trimmed);
+    ctx.out.push(formatModelRef(provider, modelId, head.override ?? thinking));
+  } catch {
+    // 정규화에서 걸러지므로 발생하지 않음. 방어적으로 건너뜀.
+  }
+  expandQueue(ctx, rest);
+};
+
+/** 펼침 예산. 위임이 깊어져도 종료되도록 함. */
+const MAX_EXPANSION_HOPS = 256;
+
+/**
+ * `profiles[profileName][tier]`의 models를 실시간으로 펼침.
+ * models의 `@profile` / `@profile#tier` / `#profile#tier#effort` 항목을
+ * 대상 profile/tier의 모델로 확장하고, tier의 강제 effort(thinking/effort)를
+ * 모델별 `#`와 위임 결과보다 우선 적용함. 대상 tier가 없으면 가까운 tier로 폴백함.
+ * 펼친 모델이 하나도 없으면 undefined.
  */
 export const dereferenceTier = (
   profiles: Record<string, RouterProfile>,
   profileName: string,
   tier: RouterTier,
 ): ResolvedTier | undefined => {
-  const visited = new Set<string>();
-  const chain: string[] = [];
-  let currentProfile = profileName;
-  let currentTier = tier;
-  let effortOverride: ThinkingLevel | undefined;
-
-  for (let hop = 0; hop < MAX_REF_HOPS; hop++) {
-    const key = `${currentProfile}#${currentTier}`;
-    if (visited.has(key)) {
-      return undefined;
-    }
-    visited.add(key);
-
-    const targetProfile = profiles[currentProfile];
-    if (!isObjectRecord(targetProfile)) {
-      return undefined;
-    }
-    const entry = targetProfile[currentTier];
-    if (!isObjectRecord(entry)) {
-      chain.push(key);
-      return nearbyDereference(profiles, currentProfile, currentTier, chain, effortOverride);
-    }
-    const ref = entry.ref;
-    if (typeof ref === "string") {
-      const parsed = parseTierRef(ref.trim());
-      if (!parsed) {
-        return undefined;
-      }
-      chain.push(parsed.effort ? `${key}##${parsed.effort}` : key);
-      if (parsed.effort && effortOverride === undefined) {
-        effortOverride = parsed.effort;
-      }
-      currentProfile = parsed.profile;
-      currentTier = parsed.tier ?? currentTier;
-      continue;
-    }
-    if (!isConcreteTier(entry)) {
-      return undefined;
-    }
-    chain.push(key);
-    return {
-      profileName: currentProfile,
-      tier: currentTier,
-      config: applyEffortOverride(entry, effortOverride),
-      chain: [...chain],
-    };
-  }
-  return undefined;
-};
-
-/** 대상 profile 안에서 ref가 아닌 가까운 tier를 실시간 추적해서 찾음. 순서 규칙은 resolveAvailableTier와 공유함. */
-const nearbyDereference = (
-  profiles: Record<string, RouterProfile>,
-  targetProfileName: string,
-  wantedTier: RouterTier,
-  chain: string[],
-  effortOverride: ThinkingLevel | undefined,
-): ResolvedTier | undefined => {
-  // 호출 전 currentProfile이 객체임이 확인되므로 직접 인덱싱함.
-  const targetProfile = profiles[targetProfileName];
-  const concrete: Partial<Record<RouterTier, RoutedTierConfig>> = {};
-  for (const t of ROUTER_TIERS) {
-    const value = targetProfile[t];
-    if (isConcreteTier(value)) {
-      concrete[t] = value;
-    }
-  }
-  const picked = resolveAvailableTier(concrete, wantedTier);
-  const pickedConfig = concrete[picked];
-  if (!pickedConfig) return undefined;
-  const key = `${targetProfileName}#${picked}`;
-  chain.push(key);
+  const located = tierEntryOf(profiles, profileName, tier);
+  if (!located) return undefined;
+  const topKey = `${profileName}#${located.tier}`;
+  const ctx: ExpansionContext = { profiles, hopsLeft: MAX_EXPANSION_HOPS, chain: [], out: [] };
+  pushChain(ctx, topKey);
+  const topVisited: ReadonlySet<string> = new Set([topKey]);
+  const topOverride = tierForcing(located.entry);
+  expandQueue(
+    ctx,
+    located.entry.models!.map((raw) => ({ raw, override: topOverride, visited: topVisited })),
+  );
+  if (ctx.out.length === 0) return undefined;
   return {
-    profileName: targetProfileName,
-    tier: picked,
-    config: applyEffortOverride(pickedConfig, effortOverride),
-    chain: [...chain],
+    profileName,
+    tier: located.tier,
+    config: { ...located.entry, models: ctx.out, thinking: tierForcing(located.entry) },
+    chain: [...ctx.chain],
   };
 };
 

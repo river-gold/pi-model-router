@@ -437,7 +437,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
       attempts: [],
     });
     const profiles: Record<string, RouterProfile> = {
-      myModel: { classifierModels: { ref: "base##off" } },
+      myModel: { classifierModels: { ref: "base#low#off" } },
       base: { low: { models: ["openai/gpt"] } },
     };
     const state = makeState();

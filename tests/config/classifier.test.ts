@@ -72,7 +72,7 @@ describe("classifier를 검증함", () => {
       expect(normalizeClassifierModels("openai/gpt-4o", w, "ctx")).toBeUndefined();
       expect(w[0]).toMatch(/Expected an array/);
       const w2: string[] = [];
-      expect(normalizeClassifierModels("@cheap##off", w2, "ctx")).toBeUndefined();
+      expect(normalizeClassifierModels("@cheap#low#off", w2, "ctx")).toBeUndefined();
       expect(w2[0]).toMatch(/Expected an array/);
     });
     it("숫자/객체 입력은 warning 남기고 undefined 반환함을 검증함", () => {
@@ -80,7 +80,7 @@ describe("classifier를 검증함", () => {
       expect(normalizeClassifierModels(123, w, "ctx")).toBeUndefined();
       expect(w[0]).toMatch(/Expected an array/);
       const w2: string[] = [];
-      expect(normalizeClassifierModels({ ref: "cheap##off" }, w2, "ctx")).toBeUndefined();
+      expect(normalizeClassifierModels({ ref: "cheap#low#off" }, w2, "ctx")).toBeUndefined();
       expect(w2[0]).toMatch(/Expected an array/);
     });
     it("유효/무효 혼합 배열을 처리함을 검증함", () => {
@@ -121,7 +121,7 @@ describe("classifier를 검증함", () => {
       expect(w[0]).toMatch(/expected "@@typesafe\/<model>"/);
     });
     it("@로 시작하는 항목은 논리적 참조로 유지함을 검증함", () => {
-      for (const ref of ["cheap##off", "cheap#low", "cheap#low##off"]) {
+      for (const ref of ["cheap#medium", "cheap#low", "cheap#low#off"]) {
         const w: string[] = [];
         expect(normalizeClassifierModels([`@${ref}`], w, "ctx")).toEqual([{ ref }]);
         expect(w).toEqual([]);
@@ -129,28 +129,28 @@ describe("classifier를 검증함", () => {
     });
     it("@ 참조 앞뒤 공백을 제거함을 검증함", () => {
       const w: string[] = [];
-      expect(normalizeClassifierModels(["  @ cheap##off  "], w, "ctx")).toEqual([
-        { ref: "cheap##off" },
+      expect(normalizeClassifierModels(["  @ cheap#low#off  "], w, "ctx")).toEqual([
+        { ref: "cheap#low#off" },
       ]);
       expect(w).toEqual([]);
     });
     it("잘못된 @ 참조는 warning 남기고 건너뜀을 검증함", () => {
       const w: string[] = [];
-      expect(normalizeClassifierModels(["@badformat"], w, "ctx")).toBeUndefined();
-      expect(w[0]).toMatch(/Invalid ctx\[0\] "@badformat"/);
+      expect(normalizeClassifierModels(["@p#bad", "@#high", "@p#h#bogus"], w, "ctx")).toBeUndefined();
+      expect(w[0]).toMatch(/Invalid ctx\[0\] "@p#bad"/);
     });
     it("배열 안의 @ 참조와 일반 모델을 함께 처리함을 검증함", () => {
       const w: string[] = [];
-      expect(normalizeClassifierModels(["@cheap##off", "openai/a#low"], w, "ctx")).toEqual([
-        { ref: "cheap##off" },
+      expect(normalizeClassifierModels(["@cheap#low#off", "openai/a#low"], w, "ctx")).toEqual([
+        { ref: "cheap#low#off" },
         { model: "openai/a", thinking: "low" },
       ]);
       expect(w).toEqual([]);
     });
     it("배열 안의 잘못된 항목은 warning 남기고 건너뜀을 검증함", () => {
       const w: string[] = [];
-      expect(normalizeClassifierModels(["@cheap##off", { ref: "x" }, 1], w, "ctx")).toEqual([
-        { ref: "cheap##off" },
+      expect(normalizeClassifierModels(["@cheap#low#off", { ref: "x" }, 1], w, "ctx")).toEqual([
+        { ref: "cheap#low#off" },
       ]);
       expect(w.length).toBe(2);
       expect(w[0]).toMatch(/expected "provider\/model#thinking"/);
@@ -158,10 +158,10 @@ describe("classifier를 검증함", () => {
     it("모든 종류의 항목 순서를 유지함을 검증함", () => {
       const w: string[] = [];
       expect(
-        normalizeClassifierModels(["@@typesafe/jev", "@base##off", "openai/a#low"], w, "ctx"),
+        normalizeClassifierModels(["@@typesafe/jev", "@base#low#off", "openai/a#low"], w, "ctx"),
       ).toEqual([
         { typesafe: true, model: "jev" },
-        { ref: "base##off" },
+        { ref: "base#low#off" },
         { model: "openai/a", thinking: "low" },
       ]);
       expect(w).toEqual([]);
@@ -270,7 +270,7 @@ describe("classifier를 검증함", () => {
         classifierModels: [
           { typesafe: true, model: "jev" },
           { model: "openai/a", thinking: "low" },
-          { ref: "base##off" },
+          { ref: "base#low#off" },
         ],
       };
       const profiles: Record<string, RouterProfile> = {
@@ -292,8 +292,8 @@ describe("classifier를 검증함", () => {
         medium: { models: ["c/m3"] },
       },
     });
-    it("profile##effort는 low tier 모델에 effort를 지정함을 검증함", () => {
-      expect(resolveClassifierRefModels("cheap##off", refProfiles())).toEqual([
+    it("profile#tier#effort는 지정 tier 모델에 effort를 지정함을 검증함", () => {
+      expect(resolveClassifierRefModels("cheap#low#off", refProfiles())).toEqual([
         { model: "c/m1", thinking: "off" },
         { model: "c/m2", thinking: "off" },
       ]);
@@ -303,8 +303,8 @@ describe("classifier를 검증함", () => {
         { model: "c/m3", thinking: undefined },
       ]);
     });
-    it("profile#tier##effort는 지정 tier에 effort를 지정함을 검증함", () => {
-      expect(resolveClassifierRefModels("cheap#medium##low", refProfiles())).toEqual([
+    it("profile#tier#effort는 지정 tier에 effort를 지정함을 검증함", () => {
+      expect(resolveClassifierRefModels("cheap#medium#low", refProfiles())).toEqual([
         { model: "c/m3", thinking: "low" },
       ]);
     });
@@ -312,15 +312,16 @@ describe("classifier를 검증함", () => {
       const profiles: Record<string, RouterProfile> = {
         cheap: { high: { models: ["c/h"] } },
       };
-      expect(resolveClassifierRefModels("cheap##off", profiles)).toEqual([
+      expect(resolveClassifierRefModels("cheap#low#off", profiles)).toEqual([
         { model: "c/h", thinking: "off" },
       ]);
     });
     it("형식 오류 ref는 undefined를 검증함", () => {
+      expect(resolveClassifierRefModels("bad#invalidtier#off", refProfiles())).toBeUndefined();
       expect(resolveClassifierRefModels("badformat", refProfiles())).toBeUndefined();
     });
     it("없는 profile은 undefined를 검증함", () => {
-      expect(resolveClassifierRefModels("ghost##off", refProfiles())).toBeUndefined();
+      expect(resolveClassifierRefModels("ghost#low#off", refProfiles())).toBeUndefined();
     });
     it("해석 불가 ref는 undefined를 검증함", () => {
       const profiles: Record<string, RouterProfile> = { auto: {} };
@@ -331,7 +332,7 @@ describe("classifier를 검증함", () => {
   describe("resolveEffectiveClassifier ref 확장을 검증함", () => {
     const refProfiles = (): Record<string, RouterProfile> => ({
       auto: {
-        classifierModels: [{ ref: "cheap##off" }],
+        classifierModels: [{ ref: "cheap#low#off" }],
         low: { models: ["auto/a#low"] },
       },
       cheap: {
@@ -356,7 +357,7 @@ describe("classifier를 검증함", () => {
       expect(r.source).toBe("global");
     });
     it("profiles 없이는 ref를 펼치지 않음을 검증함", () => {
-      const profile: RouterProfile = { classifierModels: [{ ref: "cheap##off" }] };
+      const profile: RouterProfile = { classifierModels: [{ ref: "cheap#low#off" }] };
       const r = resolveEffectiveClassifier(profile, undefined);
       expect(r.classifiers).toBeUndefined();
       expect(r.source).toBe("none");
@@ -364,7 +365,7 @@ describe("classifier를 검증함", () => {
     it("해석 불가 ref는 건너뜀을 검증함", () => {
       const profiles: Record<string, RouterProfile> = {
         auto: {
-          classifierModels: [{ ref: "ghost##off" }],
+          classifierModels: [{ ref: "ghost#low#off" }],
           low: { models: ["auto/a#low"] },
         },
       };
@@ -377,7 +378,7 @@ describe("classifier를 검증함", () => {
       const profile: RouterProfile = {
         classifierModels: [{ model: "openai/a", thinking: "low" as const }],
       };
-      const r = resolveEffectiveClassifier(profile, [{ ref: "cheap##off" }], profiles);
+      const r = resolveEffectiveClassifier(profile, [{ ref: "cheap#low#off" }], profiles);
       expect(r.classifiers).toEqual([
         { model: "openai/a", thinking: "low", source: "profile" },
         { model: "c/m1", thinking: "off", source: "global" },
@@ -392,14 +393,14 @@ describe("classifier를 검증함", () => {
       const { config, warnings } = normalizeConfig({
         profiles: {
           auto: {
-            classifierModels: ["@cheap##off"],
+            classifierModels: ["@cheap#low#off"],
             low: { models: ["auto/a"] },
           },
           cheap: { low: { models: ["c/m"] } },
         },
       });
       expect(warnings).toEqual([]);
-      expect(config.profiles.auto!.classifierModels).toEqual([{ ref: "cheap##off" }]);
+      expect(config.profiles.auto!.classifierModels).toEqual([{ ref: "cheap#low#off" }]);
     });
     it("global ref가 논리적 참조로 로드됨을 검증함", () => {
       const { config, warnings } = normalizeConfig({
@@ -429,7 +430,7 @@ describe("classifier를 검증함", () => {
       const { warnings } = normalizeConfig({
         profiles: {
           auto: {
-            classifierModels: ["@badformat"],
+            classifierModels: ["@p#bad"],
             low: { models: ["auto/a"] },
           },
         },

@@ -1,39 +1,24 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RoutedTierConfig, RouterTier } from "../types";
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from "../constants";
-import { ALLOWED_THINKING, ROUTER_TIERS } from "./constants";
+import { ALLOWED_THINKING } from "./constants";
 import { isObjectRecord } from "./guards";
-import { parseCanonicalModelRef } from "./modelRef";
+import { parseCanonicalModelRef, parseDelegatedRef } from "./modelRef";
 
 const NEARBY_TIER_ORDER: RouterTier[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
 const isThinkingLevel = (value: string): value is ThinkingLevel =>
   (ALLOWED_THINKING as readonly string[]).includes(value);
 
-/**
- * tier ref 형식 검사. `profile#tier`, `profile##effort`, `profile#tier##effort`를 허용함.
- * 실제 파싱은 src/config/ref.ts의 parseTierRef가 담당함.
- */
-const isValidTierRef = (ref: string): boolean => {
-  const doubleHash = ref.indexOf("##");
-  if (doubleHash !== -1) {
-    const left = ref.slice(0, doubleHash).trim();
-    const effort = ref.slice(doubleHash + 2).trim();
-    if (!left || !isThinkingLevel(effort)) return false;
-    if (!left.includes("#")) return true;
-    const parts = left.split("#");
-    return (
-      parts.length === 2 &&
-      parts[0]!.trim().length > 0 &&
-      (ROUTER_TIERS as readonly string[]).includes(parts[1]!.trim())
-    );
+/** 모델 항목 검증: 일반 모델 참조 또는 `@` 위임 참조. */
+const isValidModelEntry = (entry: string): boolean => {
+  if (entry.startsWith("@")) return parseDelegatedRef(entry.slice(1)) !== undefined;
+  try {
+    parseCanonicalModelRef(entry);
+    return true;
+  } catch {
+    return false;
   }
-  const parts = ref.split("#");
-  return (
-    parts.length === 2 &&
-    parts[0]!.trim().length > 0 &&
-    (ROUTER_TIERS as readonly string[]).includes(parts[1]!.trim())
-  );
 };
 
 /**
@@ -71,11 +56,8 @@ export const mergeTier = (
   next?: Partial<RoutedTierConfig>,
 ): RoutedTierConfig | undefined => {
   if (!existing && !next) return undefined;
-  if (!next) return existing;
-  if (!existing) return next;
-  if (typeof next.ref === "string") {
-    return { ...next };
-  }
+  if (typeof next === "undefined") return existing;
+  if (typeof existing === "undefined") return next;
   return { ...existing, ...next };
 };
 
@@ -94,14 +76,19 @@ export const normalizeModelList = (
       warnings.push(`Invalid model entry "${String(m)}" in profile "${profileName}" ${label}.`);
       continue;
     }
-    try {
-      parseCanonicalModelRef(m.trim());
-      models.push(m.trim());
-    } catch (error) {
+    if (m.trim().startsWith("@@")) {
       warnings.push(
-        `Invalid model "${m}" in profile "${profileName}" ${label}: ${error instanceof Error ? error.message : String(error)}`,
+        `Invalid model "${m}" in profile "${profileName}" ${label}: "@@typesafe/" entries are only supported in "classifierModels", not in tier/profile "models".`,
       );
+      continue;
     }
+    if (!isValidModelEntry(m.trim())) {
+      warnings.push(
+        `Invalid model "${m}" in profile "${profileName}" ${label}: expected "provider/model[#thinking]" or "@profile[#tier[#effort]]".`,
+      );
+      continue;
+    }
+    models.push(m.trim());
   }
   return models.length > 0 ? models : undefined;
 };
@@ -118,20 +105,14 @@ export const normalizeTierConfig = (
   }
 
   const record = value;
-  const rawRef = record.ref;
-  if (typeof rawRef === "string") {
-    const trimmed = rawRef.trim();
-    if (!isValidTierRef(trimmed)) {
-      warnings.push(
-        `Profile "${profileName}" ${tier} tier has invalid ref "${String(rawRef)}": expected "profile#tier", "profile##effort", or "profile#tier##effort". Tier disabled.`,
-      );
-      return undefined;
-    }
-    // 논리적 참조 유지: models 치환 없이 ref만 보관하고 라우팅 시점에 추적함.
-    return { ref: trimmed };
+  if (record.ref !== undefined) {
+    warnings.push(
+      `Profile "${profileName}" ${tier} tier has removed "ref" field: use "@profile[#tier[#effort]]" entries in "models" instead. Tier disabled.`,
+    );
+    return undefined;
   }
   const rawModels = record.models;
-  // 티어 `models`가 없으면 프로필 기본값 상속. ref 티어는 상속 제외.
+  // 티어 `models`가 없으면 프로필 기본값 상속.
   let models = normalizeModelList(rawModels, profileName, `${tier} tier`, warnings);
   if (!models && profileModels?.length) {
     models = [...profileModels];
@@ -146,8 +127,6 @@ export const normalizeTierConfig = (
     }
     return undefined;
   }
-
-  const primaryParsed = parseCanonicalModelRef(models[0]!);
 
   const invalidTierDefault = (key: string, raw: unknown): undefined => {
     warnings.push(
@@ -174,9 +153,8 @@ export const normalizeTierConfig = (
       `Profile "${profileName}" ${tier} tier has both "thinking" and "effort": using "thinking" ("${tierThinking}").`,
     );
   }
-  // `#` 없는 모델의 기본값. 모델별 `#`가 있으면 모델값 우선 (routing/delegate에서 `??` 처리).
-  // 티어 기본값(thinking/effort)이 있으면 그것을 저장하고, 없을 때만 primary `#`를 승격함.
-  const thinking = tierThinking ?? tierEffort ?? primaryParsed.thinking;
+  // 티어 강제 effort. 모델별 `#`와 위임 결과보다 우선함 (라우팅/확장에서 강제 적용).
+  const thinking = tierThinking ?? tierEffort;
 
   let tierContextWindow: number | undefined;
   if (typeof record.contextWindow === "number") {

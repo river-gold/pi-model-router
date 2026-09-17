@@ -6,7 +6,6 @@ import {
   formatModelRef,
   resolveAvailableTier,
   dereferenceTier,
-  isTierRef,
   resolveAvailableTierLive,
 } from "./config";
 
@@ -32,14 +31,10 @@ export const buildRoutingDecision = (
   if (!routed) {
     throw new Error(`Profile "${profileName}" has no configuration for the ${tier} tier.`);
   }
-  if (isTierRef(routed)) {
-    throw new Error(
-      `Profile "${profileName}" ${tier} tier is a logical ref ("${routed.ref}"). Use buildRoutingDecisionLive with the full profiles map to resolve it.`,
-    );
-  }
   const primaryRef = routed.models![0];
   const { provider, modelId, thinking } = parseCanonicalModelRef(primaryRef);
-  const effectiveThinking = thinking ?? routed.thinking;
+  // tier 강제 effort가 모델별 `#`보다 우선함.
+  const effectiveThinking = routed.thinking ?? thinking;
 
   return {
     profile: profileName,
@@ -55,7 +50,7 @@ export const buildRoutingDecision = (
 };
 
 /**
- * 논리적 ref를 실시간 추적해서 라우팅 결정을 만듦.
+ * tier의 `@` 위임을 실시간으로 펼쳐서 라우팅 결정을 만듦.
  * decision.profile/tier는 요청한 원본 좌표를 유지하고, reasoning에 실제 해석 경로를 남김.
  */
 export const buildRoutingDecisionLive = (
@@ -70,7 +65,8 @@ export const buildRoutingDecisionLive = (
     throw new Error(`Profile "${profileName}" has no resolvable configuration for ${tier} tier.`);
   }
   const { provider, modelId, thinking } = parseCanonicalModelRef(found.resolved.config.models![0]!);
-  const effectiveThinking = thinking ?? found.resolved.config.thinking;
+  // tier 강제 effort가 모델별 `#`보다 우선함.
+  const effectiveThinking = found.resolved.config.thinking ?? thinking;
   let finalReasoning = reasoning;
   if (found.tier !== tier) {
     finalReasoning = `Resolved from ${tier} to ${found.tier} tier (${tier} tier is not configured). Original: ${reasoning}`;

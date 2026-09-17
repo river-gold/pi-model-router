@@ -187,42 +187,42 @@ describe("registry를 검증함", () => {
       expect(resolveMaxTokens("high", profile, registry)).toBe(77777);
     });
   });
-  describe("논리적 ref 해석을 검증함", () => {
-    it("ref tier는 기본 contextWindow를 검증함", () => {
-      const profile: RouterProfile = { high: { ref: "copilot#high" } };
+  describe("위임 tier 해석을 검증함", () => {
+    it("위임 tier는 기본 contextWindow를 검증함", () => {
+      const profile: RouterProfile = { high: { models: ["@copilot#high"] } };
       expect(resolveContextWindow("high", profile, undefined)).toBe(128000);
     });
-    it("ref tier는 기본 maxTokens를 검증함", () => {
-      const profile: RouterProfile = { high: { ref: "copilot#high" } };
+    it("위임 tier는 기본 maxTokens를 검증함", () => {
+      const profile: RouterProfile = { high: { models: ["@copilot#high"] } };
       expect(resolveMaxTokens("high", profile, undefined)).toBe(16384);
     });
     it("live로 추적된 사용자 contextWindow를 검증함", () => {
       const profiles: Record<string, RouterProfile> = {
-        auto: { medium: { ref: "copilot#high" } },
+        auto: { medium: { models: ["@copilot#high"], contextWindow: 50000 } },
         copilot: {
-          high: { models: ["openai/gpt-4o"], contextWindow: 50000 },
+          high: { models: ["openai/gpt-4o"] },
         },
       };
       expect(resolveContextWindowLive(profiles, "auto", "medium", undefined)).toBe(50000);
     });
     it("live로 추적된 사용자 maxTokens를 검증함", () => {
       const profiles: Record<string, RouterProfile> = {
-        auto: { medium: { ref: "copilot#high" } },
+        auto: { medium: { models: ["@copilot#high"], maxTokens: 4000 } },
         copilot: {
-          high: { models: ["openai/gpt-4o"], maxTokens: 4000 },
+          high: { models: ["openai/gpt-4o"] },
         },
       };
       expect(resolveMaxTokensLive(profiles, "auto", "medium", undefined)).toBe(4000);
     });
     it("live 해석 불가 시 기본 contextWindow를 검증함", () => {
       const profiles: Record<string, RouterProfile> = {
-        auto: { medium: { ref: "missing#high" } },
+        auto: { medium: { models: ["@missing#high"] } },
       };
       expect(resolveContextWindowLive(profiles, "auto", "medium", undefined)).toBe(128000);
     });
     it("live 해석 불가 시 기본 maxTokens를 검증함", () => {
       const profiles: Record<string, RouterProfile> = {
-        auto: { medium: { ref: "missing#high" } },
+        auto: { medium: { models: ["@missing#high"] } },
       };
       expect(resolveMaxTokensLive(profiles, "auto", "medium", undefined)).toBe(16384);
     });

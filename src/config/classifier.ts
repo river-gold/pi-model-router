@@ -4,12 +4,11 @@ import type {
   ClassifierRefConfig,
   ClassifierSettingEntry,
   RouterProfile,
-  RouterTier,
   TypesafeClassifierConfig,
 } from "../types";
 import { CLASSIFIER_REF_PREFIX, TYPESAFE_ENTRY_PREFIX } from "./constants";
-import { formatModelRef, parseCanonicalModelRef } from "./modelRef";
-import { dereferenceTier, parseTierRef, applyEffortOverride } from "./ref";
+import { formatModelRef, parseCanonicalModelRef, parseDelegatedRef } from "./modelRef";
+import { dereferenceTier, applyEffortOverride } from "./ref";
 import { isTypesafeClassifierConfig } from "./guards";
 
 export const normalizeClassifierConfig = (
@@ -30,7 +29,7 @@ export const normalizeClassifierConfig = (
   }
 };
 
-const ENTRY_HINT = `expected "provider/model#thinking", "@profile#tier", or "@@typesafe/<model>"`;
+const ENTRY_HINT = `expected "provider/model#thinking", "@profile", "@profile#tier", "@profile#tier#effort", or "@@typesafe/<model>"`;
 
 const normalizeClassifierRef = (
   raw: string,
@@ -38,9 +37,9 @@ const normalizeClassifierRef = (
   contextLabel: string,
 ): ClassifierRefConfig | undefined => {
   const ref = raw.slice(CLASSIFIER_REF_PREFIX.length).trim();
-  if (!parseTierRef(ref)) {
+  if (!parseDelegatedRef(ref)) {
     warnings.push(
-      `Invalid ${contextLabel} "${raw}": expected "@profile#tier", "@profile##effort", or "@profile#tier##effort".`,
+      `Invalid ${contextLabel} "${raw}": expected "@profile", "@profile#tier", or "@profile#tier#effort".`,
     );
     return undefined;
   }
@@ -108,26 +107,20 @@ export type ClassifierEntry =
   | (ClassifierConfig & { source: ClassifierSource })
   | (TypesafeClassifierConfig & { source: ClassifierSource });
 
-/** `##effort`만 있을 때 따라갈 기본 tier. 분류기는 저비용 모델이 어울리고 기존 폴백도 low tier를 씀. */
-const CLASSIFIER_DEFAULT_TIER: RouterTier = "low";
-
 /**
  * classifierModels ref를 실시간 추적해서 분류기 후보 목록으로 펼침.
- * `##effort` 지정은 최종 모델에 그대로 반영됨 (dereferenceTier가 `#effort`로 다시 씀).
+ * tier 생략 시 대상 profile의 기본 티어(medium)를 따라감.
+ * `#effort` 직접 지정은 최종 모델에 그대로 반영됨 (dereferenceTier가 강제 effort를 적용함).
  */
 export const resolveClassifierRefModels = (
   ref: string,
   profiles: Record<string, RouterProfile>,
 ): ClassifierConfig[] | undefined => {
-  const parsed = parseTierRef(ref.trim());
+  const parsed = parseDelegatedRef(ref.trim());
   if (!parsed) return undefined;
-  const resolved = dereferenceTier(
-    profiles,
-    parsed.profile,
-    parsed.tier ?? CLASSIFIER_DEFAULT_TIER,
-  );
+  const resolved = dereferenceTier(profiles, parsed.profile, parsed.tier);
   if (!resolved) return undefined;
-  // ref 자리에 직접 적힌 ##가 체인 안쪽 ##보다 우선함 (first-wins).
+  // ref 자리에 직접 적힌 #effort가 위임 경로의 강제값보다 우선함 (first-wins).
   const config = parsed.effort
     ? applyEffortOverride(resolved.config, parsed.effort)
     : resolved.config;

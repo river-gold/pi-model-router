@@ -10,7 +10,7 @@ import type { RouterProfile } from "../src/types";
 const profiles = (over: Record<string, RouterProfile> = {}): Record<string, RouterProfile> => ({
   auto: {
     high: { models: ["xai/grok-4.6#high"] },
-    medium: { ref: "copilot#high" },
+    medium: { models: ["@copilot#high"] },
     low: { models: ["ollama-cloud/deepseek-v4-flash:0731#low"] },
   },
   copilot: {
@@ -20,14 +20,12 @@ const profiles = (over: Record<string, RouterProfile> = {}): Record<string, Rout
   ...over,
 });
 
-describe("논리적 ref 라우팅 결정을 검증함", () => {
-  it("concrete ref tier에 buildRoutingDecision을 쓰면 안내 에러를 검증함", () => {
-    const profile: RouterProfile = { medium: { ref: "copilot#high" } };
-    expect(() => buildRoutingDecision("auto", profile, "medium", "r")).toThrow(
-      /logical ref.*buildRoutingDecisionLive/,
-    );
+describe("위임 models 라우팅 결정을 검증함", () => {
+  it("models 없는 tier에 buildRoutingDecision을 쓰면 에러를 검증함", () => {
+    const profile: RouterProfile = { medium: {} };
+    expect(() => buildRoutingDecision("auto", profile, "medium", "r")).toThrow();
   });
-  it("ref를 추적해 cross-profile 결정과 경로 표기를 검증함", () => {
+  it("위임을 펼쳐 결정하고 경로 표기를 검증함", () => {
     const d = buildRoutingDecisionLive(profiles(), "auto", "medium", "base", false);
     expect(d.profile).toBe("auto");
     expect(d.tier).toBe("medium");
@@ -35,7 +33,7 @@ describe("논리적 ref 라우팅 결정을 검증함", () => {
     expect(d.targetModelId).toBe("gpt-5.6-sol");
     expect(d.reasoning).toContain("[ref: auto#medium -> copilot#high]");
   });
-  it("ref 없는 tier는 경로 표기 없이 결정함을 검증함", () => {
+  it("위임 없는 tier는 경로 표기 없이 결정함을 검증함", () => {
     const d = buildRoutingDecisionLive(profiles(), "auto", "high", "base", false);
     expect(d.targetModelId).toBe("grok-4.6");
     expect(d.reasoning).not.toContain("[ref:");
@@ -50,7 +48,7 @@ describe("논리적 ref 라우팅 결정을 검증함", () => {
   });
   it("해석 불가 tier는 throw함을 검증함", () => {
     const ps: Record<string, RouterProfile> = {
-      broken: { medium: { ref: "missing#high" } },
+      broken: { medium: { models: ["@missing#high"] } },
     };
     expect(() => buildRoutingDecisionLive(ps, "broken", "medium", "base")).toThrow(
       /no resolvable configuration/,
@@ -63,14 +61,14 @@ describe("논리적 ref 라우팅 결정을 검증함", () => {
     expect(d.tier).toBe("medium");
     expect(d.targetModelId).toBe("gpt-5.6-sol");
   });
-  it("resolveTierModelsLive가 추적된 모델 목록을 검증함", () => {
+  it("resolveTierModelsLive가 확장된 모델 목록을 검증함", () => {
     expect(resolveTierModelsLive(profiles(), "auto", "medium")).toEqual([
       "github-copilot/gpt-5.6-sol#high",
     ]);
   });
   it("resolveTierModelsLive가 해석 불가 시 undefined를 검증함", () => {
     const ps: Record<string, RouterProfile> = {
-      broken: { medium: { ref: "missing#high" } },
+      broken: { medium: { models: ["@missing#high"] } },
     };
     expect(resolveTierModelsLive(ps, "broken", "medium")).toBeUndefined();
   });

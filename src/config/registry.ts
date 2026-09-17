@@ -2,7 +2,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RouterProfile, RouterTier } from "../types";
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from "../constants";
 import { parseCanonicalModelRef } from "./modelRef";
-import { dereferenceTier, isTierRef } from "./ref";
+import { dereferenceTier } from "./ref";
 
 const limitFromConfig = (
   tierConfig: { models?: string[]; contextWindow?: number; maxTokens?: number },
@@ -42,9 +42,6 @@ export const resolveContextWindow = (
   const tierConfig = profile[tier];
   if (!tierConfig) return DEFAULT_CONTEXT_WINDOW;
 
-  // 논리적 ref는 여기서 해석하지 않음. resolveContextWindowLive 사용.
-  if (isTierRef(tierConfig)) return DEFAULT_CONTEXT_WINDOW;
-
   return (
     limitFromConfig(tierConfig, "contextWindow", modelRegistry) ??
     tierConfig.resolvedContextWindow ??
@@ -59,8 +56,6 @@ export const resolveMaxTokens = (
 ): number => {
   const tierConfig = profile[tier];
   if (!tierConfig) return DEFAULT_MAX_TOKENS;
-
-  if (isTierRef(tierConfig)) return DEFAULT_MAX_TOKENS;
 
   return (
     limitFromConfig(tierConfig, "maxTokens", modelRegistry) ??

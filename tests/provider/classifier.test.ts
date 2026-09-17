@@ -444,39 +444,7 @@ describe("provider/classifier 논리적 ref", () => {
     );
     expect(result).toEqual(expect.objectContaining({ profile: "myModel" }));
   });
-  it("기본 tier 자리에 ## 강제 지정이 있으면 분류기를 건너뜀", async () => {
-    mockRunClassifierBranch.mockResolvedValue({
-      result: { tier: "high", reasoning: "classifier reason" },
-    });
-    const profiles: Record<string, RouterProfile> = {
-      myModel: { medium: { ref: "deepseek##off" } },
-      deepseek: { medium: { models: ["openai/gpt-deep"] } },
-    };
-    const incoming = makeFakeDecision({ profile: "myModel", tier: "medium", reasoning: "orig" });
-    const state = makeFakeProviderState({
-      currentConfig: { historySize: 0, profiles: {} },
-      failedByChain: new Map(),
-    });
-    const result = await applyClassifierIfNeeded(
-      profiles.myModel,
-      incoming,
-      "myModel",
-      makeFakeRegistry(),
-      state,
-      baseContext,
-      undefined,
-      false,
-      false,
-      "off",
-      "source",
-      undefined,
-      profiles,
-    );
-    expect(result).toBe(incoming);
-    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
-    expect(mockBuildRoutingDecisionLive).not.toHaveBeenCalled();
-  });
-  it("기본 tier 자리가 일반 ref면 분류기를 실행함", async () => {
+  it("기본 tier 자리가 위임 models면 분류기를 실행함", async () => {
     mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
     });

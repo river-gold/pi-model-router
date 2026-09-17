@@ -17,8 +17,8 @@ export interface TypesafeClassifierConfig {
 }
 
 /**
- * `"@profile#tier"` / `"@profile##effort"` / `"@profile#tier##effort"` 항목을 정규화한 형태.
- * 라우팅 시점에 해당 profile/tier 모델로 실시간 확장됨.
+ * `"@profile"` / `"@profile#tier"` / `"@profile#tier#effort"` 항목을 정규화한 형태.
+ * 라우팅 시점에 해당 profile/tier 모델로 실시간 확장됨. tier 생략 시 기본 티어(medium).
  */
 export interface ClassifierRefConfig {
   ref: string;
@@ -34,15 +34,9 @@ export type ClassifierSettingEntry =
 export type ClassifierModelsSetting = ClassifierSettingEntry[];
 
 export interface RoutedTierConfig {
-  /**
-   * 논리적 참조. 있으면 models 대신 라우팅 시점에 실시간 추적함.
-   * - `"profile#tier"`: 대상 tier의 모델과 effort 사용.
-   * - `"profile##effort"`: 요청 tier를 따라가고 선택된 모델에 effort를 직접 지정.
-   * - `"profile#tier##effort"`: 대상 tier의 모델에 effort를 직접 지정.
-   */
-  ref?: string;
   models?: string[];
-  thinking?: ThinkingLevel; // 티어 기본값: `#` 없는 모델에 적용 (primary `#`가 있으면 우선)
+  /** tier 강제 effort: 이 tier로 선택되면 모델별 `#`와 위임 결과보다 우선 적용됨. */
+  thinking?: ThinkingLevel;
   /** `thinking`의 별칭. 둘 다 있으면 `thinking` 우선. */
   effort?: ThinkingLevel;
   contextWindow?: number;
@@ -71,7 +65,7 @@ export interface RouterConfig {
   /**
    * 분류기 후보 체인 (선언 순서대로 시도하고, 실패하면 다음 항목으로 폴백함).
    * - `"provider/model#thinking"`: 로컬 LLM 분류기
-   * - `"@profile#tier"`: 다른 profile/tier 모델을 라우팅 시점에 실시간 참조
+   * - `"@profile"` / `"@profile#tier"`: 다른 profile/tier 모델을 라우팅 시점에 실시간 참조 (tier 생략 시 medium)
    * - `"@@typesafe/<model>"`: TypeSafe System One API
    */
   classifierModels?: ClassifierModelsSetting;

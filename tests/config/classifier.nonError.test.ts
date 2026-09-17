@@ -25,9 +25,11 @@ describe("non-Error throw 분기를 검증함", () => {
   it("normalizeTierConfig가 non-Error throw를 처리함을 검증함", async () => {
     const w: string[] = [];
     const r = normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w);
-    // parseCanonicalModelRef mocked to throw string, so models push fails and goes to catch
+    // parseCanonicalModelRef mocked to throw string, so the entry is rejected
     expect(r).toBeUndefined();
     expect(w[0]).toMatch(/Invalid model/);
-    expect(w[0]).toBe('Invalid model "openai/gpt-4o" in profile "p" high tier: string error');
+    expect(w[0]).toBe(
+      'Invalid model "openai/gpt-4o" in profile "p" high tier: expected "provider/model[#thinking]" or "@profile[#tier[#effort]]".',
+    );
   });
 });

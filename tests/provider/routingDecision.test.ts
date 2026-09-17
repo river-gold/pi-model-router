@@ -109,7 +109,7 @@ describe("resolveRoutingDecision 논리적 ref", () => {
   const liveProfiles: Record<string, RouterProfile> = {
     balanced: {
       high: { models: ["openai/gpt-high"] },
-      medium: { ref: "base#high" },
+      medium: { models: ["@base#high"] },
     },
     base: { high: { models: ["openai/gpt-base"] } },
   };

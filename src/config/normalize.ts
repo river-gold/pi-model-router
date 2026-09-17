@@ -3,7 +3,6 @@ import { DEFAULT_HISTORY_SIZE, MAX_HISTORY_SIZE } from "./constants";
 import { isObjectRecord } from "./guards";
 import { normalizeClassifierModels } from "./classifier";
 import { normalizeModelList, normalizeTierConfig } from "./tier";
-import { resolveProfileTierRefs } from "./ref";
 import { normalizeTierGuides } from "./tierGuides";
 
 export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
@@ -35,7 +34,6 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     }
     rawProfiles[name] = { ...profile };
   }
-  resolveProfileTierRefs(rawProfiles, warnings);
 
   for (const [name, record] of Object.entries(rawProfiles)) {
     // 프로필 기본 모델: 티어 `models`가 없을 때 상속됨.

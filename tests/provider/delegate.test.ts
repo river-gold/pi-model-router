@@ -743,7 +743,7 @@ describe("toDelegateResult 위임 결과 변환", () => {
 describe("delegate 논리적 ref 실시간 추적", () => {
   const liveProfiles: Record<string, RouterProfile> = {
     balanced: {
-      high: { ref: "base#high" },
+      high: { models: ["@base#high"] },
       medium: { models: ["openai/gpt-medium"] },
     },
     base: {
