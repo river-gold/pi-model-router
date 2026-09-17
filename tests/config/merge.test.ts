@@ -134,9 +134,12 @@ describe("merge를 검증함", () => {
       expect(merged.typesafeConfidenceThreshold).toBe(0.4);
     });
     it("classifierModels TypeSafe 참조를 override에서 가져옴을 검증함", () => {
-      const base: RouterConfig = { profiles: {}, classifierModels: { typesafe: true } };
+      const base: RouterConfig = {
+        profiles: {},
+        classifierModels: [{ typesafe: true, model: "jev" }],
+      };
       const merged = mergeConfig(base, {});
-      expect(merged.classifierModels).toEqual({ typesafe: true });
+      expect(merged.classifierModels).toEqual([{ typesafe: true, model: "jev" }]);
     });
   });
 });

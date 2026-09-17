@@ -18,6 +18,7 @@ export const buildTypesafeState = (context: Context, historySize: number): Types
 
 export const classifyWithTypesafe = async (params: {
   context: Context;
+  model: string;
   historySize: number;
   confidenceThreshold: number;
   tierGuides?: TierGuides;
@@ -32,6 +33,7 @@ export const classifyWithTypesafe = async (params: {
   const call = await callTypesafe({
     request: buildTypesafeRequest(
       buildTypesafeState(params.context, params.historySize),
+      params.model,
       params.tierGuides,
     ),
     apiKey,

@@ -5,6 +5,7 @@ import { runClassifierBranch } from "../../src/provider/classifierBranch";
 import { CLASSIFIER_CHAIN_KEY } from "../../src/failureMemory";
 import type * as ConfigModule from "../../src/config";
 import type * as ClassifierModule from "../../src/classifier";
+import type * as TypesafeEntryModule from "../../src/provider/typesafeEntry";
 import type { ClassifierConfig, RouterProfile, TierGuides } from "../../src/types";
 import { makeFakeRegistry, makeFakeUi, makeFakeExtensionContext, fakeSignal } from "../helpers";
 
@@ -16,9 +17,15 @@ vi.mock("../../src/classifier", async () => {
   const actual = await vi.importActual<typeof ClassifierModule>("../../src/classifier");
   return { ...actual, runClassifierWithFallbacksDetailed: vi.fn() };
 });
+vi.mock("../../src/provider/typesafeEntry", async () => {
+  const actual = await vi.importActual<TypesafeEntryModule>("../../src/provider/typesafeEntry");
+  return { ...actual, runTypesafeEntry: mockRunTypesafeEntry };
+});
 
 import { resolveEffectiveClassifier } from "../../src/config";
 import { runClassifierWithFallbacksDetailed } from "../../src/classifier";
+
+const { mockRunTypesafeEntry } = vi.hoisted(() => ({ mockRunTypesafeEntry: vi.fn() }));
 
 const mockRegistry = makeFakeRegistry();
 const baseProfile: RouterProfile = { high: { models: ["openai/gpt"] } };
@@ -280,7 +287,147 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     expect(res.result).toBeDefined();
   });
 
-  it("profileName과 profiles를 resolveEffectiveClassifier에 전달함", async () => {
+  it("TypeSafe 항목이 성공하면 LLM 분류기를 건너뜀을 검증함", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [{ typesafe: true, model: "jev", source: "global" }],
+      source: "global",
+    });
+    mockRunTypesafeEntry.mockResolvedValue({
+      result: { tier: "high", reasoning: "typesafe reason" },
+    });
+    const res = await runClassifierBranch(
+      mockRegistry,
+      baseProfile,
+      makeState(),
+      ctx,
+      undefined,
+      0,
+      new Set(),
+      "src",
+    );
+    expect(res.result).toEqual({ tier: "high", reasoning: "typesafe reason" });
+    expect(runClassifierWithFallbacksDetailed).not.toHaveBeenCalled();
+  });
+
+  it("TypeSafe 실패 시 다음 LLM 항목으로 폴백함을 검증함", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [
+        { typesafe: true, model: "jev", source: "global" },
+        { model: "openai/gpt", source: "global" },
+      ],
+      source: "global",
+    });
+    mockRunTypesafeEntry.mockResolvedValue({
+      attempt: { model: "typesafe/jev", error: "TypeSafe request failed (400)" },
+    });
+    vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
+      result: { tier: "low", reasoning: "llm reason" },
+      attempts: [{ model: "openai/gpt" }],
+    });
+    const res = await runClassifierBranch(
+      mockRegistry,
+      baseProfile,
+      makeState(),
+      ctx,
+      undefined,
+      0,
+      new Set(),
+      "src",
+    );
+    expect(res.result).toEqual({ tier: "low", reasoning: "llm reason" });
+    expect(runClassifierWithFallbacksDetailed).toHaveBeenCalledTimes(1);
+    expect(res.attempts).toEqual([
+      { model: "typesafe/jev", error: "TypeSafe request failed (400)" },
+      { model: "openai/gpt" },
+    ]);
+  });
+
+  it("LLM 실패 후 TypeSafe 항목을 시도함을 검증함", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [
+        { model: "openai/gpt", source: "global" },
+        { typesafe: true, model: "jev", source: "global" },
+      ],
+      source: "global",
+    });
+    vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
+      result: undefined,
+      attempts: [{ model: "openai/gpt", error: "no tier" }],
+    });
+    mockRunTypesafeEntry.mockResolvedValue({
+      result: { tier: "high", reasoning: "typesafe reason" },
+    });
+    const res = await runClassifierBranch(
+      mockRegistry,
+      baseProfile,
+      makeState(),
+      ctx,
+      undefined,
+      0,
+      new Set(),
+      "src",
+    );
+    expect(res.result?.tier).toBe("high");
+    expect(mockRunTypesafeEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it("TypeSafe와 LLM 모두 실패하면 attempt 목록과 함께 throw함을 검증함", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [
+        { typesafe: true, model: "jev", source: "global" },
+        { model: "openai/gpt", source: "global" },
+      ],
+      source: "global",
+    });
+    mockRunTypesafeEntry.mockResolvedValue({
+      attempt: { model: "typesafe/jev", error: "boom" },
+    });
+    vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
+      result: undefined,
+      attempts: [{ model: "openai/gpt", error: "no tier" }],
+    });
+    await expect(
+      runClassifierBranch(
+        mockRegistry,
+        baseProfile,
+        makeState(),
+        ctx,
+        undefined,
+        0,
+        new Set(),
+        "src",
+      ),
+    ).rejects.toThrow("typesafe/jev (boom), openai/gpt (no tier)");
+  });
+
+  it("체인 도중 abort되면 throw함을 검증함", async () => {
+    const controller = new AbortController();
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [
+        { model: "openai/gpt", source: "global" },
+        { model: "openai/gpt2", source: "global" },
+      ],
+      source: "global",
+    });
+    vi.mocked(runClassifierWithFallbacksDetailed).mockImplementation(async () => {
+      controller.abort();
+      return { result: undefined, attempts: [{ model: "openai/gpt", error: "no tier" }] };
+    });
+    await expect(
+      runClassifierBranch(
+        mockRegistry,
+        baseProfile,
+        makeState(),
+        ctx,
+        controller.signal,
+        0,
+        new Set(),
+        "src",
+      ),
+    ).rejects.toThrow("aborted");
+  });
+
+  it("profiles를 resolveEffectiveClassifier에 전달함", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt", source: "profile" }],
       source: "profile",
@@ -312,7 +459,6 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
       profiles.myModel,
       state.currentConfig.classifierModels,
       profiles,
-      "myModel",
     );
   });
 });

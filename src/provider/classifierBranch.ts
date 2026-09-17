@@ -1,8 +1,10 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { RouterProfile, ClassifierModelsSetting, RouterTier, TierGuides } from "../types";
-import { resolveEffectiveClassifier } from "../config";
+import { resolveEffectiveClassifier, isTypesafeClassifierConfig } from "../config";
 import { runClassifierWithFallbacksDetailed, type ClassifierAttempt } from "../classifier";
+import { runTypesafeEntry } from "./typesafeEntry";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
 
 // runClassifierBranch matches task signature: (registry, profile, state, context, signal, effectiveHistorySize, failedSet, classifierSource) -> {result, attempts}
@@ -34,7 +36,6 @@ export const runClassifierBranch = async (
     profile,
     state.currentConfig.classifierModels,
     profiles,
-    profileName,
   );
   if (!effectiveClassifiers) {
     throw new Error(
@@ -42,25 +43,46 @@ export const runClassifierBranch = async (
     );
   }
   if (signal?.aborted) throw new Error("aborted");
-  const { result, attempts } = await runClassifierWithFallbacksDetailed(
-    effectiveClassifiers,
-    registry,
-    context,
-    effectiveHistorySize,
-    signal,
-    (entry) => {
-      try {
-        state.lastExtensionContext?.ui.setWorkingMessage(
-          `Classifying via ${entry.source ?? classifierSource} (${entry.model}${entry.thinking ? `#${entry.thinking}` : ""})...`,
-        );
-      } catch {
-        // stale
+  const attempts: ClassifierAttempt[] = [];
+  const onAttempt = (entry: { model: string; thinking?: ThinkingLevel; source?: string }): void => {
+    try {
+      state.lastExtensionContext?.ui.setWorkingMessage(
+        `Classifying via ${entry.source ?? classifierSource} (${entry.model}${entry.thinking ? `#${entry.thinking}` : ""})...`,
+      );
+    } catch {
+      // stale
+    }
+  };
+  let result: { tier: RouterTier; reasoning: string } | undefined;
+  // 체인 순서대로 시도하고, 실패한 항목은 attempts에 남긴 뒤 다음 항목으로 폴백함.
+  for (const entry of effectiveClassifiers) {
+    if (signal?.aborted) throw new Error("aborted");
+    if (isTypesafeClassifierConfig(entry)) {
+      const outcome = await runTypesafeEntry(entry, state, context, effectiveHistorySize, signal);
+      if ("result" in outcome) {
+        result = outcome.result;
+        break;
       }
-    },
-    failedSet,
-    state.currentConfig.tierGuides,
-    sessionId,
-  );
+      attempts.push(outcome.attempt);
+      continue;
+    }
+    const llm = await runClassifierWithFallbacksDetailed(
+      [entry],
+      registry,
+      context,
+      effectiveHistorySize,
+      signal,
+      onAttempt,
+      failedSet,
+      state.currentConfig.tierGuides,
+      sessionId,
+    );
+    attempts.push(...llm.attempts);
+    if (llm.result) {
+      result = llm.result;
+      break;
+    }
+  }
   if (failedSet.size > 0) state.failedByChain.set(CLASSIFIER_CHAIN_KEY, failedSet);
   try {
     state.lastExtensionContext?.ui.setWorkingMessage(undefined);

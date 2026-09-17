@@ -24,6 +24,7 @@ const choiceBody = (choice: string, confidence?: number): string =>
 
 const baseParams = {
   context: { messages: [{ role: "user", content: "do it", timestamp: 1 }] } as Context,
+  model: "jev-latest",
   historySize: 0,
   confidenceThreshold: 0.5,
   env: { TYPESAFE_API_KEY: "test-key" },
@@ -55,6 +56,7 @@ describe("classifyWithTypesafe를 검증함", () => {
     const fetchFn = vi.fn<TypesafeFetch>().mockResolvedValue(response(200, choiceBody("low", 0.9)));
     const result = await classifyWithTypesafe({
       context: baseParams.context,
+      model: "jev-latest",
       historySize: 0,
       confidenceThreshold: 0.5,
       fetchFn,

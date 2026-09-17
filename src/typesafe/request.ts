@@ -1,6 +1,6 @@
 import type { TierGuides } from "../types";
 import { DEFAULT_TIER_GUIDES, TIER_GUIDE_ORDER } from "../config/tierGuides";
-import { TYPESAFE_MODEL, TYPESAFE_TIER_QUESTION_ID } from "./constants";
+import { TYPESAFE_TIER_QUESTION_ID } from "./constants";
 import type { TypesafeRequest, TypesafeState } from "./types";
 
 const INSTRUCTIONS =
@@ -9,6 +9,7 @@ const INSTRUCTIONS =
 /** tierGuides가 있으면 선택지 설명으로 그대로 쓰고, 없으면 내장 설명을 씀. */
 export const buildTypesafeRequest = (
   state: TypesafeState,
+  model: string,
   guides?: TierGuides,
 ): TypesafeRequest => {
   const criteria: Record<string, string> = {};
@@ -17,7 +18,7 @@ export const buildTypesafeRequest = (
   }
   return {
     state,
-    model: TYPESAFE_MODEL,
+    model,
     questions: {
       [TYPESAFE_TIER_QUESTION_ID]: { type: "choice", instructions: INSTRUCTIONS, criteria },
     },

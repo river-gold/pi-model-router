@@ -10,7 +10,7 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 - **Manual Effort Override**: `minimal` / `low` / `medium` / `high` / `xhigh` / `max` thinking levels map directly to tiers; missing tier falls back to nearest available.
 - **Advanced Controls**: Includes built-in support for:
   - **LLM Intent Classifier**: Optionally use a fast model to categorize intent.
-  - **TypeSafe Classifier**: Alternatively classify intent with the [TypeSafe System One API](https://docs.typesafe.ai/api) (`"classifierModels": "TYPESAFE_CLASSIFIER"`), gated by calibrated confidence.
+  - **TypeSafe Classifier**: Alternatively classify intent with the [TypeSafe System One API](https://docs.typesafe.ai/api) (`"classifierModels": ["@@typesafe/jev-latest"]`), gated by calibrated confidence.
   - **Fallback Chains**: Automatic retry with alternative models if the primary choice fails.
 - **Thinking Control**: Per-tier `thinking` from `pi-model-router.json#thinking` is applied; delegated reasoning is clamped per target model.
 - **Persistent State**: Profiles, costs, and debug history are remembered across agent restarts and conversation branches.
@@ -88,27 +88,31 @@ Copy the example config to one of:
 
 ### Configuration Fields
 
-| Field                                                                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `classifierModels`                                                      | (Optional) Model(s) used to categorize intent (`provider/model#thinking`). String or array of strings. Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. `"TYPESAFE_CLASSIFIER"`를 쓰면 TypeSafe System One을 분류기로 씀(아래 참고).                                                                                     |
-| `typesafeConfidenceThreshold`                                           | (Optional) 0~1 (기본 `0.5`). TypeSafe Choice 응답의 `confidence`가 이 값보다 낮으면 한 단계 위 tier로 승격함 (`max`가 상한). 자세한 동작은 [Confidence-Gated Routing](https://docs.typesafe.ai/confidence).                                                                                                                                                                                                                       |
-| `profiles`                                                              | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required). Optional profile-level `models` is inherited by tiers without their own `models`.                                                                                                                                                                                                          |
-| `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "thinking"?, "effort"?, "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning per model; tier-level `thinking` (alias `effort`) is the default for models without `#` (`thinking` wins if both set); profile-level `models` is inherited by tiers without their own `models`.                                                                |
-| `tierGuides`                                                            | (Optional) Top-level map of tier name → classifier description (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`). Injected into the classifier system prompt in place of the built-in tier lines. Partial overrides keep built-in defaults; values are trimmed. Invalid tierGuides (non-object, unknown tier keys, non-string or empty/whitespace-only values) fail config load with an error. Hot-reloadable via `/router reload`. |
-| `historySize`                                                           | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0).                                                                                                                                                                                                                                                                                                                                                                               |
+| Field                                                                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `classifierModels`                                                      | (Optional) Classifier fallback chain (array only). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. **배열만 허용**하며 항목 순서가 곧 시도/폴백 순서임(단일 문자열 형식은 없음). 항목 형식: `"provider/model#thinking"`(로컬 LLM), `"@profile#tier"` / `"@profile##effort"` / `"@profile#tier##effort"`(해당 프로필 tier 모델을 라우팅 시점에 실시간 참조), `"@@typesafe/<model>"`(TypeSafe System One, 아래 참고). If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. |
+| `typesafeConfidenceThreshold`                                           | (Optional) 0~1 (기본 `0.5`). TypeSafe Choice 응답의 `confidence`가 이 값보다 낮으면 한 단계 위 tier로 승격함 (`max`가 상한). 자세한 동작은 [Confidence-Gated Routing](https://docs.typesafe.ai/confidence).                                                                                                                                                                                                                                                                                                                   |
+| `profiles`                                                              | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required). Optional profile-level `models` is inherited by tiers without their own `models`.                                                                                                                                                                                                                                                                                                      |
+| `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "thinking"?, "effort"?, "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning per model; tier-level `thinking` (alias `effort`) is the default for models without `#` (`thinking` wins if both set); profile-level `models` is inherited by tiers without their own `models`.                                                                                                                                                            |
+| `tierGuides`                                                            | (Optional) Top-level map of tier name → classifier description (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`). Injected into the classifier system prompt in place of the built-in tier lines. Partial overrides keep built-in defaults; values are trimmed. Invalid tierGuides (non-object, unknown tier keys, non-string or empty/whitespace-only values) fail config load with an error. Hot-reloadable via `/router reload`.                                                                                             |
+| `historySize`                                                           | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
-### TypeSafe Classifier (`classifierModels: "TYPESAFE_CLASSIFIER"`)
+### TypeSafe Classifier (`classifierModels: ["@@typesafe/jev-latest"]`)
 
-`classifierModels`에 `"TYPESAFE_CLASSIFIER"` 문자열을 쓰면 `thinkingLevel`이 `off`인 턴에서 로컬 LLM 분류기 대신 TypeSafe System One으로 tier를 분류합니다. 전역과 프로필 양쪽에서 쓸 수 있고, **프로필 설정이 전역 설정보다 우선**합니다(프로필에 자기 `classifierModels`가 있으면 그 프로필은 LLM 분류기를 씀).
+`classifierModels` 배열에 `"@@typesafe/<model>"` 항목을 넣으면 `thinkingLevel`이 `off`인 턴에서 그 항목 위치에서 TypeSafe System One으로 tier를 분류합니다. `<model>`은 API 요청의 `model` 필드로 **그대로** 전달되므로 API가 아는 이름을 써야 합니다(예: `jev-latest`, `jev-1.13.0`; `jev`는 400 `Unknown model`).
 
+- **체인/폴백**: 다른 분류기 항목과 같은 체인으로 취급됩니다. 앞 항목이 실패하면 다음 항목을 시도하고, 뒤에 LLM 모델이나 low tier 폴백이 있으면 그대로 이어집니다.
+  ```json
+  { "classifierModels": ["@@typesafe/jev-latest", "openai/gpt-5.4-nano#low"] }
+  ```
 - **요청**: `state`에 `message`(최신 user 메시지)와 `history`(`historySize`만큼의 직전 user+final 결과 쌍), `questions.tier`에 `minimal`~`max` 6개 선택지(`tierGuides`가 있으면 그 설명)를 담아 `POST https://api.typesafe.ai/v1/systemone`로 보냅니다. 인증은 `Authorization: Bearer $TYPESAFE_API_KEY`입니다.
 - **라우팅**: 응답의 `choice`를 tier로 쓰고, `confidence`가 `typesafeConfidenceThreshold`보다 낮으면 한 단계 위 tier로 승격합니다(불확실하면 더 강한 모델 쪽으로 기울임).
-- **실패 시**: API 키 없음, HTTP 오류(429/529/5xx는 지수 백오프로 1회 재시도), 파싱 실패면 분류를 포기하고 기본 tier(`medium`)를 유지합니다. LLM 분류기 폴백은 사용하지 않습니다.
-- **로그**: 결과는 `~/.pi/logs/pi-model-router.log`에 `typesafe/jev-latest` 모델로 기록됩니다.
+- **재시도**: 429/529/5xx는 지수 백오프로 1회 재시도하고, 그 밖의 실패는 즉시 다음 체인 항목으로 넘어갑니다. API 키가 없어도 마찬가지입니다.
+- **로그**: 결과는 `~/.pi/logs/pi-model-router.log`에 `typesafe/<model>` 이름으로 기록됩니다.
 
 ```json
 {
-  "classifierModels": "TYPESAFE_CLASSIFIER",
+  "classifierModels": ["@@typesafe/jev-latest"],
   "typesafeConfidenceThreshold": 0.5
 }
 ```
@@ -126,7 +130,7 @@ Copy the example config to one of:
 ## Documentation
 
 - [Architecture Guide](docs/ARCHITECTURE.md): Deep dive into the routing logic and modular design.
-- [Sample Configuration](docs/model-router.example.jsonc): Diverse profile examples (`cheap`, `deep`, `balanced`, `refTier` for `profile#tier` refs, `refEffort` for `profile##effort` refs, `refTierEffort` for `profile#tier##effort` refs, `refClassifier` for `classifierModels` refs).
+- [Sample Configuration](docs/model-router.example.jsonc): Diverse profile examples (`cheap`, `deep`, `balanced`, `refTier` for `profile#tier` refs, `refEffort` for `profile##effort` refs, `refTierEffort` for `profile#tier##effort` refs, `refClassifier` for `@profile#tier` `classifierModels` refs, `@@typesafe/<model>` for the TypeSafe classifier).
 
 ## Credits
 

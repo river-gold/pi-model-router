@@ -8,29 +8,30 @@ export interface ClassifierConfig {
 }
 
 /**
- * 분류기 후보를 다른 프로필에서 가져오는 논리적 참조.
- * - `"profile#tier"`: 해당 tier의 모델과 effort 사용.
- * - `"profile##effort"`: 해당 프로필의 low tier(없으면 가까운 tier) 모델에 effort 직접 지정.
- * - `"profile#tier##effort"`: 지정 tier 모델에 effort 직접 지정.
- * 라우팅 시점에 실시간 추적함.
+ * `"@@typesafe/<model>"` 항목을 정규화한 형태.
+ * 로컬 LLM 모델 대신 TypeSafe System One API를 분류기로 씀. `<model>`은 API에 그대로 전달됨.
  */
-export interface ClassifierModelsRef {
-  ref: string;
+export interface TypesafeClassifierConfig {
+  typesafe: true;
+  model: string;
 }
 
 /**
- * `classifierModels: "TYPESAFE_CLASSIFIER"`를 정규화한 형태.
- * 로컬 LLM 분류기 대신 TypeSafe System One API를 분류기로 씀.
+ * `"@profile#tier"` / `"@profile##effort"` / `"@profile#tier##effort"` 항목을 정규화한 형태.
+ * 라우팅 시점에 해당 profile/tier 모델로 실시간 확장됨.
  */
-export interface TypesafeClassifierRef {
-  typesafe: true;
+export interface ClassifierRefConfig {
+  ref: string;
 }
 
-/** classifierModels에 허용되는 설정 전체. */
-export type ClassifierModelsSetting =
-  | ClassifierConfig[]
-  | ClassifierModelsRef
-  | TypesafeClassifierRef;
+/** classifierModels 배열의 한 항목. */
+export type ClassifierSettingEntry =
+  | ClassifierConfig
+  | ClassifierRefConfig
+  | TypesafeClassifierConfig;
+
+/** classifierModels에 허용되는 설정 전체 (정규화 후에는 항상 배열). */
+export type ClassifierModelsSetting = ClassifierSettingEntry[];
 
 export interface RoutedTierConfig {
   /**
@@ -68,8 +69,10 @@ export type TierGuides = Partial<Record<RouterTier, string>>;
 export interface RouterConfig {
   debug?: boolean;
   /**
-   * 분류기 후보. `"TYPESAFE_CLASSIFIER"` 문자열이면 TypeSafe System One API를 분류기로 씀
-   * (이 때 classifierModels/low tier 폴백은 쓰지 않고, 실패하면 기본 tier를 유지함).
+   * 분류기 후보 체인 (선언 순서대로 시도하고, 실패하면 다음 항목으로 폴백함).
+   * - `"provider/model#thinking"`: 로컬 LLM 분류기
+   * - `"@profile#tier"`: 다른 profile/tier 모델을 라우팅 시점에 실시간 참조
+   * - `"@@typesafe/<model>"`: TypeSafe System One API
    */
   classifierModels?: ClassifierModelsSetting;
   /** TypeSafe Choice confidence 임계값 (0~1). 이 값보다 낮으면 한 단계 위 tier로 승격함. 기본 0.5. */

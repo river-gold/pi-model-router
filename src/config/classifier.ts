@@ -1,13 +1,16 @@
 import type {
   ClassifierConfig,
   ClassifierModelsSetting,
+  ClassifierRefConfig,
+  ClassifierSettingEntry,
   RouterProfile,
   RouterTier,
+  TypesafeClassifierConfig,
 } from "../types";
-import { TYPESAFE_CLASSIFIER_REF } from "./constants";
+import { CLASSIFIER_REF_PREFIX, TYPESAFE_ENTRY_PREFIX } from "./constants";
 import { formatModelRef, parseCanonicalModelRef } from "./modelRef";
-import { dereferenceTier, isTierRef, parseTierRef, applyEffortOverride } from "./ref";
-import { isTypesafeClassifierRef } from "./guards";
+import { dereferenceTier, parseTierRef, applyEffortOverride } from "./ref";
+import { isTypesafeClassifierConfig } from "./guards";
 
 export const normalizeClassifierConfig = (
   raw: unknown,
@@ -27,45 +30,83 @@ export const normalizeClassifierConfig = (
   }
 };
 
+const ENTRY_HINT = `expected "provider/model#thinking", "@profile#tier", or "@@typesafe/<model>"`;
+
+const normalizeClassifierRef = (
+  raw: string,
+  warnings: string[],
+  contextLabel: string,
+): ClassifierRefConfig | undefined => {
+  const ref = raw.slice(CLASSIFIER_REF_PREFIX.length).trim();
+  if (!parseTierRef(ref)) {
+    warnings.push(
+      `Invalid ${contextLabel} "${raw}": expected "@profile#tier", "@profile##effort", or "@profile#tier##effort".`,
+    );
+    return undefined;
+  }
+  return { ref };
+};
+
+/** `@@typesafe/<model>` — model은 API에 그대로 전달됨. */
+const normalizeTypesafeEntry = (
+  raw: string,
+  warnings: string[],
+  contextLabel: string,
+): TypesafeClassifierConfig | undefined => {
+  const model = raw.slice(TYPESAFE_ENTRY_PREFIX.length).trim();
+  if (model === "") {
+    warnings.push(`Invalid ${contextLabel} "${raw}": expected "@@typesafe/<model>".`);
+    return undefined;
+  }
+  return { typesafe: true, model };
+};
+
+const normalizeClassifierEntry = (
+  raw: unknown,
+  warnings: string[],
+  contextLabel: string,
+): ClassifierSettingEntry | undefined => {
+  if (typeof raw !== "string") {
+    warnings.push(`Invalid ${contextLabel}: ${ENTRY_HINT}.`);
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (trimmed.startsWith(TYPESAFE_ENTRY_PREFIX)) {
+    return normalizeTypesafeEntry(trimmed, warnings, contextLabel);
+  }
+  if (trimmed.startsWith(CLASSIFIER_REF_PREFIX)) {
+    return normalizeClassifierRef(trimmed, warnings, contextLabel);
+  }
+  return normalizeClassifierConfig(trimmed, warnings, contextLabel);
+};
+
+/**
+ * classifierModels는 항상 배열이어야 함 (단일 문자열 형식은 지원하지 않음).
+ * 항목 순서가 곧 분류기 폴백 순서임.
+ */
 export const normalizeClassifierModels = (
   raw: unknown,
   warnings: string[],
   contextLabel: string,
 ): ClassifierModelsSetting | undefined => {
   if (raw === undefined) return undefined;
-  if (typeof raw === "string" && raw.trim() === TYPESAFE_CLASSIFIER_REF) {
-    return { typesafe: true };
+  if (!Array.isArray(raw)) {
+    warnings.push(`Invalid ${contextLabel}: ${ENTRY_HINT}. Expected an array.`);
+    return undefined;
   }
-  if (isTierRef(raw)) {
-    const trimmed = raw.ref.trim();
-    if (!parseTierRef(trimmed)) {
-      warnings.push(
-        `Invalid ${contextLabel} ref "${raw.ref}": expected "profile#tier", "profile##effort", or "profile#tier##effort".`,
-      );
-      return undefined;
-    }
-    // 논리적 참조 유지: 분류기 실행 시점에 실시간 추적함.
-    return { ref: trimmed };
+  const out: ClassifierSettingEntry[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entry = normalizeClassifierEntry(raw[i], warnings, `${contextLabel}[${i}]`);
+    if (entry) out.push(entry);
   }
-  if (typeof raw === "string") {
-    const single = normalizeClassifierConfig(raw, warnings, contextLabel);
-    return single ? [single] : undefined;
-  }
-  if (Array.isArray(raw)) {
-    const out: ClassifierConfig[] = [];
-    for (let i = 0; i < raw.length; i++) {
-      const c = normalizeClassifierConfig(raw[i], warnings, `${contextLabel}[${i}]`);
-      if (c) out.push(c);
-    }
-    return out.length > 0 ? out : undefined;
-  }
-  warnings.push(`Invalid ${contextLabel}: expected string, array of strings, or { ref }.`);
-  return undefined;
+  return out.length > 0 ? out : undefined;
 };
 
 export type ClassifierSource = "profile" | "global" | "low tier";
 
-export type ClassifierEntry = ClassifierConfig & { source: ClassifierSource };
+export type ClassifierEntry =
+  | (ClassifierConfig & { source: ClassifierSource })
+  | (TypesafeClassifierConfig & { source: ClassifierSource });
 
 /** `##effort`만 있을 때 따라갈 기본 tier. 분류기는 저비용 모델이 어울리고 기존 폴백도 low tier를 씀. */
 const CLASSIFIER_DEFAULT_TIER: RouterTier = "low";
@@ -97,45 +138,48 @@ export const resolveClassifierRefModels = (
   });
 };
 
+/** ref가 모두 펼쳐진 뒤 체인에 들어가는 항목. */
+type ExpandedClassifierEntry = ClassifierConfig | TypesafeClassifierConfig;
+
+/** ref 항목을 실시간 추적해서 순서를 유지한 채 실제 후보로 펼침. */
 const expandClassifierModels = (
   value: ClassifierModelsSetting | undefined,
   profiles: Record<string, RouterProfile> | undefined,
-  profileName: string | undefined,
-): ClassifierConfig[] => {
-  if (Array.isArray(value)) return value;
-  if (isTypesafeClassifierRef(value)) return [];
-  if (value && profiles && profileName) {
-    return resolveClassifierRefModels(value.ref, profiles) ?? [];
+): ExpandedClassifierEntry[] => {
+  if (!value) return [];
+  const out: ExpandedClassifierEntry[] = [];
+  for (const entry of value) {
+    if (isTypesafeClassifierConfig(entry)) {
+      out.push(entry);
+      continue;
+    }
+    if ("ref" in entry) {
+      if (profiles) out.push(...(resolveClassifierRefModels(entry.ref, profiles) ?? []));
+      continue;
+    }
+    out.push(entry);
   }
-  return [];
+  return out;
 };
 
 /**
- * TypeSafe System One 분류기를 쓸지 결정함.
- * 프로필 설정이 전역 설정보다 우선함 (기존 classifierModels 우선순위와 동일).
+ * profile → global → low tier 순서로 분류기 체인을 만듦.
+ * 항목 순서가 그대로 시도 순서가 되고, 실패하면 다음 항목으로 폴백함.
  */
-export const resolveTypesafeClassifier = (
-  profile: RouterProfile,
-  globalClassifiers: ClassifierModelsSetting | undefined,
-): boolean =>
-  isTypesafeClassifierRef(profile.classifierModels) ||
-  (profile.classifierModels === undefined && isTypesafeClassifierRef(globalClassifiers));
-
 export const resolveEffectiveClassifier = (
   profile: RouterProfile,
   globalClassifiers: ClassifierModelsSetting | undefined,
   profiles?: Record<string, RouterProfile>,
-  profileName?: string,
 ): { classifiers: ClassifierEntry[] | undefined; source: string } => {
   const chain: ClassifierEntry[] = [];
   const sources: string[] = [];
 
-  const profileEntries = expandClassifierModels(profile.classifierModels, profiles, profileName);
+  const profileEntries = expandClassifierModels(profile.classifierModels, profiles);
   if (profileEntries.length > 0) {
     chain.push(...profileEntries.map((c) => ({ ...c, source: "profile" as const })));
     sources.push("profile");
   }
-  const globalEntries = expandClassifierModels(globalClassifiers, profiles, profileName);
+  const globalEntries = expandClassifierModels(globalClassifiers, profiles);
   if (globalEntries.length > 0) {
     chain.push(...globalEntries.map((c) => ({ ...c, source: "global" as const })));
     sources.push("global");

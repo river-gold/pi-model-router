@@ -19,23 +19,32 @@ describe("normalizeConfig 동작을 검증함", () => {
     expect(normalizeConfig({ debug: "yes", profiles: {} }).config.debug).toBe(false);
   });
 
-  it("classifierModels에 TYPESAFE_CLASSIFIER를 쓰면 TypeSafe 참조로 정규화함을 검증함", () => {
+  it("classifierModels의 @@typesafe 항목을 정규화함을 검증함", () => {
     const { config, warnings } = normalizeConfig({
-      classifierModels: "TYPESAFE_CLASSIFIER",
+      classifierModels: ["@@typesafe/jev"],
       profiles: {},
     });
-    expect(config.classifierModels).toEqual({ typesafe: true });
+    expect(config.classifierModels).toEqual([{ typesafe: true, model: "jev" }]);
     expect(warnings).toEqual([]);
   });
 
-  it("프로필 classifierModels의 TYPESAFE_CLASSIFIER도 처리함을 검증함", () => {
+  it("프로필 classifierModels의 @@typesafe 항목도 처리함을 검증함", () => {
     const { config, warnings } = normalizeConfig({
       profiles: {
-        p: { medium: { models: ["openai/a"] }, classifierModels: "TYPESAFE_CLASSIFIER" },
+        p: { medium: { models: ["openai/a"] }, classifierModels: ["@@typesafe/jev-latest"] },
       },
     });
-    expect(config.profiles.p.classifierModels).toEqual({ typesafe: true });
+    expect(config.profiles.p.classifierModels).toEqual([{ typesafe: true, model: "jev-latest" }]);
     expect(warnings).toEqual([]);
+  });
+
+  it("classifierModels 단일 문자열은 거부함을 검증함", () => {
+    const { config, warnings } = normalizeConfig({
+      classifierModels: "openai/gpt-4o",
+      profiles: {},
+    });
+    expect(config.classifierModels).toBeUndefined();
+    expect(warnings.some((w) => w.includes("Expected an array"))).toBe(true);
   });
 
   it("typesafeConfidenceThreshold 값을 처리함을 검증함", () => {

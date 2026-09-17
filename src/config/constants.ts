@@ -14,5 +14,8 @@ export const ALLOWED_THINKING = [
 
 export const MAX_HISTORY_SIZE = 20;
 
-/** classifierModels에 이 문자열을 쓰면 TypeSafe System One 분류기를 씀. */
-export const TYPESAFE_CLASSIFIER_REF = "TYPESAFE_CLASSIFIER";
+/** classifierModels 항목 앞에 붙이면 다른 profile/tier 모델을 라우팅 시점에 실시간 참조함. */
+export const CLASSIFIER_REF_PREFIX = "@";
+
+/** classifierModels 항목의 TypeSafe System One 접두사 (`"@@typesafe/<model>"`). */
+export const TYPESAFE_ENTRY_PREFIX = "@@typesafe/";

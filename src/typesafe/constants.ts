@@ -1,8 +1,5 @@
 export const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 
-/** System One flagship model. */
-export const TYPESAFE_MODEL = "jev-latest";
-
 export const TYPESAFE_API_KEY_ENV = "TYPESAFE_API_KEY";
 
 /** Question id for the tier Choice question (answer returned under the same id). */

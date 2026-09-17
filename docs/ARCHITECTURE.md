@@ -27,8 +27,11 @@ For every request sent to a `router/*` model, the following logic is executed:
 
 1. **Manual Effort Override**: If `pi.getThinkingLevel() !== 'off'`, map `minimal`→`minimal`, `low`→`low`, `medium`→`medium`, `high`→`high`, `xhigh`→`xhigh`, `max`→`max`, then `resolveAvailableTier()` to nearest configured tier.
 2. **Classifier**: If `thinkingLevel === 'off'`, classify the turn into a tier.
-   - **TypeSafe System One** (`"classifierModels": "TYPESAFE_CLASSIFIER"`): one `choice` question over `minimal`~`max` (`POST https://api.typesafe.ai/v1/systemone`). The returned `confidence` gates routing: below `typesafeConfidenceThreshold` the tier escalates one step up. Failures keep the default `medium` tier (no LLM fallback).
-   - **LLM classifier** (default): `classifierModels` (or `low` tier fallback) classifies to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
+   - **TypeSafe System One** (`"@@typesafe/<model>"` entry): one `choice` question over `minimal`~`max` (`POST https://api.typesafe.ai/v1/systemone`, `model` = the entry's `<model>`). The returned `confidence` gates routing: below `typesafeConfidenceThreshold` the tier escalates one step up. A failure moves on to the next chain entry (LLM model or low tier fallback).
+   - **LLM classifier** (default): `classifierModels` entries (or the `low` tier fallback) classify to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
+
+   The `classifierModels` array is the fallback chain: entries are tried in order (`@profile#tier` refs are expanded at routing time) until one returns a tier.
+
 3. **Default**: If no classifier is configured or it fails, defaults to `medium` (with `resolveAvailableTier()` fallback).
 
 ## Module Architecture
@@ -39,7 +42,7 @@ The extension is modularized for maintainability:
 - `src/provider.ts`: Implements the `router` provider and the delegation/retry loop.
 - `src/routing.ts`: Core decision logic (tier resolution) and routing helpers.
 - `src/config/`: Loads, merges, and normalizes the JSON configuration (modularized from `src/config.ts`).
-- `src/typesafe/`: TypeSafe System One classifier (request building, response parsing, confidence gating, HTTP client, orchestration) used when `classifierModels` is `"TYPESAFE_CLASSIFIER"`.
+- `src/typesafe/`: TypeSafe System One classifier (request building, response parsing, confidence gating, HTTP client, orchestration) used by `"@@typesafe/<model>"` chain entries.
 - `src/commands.ts`: Registers all `/router` subcommands and their autocompletions.
 - `src/ui.ts`: Manages the router status line.
 - `src/state.ts`: Handles session-persisted state and snapshots.
