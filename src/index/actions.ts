@@ -3,7 +3,7 @@ import type { RouterState } from "../state";
 import { createPersistState, createRecordDebugDecision } from "./persist";
 import { createReloadConfig } from "./reload";
 import {
-  createEnsureValidActiveRouterProfile,
+  createEnsureValidActiveRouter,
   createSetModelInternally,
   createTryFallbackByRef,
   createTryRestoreFallback,
@@ -17,7 +17,7 @@ export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
   const setModelInternally = createSetModelInternally(pi, state);
   const tryFallbackByRef = createTryFallbackByRef(pi, state, setModelInternally);
   const tryRestoreFallback = createTryRestoreFallback(state, tryFallbackByRef);
-  const ensureValidActiveRouterProfile = createEnsureValidActiveRouterProfile(
+  const ensureValidActiveRouter = createEnsureValidActiveRouter(
     state,
     tryRestoreFallback,
   );
@@ -42,11 +42,11 @@ export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
         get lastExtensionContext() {
           return state.lastExtensionContext;
         },
-        get selectedProfile() {
-          return state.selectedProfile;
+        get selectedRouter() {
+          return state.selectedRouter;
         },
-        set selectedProfile(v) {
-          state.selectedProfile = v;
+        set selectedRouter(v) {
+          state.selectedRouter = v;
         },
         get routerEnabled() {
           return state.routerEnabled;
@@ -74,7 +74,7 @@ export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
         persistState,
         recordDebugDecision,
         updateStatus: (c) =>
-          updateStatus(c, state.routerEnabled, state.selectedProfile, state.lastDecision),
+          updateStatus(c, state.routerEnabled, state.selectedRouter, state.lastDecision),
       },
     );
   };
@@ -83,7 +83,7 @@ export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
     persistState,
     recordDebugDecision,
     reloadConfig,
-    ensureValidActiveRouterProfile,
+    ensureValidActiveRouter,
     registerRouterProvider: registerRouterProviderAction,
     setModelInternally,
     tryFallbackByRef,

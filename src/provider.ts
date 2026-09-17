@@ -7,7 +7,7 @@ import {
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterProfile, RoutingDecision, RouterTier } from "./types";
+import type { Router, RoutingDecision, RouterTier } from "./types";
 import { resolveEffectiveClassifier, resolvableTiers } from "./config";
 import { decideInitialDecision } from "./provider/routing";
 import { delegateToTierModels } from "./provider/delegate";
@@ -60,44 +60,44 @@ export const registerRouterProvider = (
         try {
           const registry: ExtensionContext["modelRegistry"] | undefined =
             state.currentModelRegistry;
-          const profile: RouterProfile | undefined = state.currentConfig.profiles[model.id];
+          const router: Router | undefined = state.currentConfig.routers[model.id];
           // @ts-ignore TS2775 non-null assertion requires explicit type, already provided
           // 아래 registry! 가 안전함: validateProviderState가 !registry에서 throw함.
-          validateProviderState(registry, profile, model.id);
+          validateProviderState(registry, router, model.id);
           const snap = state.lastDecision;
           await withCommitMutex(async () => {
-            state.selectedProfile = model.id;
+            state.selectedRouter = model.id;
             state.routerEnabled = true;
           });
           if (options?.signal?.aborted) throw new Error("aborted");
           const isToolLoop =
             context.messages[context.messages.length - 1]?.role === "toolResult" &&
-            snap?.profile === model.id &&
+            snap?.router === model.id &&
             snap !== undefined;
-          const profiles = state.currentConfig.profiles;
-          const liveTiers = resolvableTiers(profiles, model.id);
+          const routers = state.currentConfig.routers;
+          const liveTiers = resolvableTiers(routers, model.id);
           let decision = decideInitialDecision({
-            profileName: model.id,
-            profile: profile as RouterProfile,
+            routerName: model.id,
+            router: router as Router,
             context,
             snapshotLastDecision: snap,
             thinkingLevel: pi.getThinkingLevel(),
             isToolLoop,
             singleTier: liveTiers[0] as RouterTier | undefined,
             validTierCount: liveTiers.length,
-            profiles,
+            routers,
           });
           const { source } = resolveEffectiveClassifier(
-            profile as RouterProfile,
+            router as Router,
             state.currentConfig.classifierModels,
-            profiles,
+            routers,
           );
           const isSingleTier = liveTiers.length === 1;
           const isToolLoopNow =
             context.messages[context.messages.length - 1]?.role === "toolResult" &&
-            snap?.profile === model.id;
+            snap?.router === model.id;
           decision = await applyClassifierIfNeeded(
-            profile as RouterProfile,
+            router as Router,
             decision,
             model.id,
             registry!,
@@ -109,7 +109,7 @@ export const registerRouterProvider = (
             pi.getThinkingLevel(),
             source,
             options?.sessionId,
-            profiles,
+            routers,
           );
           await withCommitMutex(async () => {
             state.lastDecision = decision;
@@ -118,8 +118,8 @@ export const registerRouterProvider = (
           safeUpdateStatus(state, actions);
           const res = await delegateToTierModels({
             registry: registry!,
-            profile: profile as RouterProfile,
-            profiles,
+            router: router as Router,
+            routers,
             decision,
             routerModel: model,
             context,

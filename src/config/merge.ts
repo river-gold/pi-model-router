@@ -1,23 +1,23 @@
-import type { RouterConfig, RouterProfile } from "../types";
+import type { RouterConfig, Router } from "../types";
 import { mergeTier } from "./tier";
 import { mergeTierGuides } from "./tierGuides";
 
 export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>): RouterConfig => {
-  const mergedProfiles: Record<string, RouterProfile> = { ...base.profiles };
-  for (const [name, profile] of Object.entries(override.profiles ?? {})) {
-    if (typeof profile !== "object" || profile === null || Array.isArray(profile)) {
+  const mergedRouters: Record<string, Router> = { ...base.routers };
+  for (const [name, router] of Object.entries(override.routers ?? {})) {
+    if (typeof router !== "object" || router === null || Array.isArray(router)) {
       continue;
     }
-    const existing = mergedProfiles[name];
-    mergedProfiles[name] = {
-      models: profile.models ?? existing?.models,
-      max: mergeTier(existing?.max, profile.max),
-      xhigh: mergeTier(existing?.xhigh, profile.xhigh),
-      high: mergeTier(existing?.high, profile.high),
-      medium: mergeTier(existing?.medium, profile.medium),
-      low: mergeTier(existing?.low, profile.low),
-      minimal: mergeTier(existing?.minimal, profile.minimal),
-      classifierModels: profile.classifierModels ?? existing?.classifierModels,
+    const existing = mergedRouters[name];
+    mergedRouters[name] = {
+      models: router.models ?? existing?.models,
+      max: mergeTier(existing?.max, router.max),
+      xhigh: mergeTier(existing?.xhigh, router.xhigh),
+      high: mergeTier(existing?.high, router.high),
+      medium: mergeTier(existing?.medium, router.medium),
+      low: mergeTier(existing?.low, router.low),
+      minimal: mergeTier(existing?.minimal, router.minimal),
+      classifierModels: router.classifierModels ?? existing?.classifierModels,
     };
   }
 
@@ -33,6 +33,6 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
           ? base.historySize
           : undefined,
     tierGuides: mergeTierGuides(base.tierGuides, override.tierGuides),
-    profiles: mergedProfiles,
+    routers: mergedRouters,
   };
 };

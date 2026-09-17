@@ -6,7 +6,7 @@ import type {
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterProfile, RoutingDecision } from "../types";
+import type { Router, RoutingDecision } from "../types";
 import { dereferenceTier, isObjectRecord } from "../config";
 import {
   parseCanonicalModelRef,
@@ -29,10 +29,10 @@ import type { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 
 export type DelegateParams = {
   registry: ExtensionContext["modelRegistry"];
-  profile: RouterProfile;
+  router: Router;
   decision: RoutingDecision;
   /** 있으면 tier models/limit을 실시간 추적함. */
-  profiles?: Record<string, RouterProfile>;
+  routers?: Record<string, Router>;
   routerModel: Model<Api>;
   context: Context;
   options?: SimpleStreamOptions;
@@ -55,17 +55,17 @@ export type DelegateResult = {
 };
 
 export const getInitialModelsToTry = (
-  profile: RouterProfile,
+  router: Router,
   decision: RoutingDecision,
-  profiles?: Record<string, RouterProfile>,
+  routers?: Record<string, Router>,
 ): string[] => {
-  if (profiles) {
-    const live = dereferenceTier(profiles, decision.profile, decision.tier)?.config.models;
+  if (routers) {
+    const live = dereferenceTier(routers, decision.router, decision.tier)?.config.models;
     if (live?.length) return [...new Set(live)];
   }
-  const tierModels = profile[decision.tier]?.models;
+  const tierModels = router[decision.tier]?.models;
   if (!tierModels?.length)
-    return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.thinking)];
+    return [formatModelRef(decision.targetProvider, decision.targetModelId, decision.effort)];
   return [...new Set(tierModels)];
 };
 
@@ -94,33 +94,33 @@ export const createRecordFailure =
   };
 
 export const resolveTargetLimit = (
-  profile: RouterProfile,
+  router: Router,
   decision: RoutingDecision,
   modelRef: string,
   registry: ExtensionContext["modelRegistry"],
   targetProvider: string,
   targetModelId: string,
-  profiles?: Record<string, RouterProfile>,
+  routers?: Record<string, Router>,
 ): number => {
-  if (profiles) {
+  if (routers) {
     for (const t of ROUTER_TIERS) {
-      const live = dereferenceTier(profiles, decision.profile, t)?.config.models;
+      const live = dereferenceTier(routers, decision.router, t)?.config.models;
       if (live?.includes(modelRef)) {
-        return resolveContextWindowLive(profiles, decision.profile, t, registry);
+        return resolveContextWindowLive(routers, decision.router, t, registry);
       }
     }
     const found = registry.find(targetProvider, targetModelId);
     return (
       found?.contextWindow ??
-      resolveContextWindowLive(profiles, decision.profile, decision.tier, registry)
+      resolveContextWindowLive(routers, decision.router, decision.tier, registry)
     );
   }
   for (const t of ROUTER_TIERS) {
-    const tc = profile[t];
-    if (tc?.models?.includes(modelRef)) return resolveContextWindow(t, profile, registry);
+    const tc = router[t];
+    if (tc?.models?.includes(modelRef)) return resolveContextWindow(t, router, registry);
   }
   const found = registry.find(targetProvider, targetModelId);
-  return found?.contextWindow ?? resolveContextWindow(decision.tier, profile, registry);
+  return found?.contextWindow ?? resolveContextWindow(decision.tier, router, registry);
 };
 
 export const buildEffectiveContext = (
@@ -190,13 +190,13 @@ export const resolveAuthError = (
 export const shouldSkipRouterModel = (provider: string): boolean => provider === "router";
 
 export const buildFallbackDecision = (decision: RoutingDecision, modelRef: string): void => {
-  const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
+  const { provider, modelId, effort } = parseCanonicalModelRef(modelRef);
   Object.assign(decision, {
     isFallback: true,
     targetProvider: provider,
     targetModelId: modelId,
     targetLabel: formatModelRef(provider, modelId),
-    thinking: thinking ?? decision.thinking,
+    effort: effort ?? decision.effort,
   });
 };
 
@@ -214,7 +214,7 @@ export const attemptSingleModel = async (
 ): Promise<AttemptResult> => {
   const {
     registry,
-    profile,
+    router,
     decision,
     routerModel,
     context,
@@ -224,9 +224,9 @@ export const attemptSingleModel = async (
     stream,
     recordDebugDecision,
   } = params;
-  const { provider, modelId, thinking } = parseCanonicalModelRef(modelRef);
-  const tryThinking = thinking ?? decision.thinking;
-  const routeChainKey = chainKeyForRoute(decision.profile, decision.tier);
+  const { provider, modelId, effort } = parseCanonicalModelRef(modelRef);
+  const tryThinking = effort ?? decision.effort;
+  const routeChainKey = chainKeyForRoute(decision.router, decision.tier);
   const remember = (err: unknown): void => {
     rememberPreStreamFailure(err, modelRef, recordRouteFailure, routeChainKey);
   };
@@ -245,13 +245,13 @@ export const attemptSingleModel = async (
   }
   if (options?.signal?.aborted) return { status: "nonRetryable", error: new Error("aborted") };
   const targetLimit = resolveTargetLimit(
-    profile,
+    router,
     decision,
     modelRef,
     registry,
     provider,
     modelId,
-    params.profiles,
+    params.routers,
   );
   const effectiveContext = buildEffectiveContext(context, targetLimit, routerModel);
   const delegatedReasoning = resolveDelegatedReasoning(targetModel, tryThinking);
@@ -316,7 +316,7 @@ export const attemptSingleModel = async (
     if (index > 0) {
       buildFallbackDecision(decision, modelRef);
       await withCommitMutex(async () => {
-        if (state.lastDecision === decision || state.lastDecision?.profile === decision.profile)
+        if (state.lastDecision === decision || state.lastDecision?.router === decision.router)
           state.lastDecision = { ...decision };
       });
       recordDebugDecision(decision);
@@ -346,9 +346,9 @@ export const runDelegateAttempt = async (
   params: DelegateParams,
   curDecision: RoutingDecision,
 ): Promise<{ success: boolean; costDelta: number; lastError?: unknown }> => {
-  const { profile, state } = params;
-  const initialModels = getInitialModelsToTry(profile, curDecision, params.profiles);
-  const routeChainKey = chainKeyForRoute(curDecision.profile, curDecision.tier);
+  const { router, state } = params;
+  const initialModels = getInitialModelsToTry(router, curDecision, params.routers);
+  const routeChainKey = chainKeyForRoute(curDecision.router, curDecision.tier);
   const recordRouteFailure = createRecordFailure(state, routeChainKey);
   const {
     filtered: modelsToTry,

@@ -19,7 +19,7 @@ import {
 describe("index/handlers 모듈", () => {
   const makeState = () => {
     const s = createRouterState();
-    s.currentConfig = { profiles: { balanced: { medium: { models: ["openai/a"] } } } };
+    s.currentConfig = { routers: { balanced: { medium: { models: ["openai/a"] } } } };
     return s;
   };
 
@@ -27,7 +27,7 @@ describe("index/handlers 모듈", () => {
     const setModelInternally = vi.fn().mockResolvedValue(true);
     const persistState = vi.fn();
     const reloadConfig = vi.fn();
-    const ensureValidActiveRouterProfile = vi.fn().mockResolvedValue(undefined);
+    const ensureValidActiveRouter = vi.fn().mockResolvedValue(undefined);
     const tryRestoreFallback = vi.fn().mockResolvedValue(false);
     const recordDebugDecision = vi.fn();
     const actions = createRouterActions(makeFakePi(), state);
@@ -35,7 +35,7 @@ describe("index/handlers 모듈", () => {
       setModelInternally,
       persistState,
       reloadConfig,
-      ensureValidActiveRouterProfile,
+      ensureValidActiveRouter,
       tryRestoreFallback,
       recordDebugDecision,
     });
@@ -44,7 +44,7 @@ describe("index/handlers 모듈", () => {
       setModelInternally,
       persistState,
       reloadConfig,
-      ensureValidActiveRouterProfile,
+      ensureValidActiveRouter,
       tryRestoreFallback,
       recordDebugDecision,
     };
@@ -83,7 +83,7 @@ describe("index/handlers 모듈", () => {
     it("debugEnabled일 때 알림한다", async () => {
       const state = makeState();
       state.debugEnabled = true;
-      state.currentConfig = { profiles: { balanced: {} } };
+      state.currentConfig = { routers: { balanced: {} } };
       const bundled = makeActionsFor(state);
       const tryRestoreFallback = vi.fn().mockResolvedValue(false);
       Object.assign(bundled.actions, { tryRestoreFallback });
@@ -139,7 +139,7 @@ describe("index/handlers 모듈", () => {
       expect(persistState).not.toHaveBeenCalled();
     });
 
-    it("router 유효 profile이다", async () => {
+    it("router 유효 router이다", async () => {
       const state = makeState();
       state.isInitialized = true;
       const { actions, persistState } = makeActionsFor(state);
@@ -171,7 +171,7 @@ describe("index/handlers 모듈", () => {
         actions,
       );
       expect(state.routerEnabled).toBe(true);
-      expect(state.selectedProfile).toBe("balanced");
+      expect(state.selectedRouter).toBe("balanced");
       expect(persistState).toHaveBeenCalled();
     });
 
@@ -209,10 +209,10 @@ describe("index/handlers 모듈", () => {
       expect(setModelInternally).toHaveBeenCalled();
     });
 
-    it("알 수 없는 router profile은 폴백으로 처리한다", async () => {
+    it("알 수 없는 router router은 폴백으로 처리한다", async () => {
       const state = makeState();
       state.isInitialized = true;
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const bundled = makeActionsFor(state);
       const tryRestoreFallback = vi.fn().mockResolvedValue(true);
       Object.assign(bundled.actions, { tryRestoreFallback });
@@ -229,15 +229,15 @@ describe("index/handlers 모듈", () => {
       );
       expect(tryRestoreFallback).toHaveBeenCalled();
       expect(notify).toHaveBeenCalledWith(
-        expect.stringContaining("Unknown router profile"),
+        expect.stringContaining("Unknown router router"),
         "error",
       );
     });
 
-    it("알 수 없는 router profile은 폴백 없이 처리한다", async () => {
+    it("알 수 없는 router router은 폴백 없이 처리한다", async () => {
       const state = makeState();
       state.isInitialized = true;
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const bundled = makeActionsFor(state);
       const tryRestoreFallback = vi.fn().mockResolvedValue(false);
       Object.assign(bundled.actions, { tryRestoreFallback });
@@ -332,7 +332,7 @@ describe("index/handlers 모듈", () => {
       });
       state.currentModelRegistry = registry;
       state.routerEnabled = true;
-      state.selectedProfile = "balanced";
+      state.selectedRouter = "balanced";
       const { actions, setModelInternally } = makeActionsFor(state);
       const { ui } = makeUiMocks();
       const ctx = makeFakeExtensionContext({
@@ -349,7 +349,7 @@ describe("index/handlers 모듈", () => {
       const state = createRouterState();
       state.currentModelRegistry = makeFakeRegistry({ find: vi.fn() });
       state.routerEnabled = true;
-      state.selectedProfile = "balanced";
+      state.selectedRouter = "balanced";
       const { actions, setModelInternally } = makeActionsFor(state);
       const { ui } = makeUiMocks();
       const ctx = makeFakeExtensionContext({
@@ -362,11 +362,11 @@ describe("index/handlers 모듈", () => {
       expect(setModelInternally).not.toHaveBeenCalled();
     });
 
-    it("selectedProfile이 없으면 복원하지 않는다", async () => {
+    it("selectedRouter이 없으면 복원하지 않는다", async () => {
       const state = createRouterState();
       state.currentModelRegistry = makeFakeRegistry({ find: vi.fn() });
       state.routerEnabled = true;
-      state.selectedProfile = undefined;
+      state.selectedRouter = undefined;
       const { actions, setModelInternally } = makeActionsFor(state);
       const { ui } = makeUiMocks();
       const ctx = makeFakeExtensionContext({
@@ -385,7 +385,7 @@ describe("index/handlers 모듈", () => {
         find: vi.fn().mockReturnValue(undefined),
       });
       state.routerEnabled = true;
-      state.selectedProfile = "balanced";
+      state.selectedRouter = "balanced";
       const { actions, setModelInternally } = makeActionsFor(state);
       const { ui } = makeUiMocks();
       const ctx = makeFakeExtensionContext({

@@ -5,7 +5,7 @@ export {
   createSetModelInternally,
   createTryFallbackByRef,
   createTryRestoreFallback,
-  createEnsureValidActiveRouterProfile,
+  createEnsureValidActiveRouter,
 } from "./fallback";
 export { handleSessionStart, handleModelSelect, handleTurnStart, handleTurnEnd } from "./handlers";
 export { default as routerExtension, createExtensionState } from "./extension";

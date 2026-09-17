@@ -42,11 +42,11 @@ export const nearbyTierOrder = (preferred: RouterTier): RouterTier[] => {
  * 라우팅(src/routing.ts)과 ref 해결(src/config/ref.ts)이 공유함.
  */
 export const resolveAvailableTier = (
-  profile: Partial<Record<RouterTier, unknown>>,
+  router: Partial<Record<RouterTier, unknown>>,
   preferred: RouterTier,
 ): RouterTier => {
   for (const tier of nearbyTierOrder(preferred)) {
-    if (profile[tier]) return tier;
+    if (router[tier]) return tier;
   }
   return preferred;
 };
@@ -63,7 +63,7 @@ export const mergeTier = (
 
 export const normalizeModelList = (
   rawModels: unknown,
-  profileName: string,
+  routerName: string,
   label: string,
   warnings: string[],
 ): string[] | undefined => {
@@ -73,18 +73,18 @@ export const normalizeModelList = (
   const models: string[] = [];
   for (const m of rawModels) {
     if (typeof m !== "string" || !m.trim()) {
-      warnings.push(`Invalid model entry "${String(m)}" in profile "${profileName}" ${label}.`);
+      warnings.push(`Invalid model entry "${String(m)}" in router "${routerName}" ${label}.`);
       continue;
     }
     if (m.trim().startsWith("@@")) {
       warnings.push(
-        `Invalid model "${m}" in profile "${profileName}" ${label}: "@@typesafe/" entries are only supported in "classifierModels", not in tier/profile "models".`,
+        `Invalid model "${m}" in router "${routerName}" ${label}: "@@typesafe/" entries are only supported in "classifierModels", not in tier/router "models".`,
       );
       continue;
     }
     if (!isValidModelEntry(m.trim())) {
       warnings.push(
-        `Invalid model "${m}" in profile "${profileName}" ${label}: expected "provider/model[#thinking]" or "@profile[#tier[#effort]]".`,
+        `Invalid model "${m}" in router "${routerName}" ${label}: expected "provider/model[#effort]" or "@router[#tier[#effort]]".`,
       );
       continue;
     }
@@ -95,10 +95,10 @@ export const normalizeModelList = (
 
 export const normalizeTierConfig = (
   value: unknown,
-  profileName: string,
+  routerName: string,
   tier: RouterTier,
   warnings: string[],
-  profileModels?: string[],
+  routerModels?: string[],
 ): RoutedTierConfig | undefined => {
   if (!isObjectRecord(value)) {
     return undefined;
@@ -107,22 +107,22 @@ export const normalizeTierConfig = (
   const record = value;
   if (record.ref !== undefined) {
     warnings.push(
-      `Profile "${profileName}" ${tier} tier has removed "ref" field: use "@profile[#tier[#effort]]" entries in "models" instead. Tier disabled.`,
+      `Router "${routerName}" ${tier} tier has removed "ref" field: use "@router[#tier[#effort]]" entries in "models" instead. Tier disabled.`,
     );
     return undefined;
   }
   const rawModels = record.models;
-  // 티어 `models`가 없으면 프로필 기본값 상속.
-  let models = normalizeModelList(rawModels, profileName, `${tier} tier`, warnings);
-  if (!models && profileModels?.length) {
-    models = [...profileModels];
+  // 티어 `models`가 없으면 라우터 기본값 상속.
+  let models = normalizeModelList(rawModels, routerName, `${tier} tier`, warnings);
+  if (!models && routerModels?.length) {
+    models = [...routerModels];
   }
   if (!models) {
     if (Array.isArray(rawModels) && rawModels.length > 0) {
-      warnings.push(`Profile "${profileName}" ${tier} tier has no valid models. Tier disabled.`);
+      warnings.push(`Router "${routerName}" ${tier} tier has no valid models. Tier disabled.`);
     } else {
       warnings.push(
-        `Profile "${profileName}" ${tier} tier is missing "models" array. Tier disabled.`,
+        `Router "${routerName}" ${tier} tier is missing "models" array. Tier disabled.`,
       );
     }
     return undefined;
@@ -130,7 +130,7 @@ export const normalizeTierConfig = (
 
   const invalidTierDefault = (key: string, raw: unknown): undefined => {
     warnings.push(
-      `Profile "${profileName}" ${tier} tier has invalid ${key} ${JSON.stringify(raw)}: expected one of ${(ALLOWED_THINKING as readonly string[]).join(", ")}. Ignored.`,
+      `Router "${routerName}" ${tier} tier has invalid ${key} ${JSON.stringify(raw)}: expected one of ${(ALLOWED_THINKING as readonly string[]).join(", ")}. Ignored.`,
     );
     return undefined;
   };
@@ -146,15 +146,9 @@ export const normalizeTierConfig = (
     }
     return v;
   };
-  const tierThinking = parseTierDefault(record.thinking, "thinking");
-  const tierEffort = parseTierDefault(record.effort, "effort");
-  if (tierThinking !== undefined && tierEffort !== undefined && tierThinking !== tierEffort) {
-    warnings.push(
-      `Profile "${profileName}" ${tier} tier has both "thinking" and "effort": using "thinking" ("${tierThinking}").`,
-    );
-  }
+  // 제거된 thinking 키는 알 수 없는 프로퍼티로 조용히 무시함 (effort만 유효).
   // 티어 강제 effort. 모델별 `#`와 위임 결과보다 우선함 (라우팅/확장에서 강제 적용).
-  const thinking = tierThinking ?? tierEffort;
+  const effort = parseTierDefault(record.effort, "effort");
 
   let tierContextWindow: number | undefined;
   if (typeof record.contextWindow === "number") {
@@ -176,7 +170,7 @@ export const normalizeTierConfig = (
 
   return {
     models,
-    thinking,
+    effort,
     contextWindow: tierContextWindow,
     maxTokens: tierMaxTokens,
     reasoning: tierReasoning,

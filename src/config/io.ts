@@ -101,7 +101,7 @@ export const createLoadRouterConfig =
     const projectJsonResult = deps.parseConfigFile(projectJsonPath);
     const projectJsoncResult = deps.parseConfigFile(projectJsoncPath);
 
-    const baseConfig: RouterConfig = { profiles: {} };
+    const baseConfig: RouterConfig = { routers: {} };
     let merged = deps.mergeConfig(baseConfig, globalJsonResult.config);
     merged = deps.mergeConfig(merged, globalJsoncResult.config);
     merged = deps.mergeConfig(merged, projectJsonResult.config);

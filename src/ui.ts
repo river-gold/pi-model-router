@@ -2,7 +2,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { RoutingDecision } from "./types";
 
 export const formatDecision = (decision: RoutingDecision): string => {
-  return `${decision.profile}: ${decision.tier} -> ${decision.targetProvider}/${decision.targetModelId} [${decision.thinking ?? "auto"}] (${decision.reasoning})`;
+  return `${decision.router}: ${decision.tier} -> ${decision.targetProvider}/${decision.targetModelId} [${decision.effort ?? "auto"}] (${decision.reasoning})`;
 };
 
 export const formatModelRef = (ref: string | undefined): string => {
@@ -12,19 +12,19 @@ export const formatModelRef = (ref: string | undefined): string => {
 export const updateStatus = (
   ctx: ExtensionContext,
   routerEnabled: boolean,
-  selectedProfile: string | undefined,
+  selectedRouter: string | undefined,
   lastDecision: RoutingDecision | undefined,
 ) => {
-  const activeRouterProfile = routerEnabled ? selectedProfile : undefined;
+  const activeRouter = routerEnabled ? selectedRouter : undefined;
 
-  if (activeRouterProfile) {
-    const matchesProfile = lastDecision && lastDecision.profile === activeRouterProfile;
+  if (activeRouter) {
+    const matchesRouter = lastDecision && lastDecision.router === activeRouter;
 
     let statusText: string;
-    if (lastDecision && matchesProfile) {
-      statusText = `router:${activeRouterProfile} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.thinking ?? "auto"})`;
+    if (lastDecision && matchesRouter) {
+      statusText = `router:${activeRouter} -> ${lastDecision.tier} -> ${lastDecision.targetProvider}/${lastDecision.targetModelId} (${lastDecision.effort ?? "auto"})`;
     } else {
-      statusText = `router:${activeRouterProfile} -> waiting`;
+      statusText = `router:${activeRouter} -> waiting`;
     }
     ctx.ui.setStatus("router", `🚥 ${statusText}`);
   } else {

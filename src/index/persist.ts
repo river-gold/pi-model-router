@@ -9,7 +9,7 @@ export const createPersistState = (pi: ExtensionAPI, state: RouterState) => {
     const snapshot = JSON.stringify({
       ...buildPersistedState(
         state.routerEnabled,
-        state.selectedProfile,
+        state.selectedRouter,
         state.debugEnabled,
         state.debugHistory,
         state.lastDecision,
@@ -26,7 +26,7 @@ export const createPersistState = (pi: ExtensionAPI, state: RouterState) => {
         "router-state",
         buildPersistedState(
           state.routerEnabled,
-          state.selectedProfile,
+          state.selectedRouter,
           state.debugEnabled,
           state.debugHistory,
           state.lastDecision,

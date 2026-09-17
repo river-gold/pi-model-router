@@ -1,16 +1,16 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { RouterProfile, ClassifierModelsSetting, RouterTier, TierGuides } from "../types";
+import type { Router, ClassifierModelsSetting, RouterTier, TierGuides } from "../types";
 import { resolveEffectiveClassifier, isTypesafeClassifierConfig } from "../config";
 import { runClassifierWithFallbacksDetailed, type ClassifierAttempt } from "../classifier";
 import { runTypesafeEntry } from "./typesafeEntry";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
 
-// runClassifierBranch matches task signature: (registry, profile, state, context, signal, effectiveHistorySize, failedSet, classifierSource) -> {result, attempts}
+// runClassifierBranch matches task signature: (registry, router, state, context, signal, effectiveHistorySize, failedSet, classifierSource) -> {result, attempts}
 export const runClassifierBranch = async (
   registry: ExtensionContext["modelRegistry"],
-  profile: RouterProfile,
+  router: Router,
   state: {
     currentConfig: {
       classifierModels?: ClassifierModelsSetting | undefined;
@@ -26,16 +26,16 @@ export const runClassifierBranch = async (
   failedSet: Set<string>,
   classifierSource: string,
   sessionId?: string,
-  profileName?: string,
-  profiles?: Record<string, RouterProfile>,
+  routerName?: string,
+  routers?: Record<string, Router>,
 ): Promise<{
   result: { tier: RouterTier; reasoning: string } | undefined;
   attempts: ClassifierAttempt[];
 }> => {
   const { classifiers: effectiveClassifiers } = resolveEffectiveClassifier(
-    profile,
+    router,
     state.currentConfig.classifierModels,
-    profiles,
+    routers,
   );
   if (!effectiveClassifiers) {
     throw new Error(
@@ -44,10 +44,10 @@ export const runClassifierBranch = async (
   }
   if (signal?.aborted) throw new Error("aborted");
   const attempts: ClassifierAttempt[] = [];
-  const onAttempt = (entry: { model: string; thinking?: ThinkingLevel; source?: string }): void => {
+  const onAttempt = (entry: { model: string; effort?: ThinkingLevel; source?: string }): void => {
     try {
       state.lastExtensionContext?.ui.setWorkingMessage(
-        `Classifying via ${entry.source ?? classifierSource} (${entry.model}${entry.thinking ? `#${entry.thinking}` : ""})...`,
+        `Classifying via ${entry.source ?? classifierSource} (${entry.model}${entry.effort ? `#${entry.effort}` : ""})...`,
       );
     } catch {
       // stale
@@ -91,7 +91,7 @@ export const runClassifierBranch = async (
   }
   if (result) return { result, attempts };
   const attempted = attempts
-    .map((a) => `${a.model}${a.thinking ? `#${a.thinking}` : ""} (${a.error})`)
+    .map((a) => `${a.model}${a.effort ? `#${a.effort}` : ""} (${a.error})`)
     .join(", ");
   throw new Error(
     `Classifier failed to determine a tier. Source: ${classifierSource}. Attempted: ${attempted || "none"}. Models may be unregistered, missing API keys, or returned invalid format (expected "Tier: minimal|low|medium|high|xhigh|max").`,

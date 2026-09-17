@@ -15,7 +15,7 @@ import {
   toDelegateResult,
 } from "../../src/provider/delegate";
 import type { DelegateParams } from "../../src/provider/delegate";
-import type { RouterProfile, RoutingDecision } from "../../src/types";
+import type { Router, RoutingDecision } from "../../src/types";
 import { clearRateLimitCooldowns, liveRateLimitedRefs } from "../../src/failureMemory";
 import { fakeSignal, makeFakeModel, makeFakeRegistry, makeStreamSpy } from "../helpers";
 
@@ -28,7 +28,7 @@ vi.mock("../../src/stream", async () => {
   return { ...actual, streamDelegated: mockStreamDelegated };
 });
 
-const profile = (over: Partial<RouterProfile> = {}): RouterProfile =>
+const router = (over: Partial<Router> = {}): Router =>
   Object.assign(
     {
       high: { models: ["openai/gpt-high"], resolvedContextWindow: 1000 },
@@ -39,13 +39,13 @@ const profile = (over: Partial<RouterProfile> = {}): RouterProfile =>
 const decision = (over: Partial<RoutingDecision> = {}): RoutingDecision =>
   Object.assign(
     {
-      profile: "balanced",
+      router: "balanced",
       tier: "high",
       targetProvider: "openai",
       targetModelId: "gpt-high",
       targetLabel: "openai/gpt-high",
       reasoning: "r",
-      thinking: "high",
+      effort: "high",
       timestamp: Date.now(),
     },
     over,
@@ -58,7 +58,7 @@ const base = (over: Partial<DelegateParams> = {}): DelegateParams =>
         find: () => makeFakeModel({ provider: "openai", id: "gpt-high", reasoning: false }),
         getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k", headers: {} }),
       }),
-      profile: profile({ high: { models: ["openai/gpt-high"] } }),
+      router: router({ high: { models: ["openai/gpt-high"] } }),
       decision: decision({ tier: "high" }),
       routerModel: makeFakeModel({ contextWindow: 10000 }),
       context: { messages: [] },
@@ -79,7 +79,7 @@ describe("delegate 순수 헬퍼 함수들", () => {
   it("getInitialModelsToTry 중복 제거", () => {
     expect(
       getInitialModelsToTry(
-        profile({ high: { models: ["a/b", "a/b"] } }),
+        router({ high: { models: ["a/b", "a/b"] } }),
         decision({ tier: "high" }),
       ),
     ).toEqual(["a/b"]);
@@ -87,7 +87,7 @@ describe("delegate 순수 헬퍼 함수들", () => {
   it("getInitialModelsToTry tier가 undefined인 경우", () => {
     expect(
       getInitialModelsToTry(
-        profile({ high: undefined }),
+        router({ high: undefined }),
         decision({ tier: "high", targetProvider: "openai", targetModelId: "gpt" }),
       ),
     ).toEqual(["openai/gpt#high"]);
@@ -95,7 +95,7 @@ describe("delegate 순수 헬퍼 함수들", () => {
   it("getInitialModelsToTry tier가 비어 있는 경우", () => {
     expect(
       getInitialModelsToTry(
-        profile({ high: { models: [] } }),
+        router({ high: { models: [] } }),
         decision({ tier: "high", targetProvider: "openai", targetModelId: "gpt" }),
       ),
     ).toEqual(["openai/gpt#high"]);
@@ -120,7 +120,7 @@ describe("delegate 순수 헬퍼 함수들", () => {
     expect(state.failedByChain.get("route:balanced:high")!.size).toBe(1);
   });
   it("resolveTargetLimit 대상 limit 결정", () => {
-    const p = profile({ high: { models: ["openai/gpt-high"] } });
+    const p = router({ high: { models: ["openai/gpt-high"] } });
     expect(
       typeof resolveTargetLimit(
         p,
@@ -153,7 +153,7 @@ describe("delegate 순수 헬퍼 함수들", () => {
     ).toBe("number");
     expect(
       typeof resolveTargetLimit(
-        profile({
+        router({
           high: { models: ["openai/gpt-high"] },
           medium: { models: ["openai/gpt-medium"] },
         }),
@@ -235,12 +235,12 @@ describe("delegate 순수 헬퍼 함수들", () => {
     expect(shouldSkipRouterModel("openai")).toBe(false);
   });
   it("buildFallbackDecision 폴백 decision 구성", () => {
-    const d = decision({ thinking: "high" });
+    const d = decision({ effort: "high" });
     buildFallbackDecision(d, "anthropic/claude#low");
-    expect(d.isFallback && d.targetProvider === "anthropic" && d.thinking === "low").toBe(true);
-    const d2 = decision({ thinking: "high" });
+    expect(d.isFallback && d.targetProvider === "anthropic" && d.effort === "low").toBe(true);
+    const d2 = decision({ effort: "high" });
     buildFallbackDecision(d2, "openai/gpt");
-    expect(d2.thinking).toBe("high");
+    expect(d2.effort).toBe("high");
   });
 });
 
@@ -279,7 +279,7 @@ describe("attemptSingleModel 단일 모델 시도", () => {
     );
     const s: any = {
       failedByChain: new Map(),
-      lastDecision: { profile: "balanced" },
+      lastDecision: { router: "balanced" },
       accumulatedCost: 0,
       lastExtensionContext: { ui: { setHiddenThinkingLabel: vi.fn() } },
     };
@@ -328,7 +328,7 @@ describe("attemptSingleModel 단일 모델 시도", () => {
           0,
           base({
             state: s,
-            decision: decision({ tier: "high", thinking: "high" }),
+            decision: decision({ tier: "high", effort: "high" }),
             registry: makeFakeRegistry({
               find: () => makeFakeModel({ provider: "openai", id: "gpt-high", reasoning: true }),
               getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k", headers: {} }),
@@ -519,9 +519,9 @@ describe("attemptSingleModel 단일 모델 시도", () => {
     );
     expect(r.status).toBe("success");
     expect(s.lastDecision).not.toBe(dec);
-    expect(s.lastDecision.profile).toBe("balanced");
+    expect(s.lastDecision.router).toBe("balanced");
   });
-  it("fallback 시 다른 profile의 lastDecision 유지", async () => {
+  it("fallback 시 다른 router의 lastDecision 유지", async () => {
     mockStreamDelegated.mockImplementation(() =>
       (async function* () {
         yield { type: "done", message: { usage: { cost: { total: 0 } } } };
@@ -530,7 +530,7 @@ describe("attemptSingleModel 단일 모델 시도", () => {
     const dec = decision({ tier: "high" });
     const s: any = {
       failedByChain: new Map(),
-      lastDecision: { profile: "other" },
+      lastDecision: { router: "other" },
       accumulatedCost: 0,
     };
     const r = await attemptSingleModel(
@@ -540,7 +540,7 @@ describe("attemptSingleModel 단일 모델 시도", () => {
       vi.fn(),
     );
     expect(r.status).toBe("success");
-    expect(s.lastDecision).toEqual({ profile: "other" });
+    expect(s.lastDecision).toEqual({ router: "other" });
   });
   it("streamDelegated throw 시 transient error 기록 없이 retry", async () => {
     mockStreamDelegated.mockImplementation(() => {
@@ -662,14 +662,14 @@ describe("delegateToTierModels tier 모델 위임", () => {
     );
     const state: any = {
       failedByChain: new Map(),
-      lastDecision: { profile: "balanced" },
+      lastDecision: { router: "balanced" },
       accumulatedCost: 0,
       lastExtensionContext: { ui: { setHiddenThinkingLabel: vi.fn() } },
     };
     const res = await delegateToTierModels(
       base({
         state,
-        profile: profile({ high: { models: ["openai/gpt-high", "openai/gpt-fallback"] } }),
+        router: router({ high: { models: ["openai/gpt-high", "openai/gpt-fallback"] } }),
         registry: makeFakeRegistry({
           find: () => makeFakeModel({ provider: "openai", id: "gpt-high", reasoning: false }),
           getApiKeyAndHeaders: async () => {
@@ -704,7 +704,7 @@ describe("delegateToTierModels tier 모델 위임", () => {
     const res = await delegateToTierModels(
       base({
         state,
-        profile: profile({ high: { models: ["router/auto", "openai/gpt-high"] } }),
+        router: router({ high: { models: ["router/auto", "openai/gpt-high"] } }),
       }),
     );
     expect(res.success).toBe(true);
@@ -731,7 +731,7 @@ describe("delegateToTierModels tier 모델 위임", () => {
 });
 
 describe("toDelegateResult 위임 결과 변환", () => {
-  const d = decision({ tier: "medium", profile: "balanced" });
+  const d = decision({ tier: "medium", router: "balanced" });
   it("toDelegateResult 성공과 실패 매핑", () => {
     expect(toDelegateResult({ success: true, costDelta: 1 }, d).success).toBe(true);
     expect(
@@ -741,7 +741,7 @@ describe("toDelegateResult 위임 결과 변환", () => {
 });
 
 describe("delegate 논리적 ref 실시간 추적", () => {
-  const liveProfiles: Record<string, RouterProfile> = {
+  const liveRouters: Record<string, Router> = {
     balanced: {
       high: { models: ["@base#high"] },
       medium: { models: ["openai/gpt-medium"] },
@@ -753,21 +753,21 @@ describe("delegate 논리적 ref 실시간 추적", () => {
   it("getInitialModelsToTry가 추적된 모델을 반환함", () => {
     expect(
       getInitialModelsToTry(
-        liveProfiles.balanced,
-        decision({ profile: "balanced", tier: "high" }),
-        liveProfiles,
+        liveRouters.balanced,
+        decision({ router: "balanced", tier: "high" }),
+        liveRouters,
       ),
     ).toEqual(["openai/gpt-high"]);
   });
-  it("getInitialModelsToTry 추적 실패 시 기존 profile로 대체함", () => {
-    const profiles: Record<string, RouterProfile> = {
+  it("getInitialModelsToTry 추적 실패 시 기존 router로 대체함", () => {
+    const routers: Record<string, Router> = {
       balanced: { high: { ref: "missing#high" } },
     };
     expect(
       getInitialModelsToTry(
         { high: { models: ["openai/fallback"] } },
-        decision({ profile: "balanced", tier: "high" }),
-        profiles,
+        decision({ router: "balanced", tier: "high" }),
+        routers,
       ),
     ).toEqual(["openai/fallback"]);
   });
@@ -777,13 +777,13 @@ describe("delegate 논리적 ref 실시간 추적", () => {
     });
     expect(
       resolveTargetLimit(
-        liveProfiles.balanced,
-        decision({ profile: "balanced", tier: "high" }),
+        liveRouters.balanced,
+        decision({ router: "balanced", tier: "high" }),
         "openai/gpt-high",
         registry,
         "openai",
         "gpt-high",
-        liveProfiles,
+        liveRouters,
       ),
     ).toBe(2000);
   });
@@ -793,28 +793,28 @@ describe("delegate 논리적 ref 실시간 추적", () => {
     });
     expect(
       resolveTargetLimit(
-        liveProfiles.balanced,
-        decision({ profile: "balanced", tier: "high" }),
+        liveRouters.balanced,
+        decision({ router: "balanced", tier: "high" }),
         "openai/other",
         registry,
         "openai",
         "other",
-        liveProfiles,
+        liveRouters,
       ),
     ).toBe(3000);
   });
   it("resolveTargetLimit이 전부 해석 불가면 기본값을 반환함", () => {
-    const profiles: Record<string, RouterProfile> = { balanced: { high: { ref: "missing#high" } } };
+    const routers: Record<string, Router> = { balanced: { high: { ref: "missing#high" } } };
     const registry = makeFakeRegistry({ find: vi.fn().mockReturnValue(undefined) });
     expect(
       resolveTargetLimit(
-        profiles.balanced,
-        decision({ profile: "balanced", tier: "high" }),
+        routers.balanced,
+        decision({ router: "balanced", tier: "high" }),
         "openai/other",
         registry,
         "openai",
         "other",
-        profiles,
+        routers,
       ),
     ).toBe(128000);
   });

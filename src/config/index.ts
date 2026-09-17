@@ -55,7 +55,7 @@ export type {
   ParseConfigFileDeps,
   LoadRouterConfigDeps,
 } from "./io";
-export { profileNames, resolveProfileName } from "./profile";
+export { routerNames, resolveRouterName } from "./router";
 export {
   resolveContextWindow,
   resolveMaxTokens,

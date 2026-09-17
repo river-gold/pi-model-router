@@ -6,7 +6,7 @@ export type RouterProviderState = {
   readonly currentConfig: RouterConfig;
   readonly currentModelRegistry: ExtensionContext["modelRegistry"] | undefined;
   readonly lastExtensionContext: ExtensionContext | undefined;
-  selectedProfile: string | undefined;
+  selectedRouter: string | undefined;
   routerEnabled: boolean;
   lastDecision: RoutingDecision | undefined;
   accumulatedCost: number;

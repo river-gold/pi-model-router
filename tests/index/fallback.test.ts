@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createEnsureValidActiveRouterProfile,
+  createEnsureValidActiveRouter,
   createSetModelInternally,
   createTryFallbackByRef,
   createTryRestoreFallback,
@@ -150,10 +150,10 @@ describe("index/fallback 모듈", () => {
     });
   });
 
-  describe("createEnsureValidActiveRouterProfile 함수", () => {
+  describe("createEnsureValidActiveRouter 함수", () => {
     it("router provider가 아니면 반환한다", async () => {
       const state = createRouterState();
-      const fn = createEnsureValidActiveRouterProfile(state, vi.fn());
+      const fn = createEnsureValidActiveRouter(state, vi.fn());
       const notify = vi.fn();
       const ctx = makeFakeExtensionContext({
         model: makeFakeModel({ provider: "openai", id: "gpt" }),
@@ -164,27 +164,27 @@ describe("index/fallback 모듈", () => {
     });
     it("model이 없으면 반환한다", async () => {
       const state = createRouterState();
-      const fn = createEnsureValidActiveRouterProfile(state, vi.fn());
+      const fn = createEnsureValidActiveRouter(state, vi.fn());
       await fn(makeFakeExtensionContext({ model: undefined }));
       // should return early, no notify
     });
-    it("유효한 profile이다", async () => {
+    it("유효한 router이다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: { balanced: {} } };
-      const fn = createEnsureValidActiveRouterProfile(state, vi.fn());
+      state.currentConfig = { routers: { balanced: {} } };
+      const fn = createEnsureValidActiveRouter(state, vi.fn());
       const ctx = makeFakeExtensionContext({
         model: makeFakeModel({ provider: "router", id: "balanced" }),
         ui: makeFakeUi(),
       });
       await fn(ctx);
-      expect(state.selectedProfile).toBe("balanced");
+      expect(state.selectedRouter).toBe("balanced");
       expect(state.routerEnabled).toBe(true);
     });
-    it("유효하지 않은 profile은 폴백 성공 시 처리한다", async () => {
+    it("유효하지 않은 router은 폴백 성공 시 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const tryRestoreFallback = vi.fn().mockResolvedValue(true);
-      const fn = createEnsureValidActiveRouterProfile(state, tryRestoreFallback);
+      const fn = createEnsureValidActiveRouter(state, tryRestoreFallback);
       const notify = vi.fn();
       const ctx = makeFakeExtensionContext({
         model: makeFakeModel({ provider: "router", id: "unknown" }),
@@ -192,18 +192,18 @@ describe("index/fallback 모듈", () => {
       });
       await fn(ctx);
       expect(state.routerEnabled).toBe(false);
-      expect(state.selectedProfile).toBeUndefined();
+      expect(state.selectedRouter).toBeUndefined();
       expect(tryRestoreFallback).toHaveBeenCalled();
       expect(notify).toHaveBeenCalledWith(
         expect.stringContaining("no longer configured"),
         "warning",
       );
     });
-    it("유효하지 않은 profile은 폴백 실패 시 처리한다", async () => {
+    it("유효하지 않은 router은 폴백 실패 시 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const tryRestoreFallback = vi.fn().mockResolvedValue(false);
-      const fn = createEnsureValidActiveRouterProfile(state, tryRestoreFallback);
+      const fn = createEnsureValidActiveRouter(state, tryRestoreFallback);
       const notify = vi.fn();
       const ctx = makeFakeExtensionContext({
         model: makeFakeModel({ provider: "router", id: "unknown" }),

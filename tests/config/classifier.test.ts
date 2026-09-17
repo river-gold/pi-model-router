@@ -6,30 +6,30 @@ import {
   resolveEffectiveClassifier,
 } from "../../src/config/classifier";
 import { normalizeConfig } from "../../src/config/normalize";
-import type { RouterProfile } from "../../src/types";
+import type { Router } from "../../src/types";
 
 describe("classifier를 검증함", () => {
   describe("normalizeClassifierConfig 동작을 검증함", () => {
-    it("thinking 없는 유효한 문자열을 처리함을 검증함", () => {
+    it("effort 없는 유효한 문자열을 처리함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("openai/gpt-4o", w, "classifierModels")).toEqual({
         model: "openai/gpt-4o",
-        thinking: undefined,
+        effort: undefined,
       });
       expect(w).toEqual([]);
     });
-    it("thinking 있는 유효한 문자열을 처리함을 검증함", () => {
+    it("effort 있는 유효한 문자열을 처리함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("openai/gpt-4o#high", w, "classifierModels")).toEqual({
         model: "openai/gpt-4o",
-        thinking: "high",
+        effort: "high",
       });
     });
     it("앞뒤 공백을 제거함을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig(" openai/gpt-4o#low ", w, "ctx")).toEqual({
         model: "openai/gpt-4o",
-        thinking: "low",
+        effort: "low",
       });
     });
     it("잘못된 ref는 warning 남기고 undefined 반환함을 검증함", () => {
@@ -37,7 +37,7 @@ describe("classifier를 검증함", () => {
       expect(normalizeClassifierConfig("invalid", w, "classifierModels")).toBeUndefined();
       expect(w[0]).toMatch(/Invalid classifierModels/);
     });
-    it("잘못된 thinking은 warning 남김을 검증함", () => {
+    it("잘못된 effort는 warning 남김을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierConfig("openai/gpt-4o#bad", w, "ctx")).toBeUndefined();
       expect(w[0]).toMatch(/Invalid ctx/);
@@ -91,8 +91,8 @@ describe("classifier를 검증함", () => {
         "ctx",
       );
       expect(r).toEqual([
-        { model: "openai/gpt-4o", thinking: "high" },
-        { model: "google/gemini", thinking: "low" },
+        { model: "openai/gpt-4o", effort: "high" },
+        { model: "google/gemini", effort: "low" },
       ]);
       expect(w.length).toBe(1);
     });
@@ -143,7 +143,7 @@ describe("classifier를 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels(["@cheap#low#off", "openai/a#low"], w, "ctx")).toEqual([
         { ref: "cheap#low#off" },
-        { model: "openai/a", thinking: "low" },
+        { model: "openai/a", effort: "low" },
       ]);
       expect(w).toEqual([]);
     });
@@ -153,7 +153,7 @@ describe("classifier를 검증함", () => {
         { ref: "cheap#low#off" },
       ]);
       expect(w.length).toBe(2);
-      expect(w[0]).toMatch(/expected "provider\/model#thinking"/);
+      expect(w[0]).toMatch(/expected "provider\/model#effort"/);
     });
     it("모든 종류의 항목 순서를 유지함을 검증함", () => {
       const w: string[] = [];
@@ -162,236 +162,236 @@ describe("classifier를 검증함", () => {
       ).toEqual([
         { typesafe: true, model: "jev" },
         { ref: "base#low#off" },
-        { model: "openai/a", thinking: "low" },
+        { model: "openai/a", effort: "low" },
       ]);
       expect(w).toEqual([]);
     });
   });
 
   describe("resolveEffectiveClassifier 동작을 검증함", () => {
-    it("profile만 있는 경우를 처리함을 검증함", () => {
-      const profile = { classifierModels: [{ model: "openai/gpt-4o", thinking: "low" as const }] };
-      const r = resolveEffectiveClassifier(profile, undefined);
+    it("router만 있는 경우를 처리함을 검증함", () => {
+      const router = { classifierModels: [{ model: "openai/gpt-4o", effort: "low" as const }] };
+      const r = resolveEffectiveClassifier(router, undefined);
       expect(r.classifiers).toEqual([
-        { model: "openai/gpt-4o", thinking: "low", source: "profile" },
+        { model: "openai/gpt-4o", effort: "low", source: "router" },
       ]);
-      expect(r.source).toBe("profile");
+      expect(r.source).toBe("router");
     });
     it("global만 있는 경우를 처리함을 검증함", () => {
-      const profile: RouterProfile = {};
-      const r = resolveEffectiveClassifier(profile, [
-        { model: "openai/gpt-4o", thinking: "high" as const },
+      const router: Router = {};
+      const r = resolveEffectiveClassifier(router, [
+        { model: "openai/gpt-4o", effort: "high" as const },
       ]);
       expect(r.classifiers).toEqual([
-        { model: "openai/gpt-4o", thinking: "high", source: "global" },
+        { model: "openai/gpt-4o", effort: "high", source: "global" },
       ]);
       expect(r.source).toBe("global");
     });
     it("low만 있는 경우를 처리함을 검증함", () => {
-      const profile: RouterProfile = { low: { models: ["google/gemini#low"] } };
-      const r = resolveEffectiveClassifier(profile, undefined);
+      const router: Router = { low: { models: ["google/gemini#low"] } };
+      const r = resolveEffectiveClassifier(router, undefined);
       expect(r.classifiers).toEqual([
-        { model: "google/gemini", thinking: "low", source: "low tier" },
+        { model: "google/gemini", effort: "low", source: "low tier" },
       ]);
       expect(r.source).toBe("low tier");
     });
-    it("profile+global+low 조합을 처리함을 검증함", () => {
-      const profile: RouterProfile = {
-        classifierModels: [{ model: "openai/a", thinking: "low" as const }],
+    it("router+global+low 조합을 처리함을 검증함", () => {
+      const router: Router = {
+        classifierModels: [{ model: "openai/a", effort: "low" as const }],
         low: { models: ["google/gemini#high"] },
       };
-      const global = [{ model: "openai/b", thinking: "medium" as const }];
-      const r = resolveEffectiveClassifier(profile, global);
+      const global = [{ model: "openai/b", effort: "medium" as const }];
+      const r = resolveEffectiveClassifier(router, global);
       expect(r.classifiers).toEqual([
-        { model: "openai/a", thinking: "low", source: "profile" },
-        { model: "openai/b", thinking: "medium", source: "global" },
-        { model: "google/gemini", thinking: "high", source: "low tier" },
+        { model: "openai/a", effort: "low", source: "router" },
+        { model: "openai/b", effort: "medium", source: "global" },
+        { model: "google/gemini", effort: "high", source: "low tier" },
       ]);
-      expect(r.source).toBe("profile → global → low tier");
+      expect(r.source).toBe("router → global → low tier");
     });
-    it("profile+low 조합을 처리함을 검증함", () => {
-      const profile: RouterProfile = {
-        classifierModels: [{ model: "openai/gpt-4o", thinking: "low" as const }],
+    it("router+low 조합을 처리함을 검증함", () => {
+      const router: Router = {
+        classifierModels: [{ model: "openai/gpt-4o", effort: "low" as const }],
         low: { models: ["google/gemini#low"] },
       };
-      const r = resolveEffectiveClassifier(profile, undefined);
-      expect(r.source).toBe("profile → low tier");
+      const r = resolveEffectiveClassifier(router, undefined);
+      expect(r.source).toBe("router → low tier");
       expect(r.classifiers?.length).toBe(2);
     });
     it("없으면 classifiers는 undefined, source는 none임을 검증함", () => {
-      const profile: RouterProfile = { high: { models: ["openai/gpt-4o"] } };
-      const r = resolveEffectiveClassifier(profile, undefined);
+      const router: Router = { high: { models: ["openai/gpt-4o"] } };
+      const r = resolveEffectiveClassifier(router, undefined);
       expect(r.classifiers).toBeUndefined();
       expect(r.source).toBe("none");
     });
-    it("여러 모델과 thinking이 있는 low를 처리함을 검증함", () => {
-      const profile: RouterProfile = {
+    it("여러 모델과 effort가 있는 low를 처리함을 검증함", () => {
+      const router: Router = {
         low: { models: ["google/gemini#high", "openai/gpt-4o-mini#off"] },
       };
-      const r = resolveEffectiveClassifier(profile, undefined);
+      const r = resolveEffectiveClassifier(router, undefined);
       expect(r.classifiers).toEqual([
-        { model: "google/gemini", thinking: "high", source: "low tier" },
-        { model: "openai/gpt-4o-mini", thinking: "off", source: "low tier" },
+        { model: "google/gemini", effort: "high", source: "low tier" },
+        { model: "openai/gpt-4o-mini", effort: "off", source: "low tier" },
       ]);
     });
     it("빈 low는 무시함을 검증함", () => {
-      const profile: RouterProfile = { low: { models: [] } };
-      const r = resolveEffectiveClassifier(profile, undefined);
+      const router: Router = { low: { models: [] } };
+      const r = resolveEffectiveClassifier(router, undefined);
       expect(r.classifiers).toBeUndefined();
     });
-    it("빈 profile classifier는 무시함을 검증함", () => {
-      const profile: RouterProfile = {
+    it("빈 router classifier는 무시함을 검증함", () => {
+      const router: Router = {
         classifierModels: [],
         low: { models: ["google/gemini#low"] },
       };
-      const r = resolveEffectiveClassifier(profile, undefined);
+      const r = resolveEffectiveClassifier(router, undefined);
       expect(r.source).toBe("low tier");
     });
     it("빈 global은 무시함을 검증함", () => {
-      const profile: RouterProfile = { low: { models: ["google/gemini#low"] } };
-      const r = resolveEffectiveClassifier(profile, []);
+      const router: Router = { low: { models: ["google/gemini#low"] } };
+      const r = resolveEffectiveClassifier(router, []);
       expect(r.source).toBe("low tier");
     });
     it("TypeSafe 항목은 체인에 그대로 남음을 검증함", () => {
-      const profile: RouterProfile = {
+      const router: Router = {
         classifierModels: [{ typesafe: true, model: "jev" }],
         low: { models: ["google/gemini#low"] },
       };
-      const r = resolveEffectiveClassifier(profile, [{ typesafe: true, model: "jev" }]);
-      expect(r.source).toBe("profile → global → low tier");
+      const r = resolveEffectiveClassifier(router, [{ typesafe: true, model: "jev" }]);
+      expect(r.source).toBe("router → global → low tier");
       expect(r.classifiers).toEqual([
-        { typesafe: true, model: "jev", source: "profile" },
+        { typesafe: true, model: "jev", source: "router" },
         { typesafe: true, model: "jev", source: "global" },
-        { model: "google/gemini", thinking: "low", source: "low tier" },
+        { model: "google/gemini", effort: "low", source: "low tier" },
       ]);
     });
     it("항목 순서가 그대로 체인 순서가 됨을 검증함", () => {
-      const profile: RouterProfile = {
+      const router: Router = {
         classifierModels: [
           { typesafe: true, model: "jev" },
-          { model: "openai/a", thinking: "low" },
+          { model: "openai/a", effort: "low" },
           { ref: "base#low#off" },
         ],
       };
-      const profiles: Record<string, RouterProfile> = {
+      const routers: Record<string, Router> = {
         base: { medium: { models: ["base/m"] } },
       };
-      const r = resolveEffectiveClassifier(profile, undefined, profiles);
+      const r = resolveEffectiveClassifier(router, undefined, routers);
       expect(r.classifiers).toEqual([
-        { typesafe: true, model: "jev", source: "profile" },
-        { model: "openai/a", thinking: "low", source: "profile" },
-        { model: "base/m", thinking: "off", source: "profile" },
+        { typesafe: true, model: "jev", source: "router" },
+        { model: "openai/a", effort: "low", source: "router" },
+        { model: "base/m", effort: "off", source: "router" },
       ]);
     });
   });
 
   describe("resolveClassifierRefModels 동작을 검증함", () => {
-    const refProfiles = (): Record<string, RouterProfile> => ({
+    const refRouters = (): Record<string, Router> => ({
       cheap: {
-        low: { models: ["c/m1", "c/m2#high"], thinking: "max" },
+        low: { models: ["c/m1", "c/m2#high"], effort: "max" },
         medium: { models: ["c/m3"] },
       },
     });
-    it("profile#tier#effort는 지정 tier 모델에 effort를 지정함을 검증함", () => {
-      expect(resolveClassifierRefModels("cheap#low#off", refProfiles())).toEqual([
-        { model: "c/m1", thinking: "off" },
-        { model: "c/m2", thinking: "off" },
+    it("router#tier#effort는 지정 tier 모델에 effort를 지정함을 검증함", () => {
+      expect(resolveClassifierRefModels("cheap#low#off", refRouters())).toEqual([
+        { model: "c/m1", effort: "off" },
+        { model: "c/m2", effort: "off" },
       ]);
     });
-    it("profile#tier는 해당 tier를 사용함을 검증함", () => {
-      expect(resolveClassifierRefModels("cheap#medium", refProfiles())).toEqual([
-        { model: "c/m3", thinking: undefined },
+    it("router#tier는 해당 tier를 사용함을 검증함", () => {
+      expect(resolveClassifierRefModels("cheap#medium", refRouters())).toEqual([
+        { model: "c/m3", effort: undefined },
       ]);
     });
-    it("profile#tier#effort는 지정 tier에 effort를 지정함을 검증함", () => {
-      expect(resolveClassifierRefModels("cheap#medium#low", refProfiles())).toEqual([
-        { model: "c/m3", thinking: "low" },
+    it("router#tier#effort는 지정 tier에 effort를 지정함을 검증함", () => {
+      expect(resolveClassifierRefModels("cheap#medium#low", refRouters())).toEqual([
+        { model: "c/m3", effort: "low" },
       ]);
     });
     it("대상 tier가 없으면 가까운 tier로 폴백함을 검증함", () => {
-      const profiles: Record<string, RouterProfile> = {
+      const routers: Record<string, Router> = {
         cheap: { high: { models: ["c/h"] } },
       };
-      expect(resolveClassifierRefModels("cheap#low#off", profiles)).toEqual([
-        { model: "c/h", thinking: "off" },
+      expect(resolveClassifierRefModels("cheap#low#off", routers)).toEqual([
+        { model: "c/h", effort: "off" },
       ]);
     });
     it("형식 오류 ref는 undefined를 검증함", () => {
-      expect(resolveClassifierRefModels("bad#invalidtier#off", refProfiles())).toBeUndefined();
-      expect(resolveClassifierRefModels("badformat", refProfiles())).toBeUndefined();
+      expect(resolveClassifierRefModels("bad#invalidtier#off", refRouters())).toBeUndefined();
+      expect(resolveClassifierRefModels("badformat", refRouters())).toBeUndefined();
     });
-    it("없는 profile은 undefined를 검증함", () => {
-      expect(resolveClassifierRefModels("ghost#low#off", refProfiles())).toBeUndefined();
+    it("없는 router은 undefined를 검증함", () => {
+      expect(resolveClassifierRefModels("ghost#low#off", refRouters())).toBeUndefined();
     });
     it("해석 불가 ref는 undefined를 검증함", () => {
-      const profiles: Record<string, RouterProfile> = { auto: {} };
-      expect(resolveClassifierRefModels("ghost#high", profiles)).toBeUndefined();
+      const routers: Record<string, Router> = { auto: {} };
+      expect(resolveClassifierRefModels("ghost#high", routers)).toBeUndefined();
     });
   });
 
   describe("resolveEffectiveClassifier ref 확장을 검증함", () => {
-    const refProfiles = (): Record<string, RouterProfile> => ({
+    const refRouters = (): Record<string, Router> => ({
       auto: {
         classifierModels: [{ ref: "cheap#low#off" }],
         low: { models: ["auto/a#low"] },
       },
       cheap: {
-        low: { models: ["c/m1", "c/m2#high"], thinking: "max" },
+        low: { models: ["c/m1", "c/m2#high"], effort: "max" },
         medium: { models: ["c/m3"] },
       },
     });
-    it("profile ref를 펼쳐 source profile로 묶음을 검증함", () => {
-      const profiles = refProfiles();
-      const r = resolveEffectiveClassifier(profiles.auto!, undefined, profiles);
+    it("router ref를 펼쳐 source router로 묶음을 검증함", () => {
+      const routers = refRouters();
+      const r = resolveEffectiveClassifier(routers.auto!, undefined, routers);
       expect(r.classifiers).toEqual([
-        { model: "c/m1", thinking: "off", source: "profile" },
-        { model: "c/m2", thinking: "off", source: "profile" },
-        { model: "auto/a", thinking: "low", source: "low tier" },
+        { model: "c/m1", effort: "off", source: "router" },
+        { model: "c/m2", effort: "off", source: "router" },
+        { model: "auto/a", effort: "low", source: "low tier" },
       ]);
-      expect(r.source).toBe("profile → low tier");
+      expect(r.source).toBe("router → low tier");
     });
     it("global ref를 펼침을 검증함", () => {
-      const profiles = refProfiles();
-      const r = resolveEffectiveClassifier({}, [{ ref: "cheap#medium" }], profiles);
-      expect(r.classifiers).toEqual([{ model: "c/m3", thinking: undefined, source: "global" }]);
+      const routers = refRouters();
+      const r = resolveEffectiveClassifier({}, [{ ref: "cheap#medium" }], routers);
+      expect(r.classifiers).toEqual([{ model: "c/m3", effort: undefined, source: "global" }]);
       expect(r.source).toBe("global");
     });
-    it("profiles 없이는 ref를 펼치지 않음을 검증함", () => {
-      const profile: RouterProfile = { classifierModels: [{ ref: "cheap#low#off" }] };
-      const r = resolveEffectiveClassifier(profile, undefined);
+    it("routers 없이는 ref를 펼치지 않음을 검증함", () => {
+      const router: Router = { classifierModels: [{ ref: "cheap#low#off" }] };
+      const r = resolveEffectiveClassifier(router, undefined);
       expect(r.classifiers).toBeUndefined();
       expect(r.source).toBe("none");
     });
     it("해석 불가 ref는 건너뜀을 검증함", () => {
-      const profiles: Record<string, RouterProfile> = {
+      const routers: Record<string, Router> = {
         auto: {
           classifierModels: [{ ref: "ghost#low#off" }],
           low: { models: ["auto/a#low"] },
         },
       };
-      const r = resolveEffectiveClassifier(profiles.auto!, undefined, profiles);
-      expect(r.classifiers).toEqual([{ model: "auto/a", thinking: "low", source: "low tier" }]);
+      const r = resolveEffectiveClassifier(routers.auto!, undefined, routers);
+      expect(r.classifiers).toEqual([{ model: "auto/a", effort: "low", source: "low tier" }]);
       expect(r.source).toBe("low tier");
     });
-    it("profile 배열과 global ref를 함께 펼침을 검증함", () => {
-      const profiles = refProfiles();
-      const profile: RouterProfile = {
-        classifierModels: [{ model: "openai/a", thinking: "low" as const }],
+    it("router 배열과 global ref를 함께 펼침을 검증함", () => {
+      const routers = refRouters();
+      const router: Router = {
+        classifierModels: [{ model: "openai/a", effort: "low" as const }],
       };
-      const r = resolveEffectiveClassifier(profile, [{ ref: "cheap#low#off" }], profiles);
+      const r = resolveEffectiveClassifier(router, [{ ref: "cheap#low#off" }], routers);
       expect(r.classifiers).toEqual([
-        { model: "openai/a", thinking: "low", source: "profile" },
-        { model: "c/m1", thinking: "off", source: "global" },
-        { model: "c/m2", thinking: "off", source: "global" },
+        { model: "openai/a", effort: "low", source: "router" },
+        { model: "c/m1", effort: "off", source: "global" },
+        { model: "c/m2", effort: "off", source: "global" },
       ]);
-      expect(r.source).toBe("profile → global");
+      expect(r.source).toBe("router → global");
     });
   });
 
   describe("normalizeConfig classifierModels ref 통합을 검증함", () => {
-    it("profile ref가 논리적 참조로 로드됨을 검증함", () => {
+    it("router ref가 논리적 참조로 로드됨을 검증함", () => {
       const { config, warnings } = normalizeConfig({
-        profiles: {
+        routers: {
           auto: {
             classifierModels: ["@cheap#low#off"],
             low: { models: ["auto/a"] },
@@ -400,12 +400,12 @@ describe("classifier를 검증함", () => {
         },
       });
       expect(warnings).toEqual([]);
-      expect(config.profiles.auto!.classifierModels).toEqual([{ ref: "cheap#low#off" }]);
+      expect(config.routers.auto!.classifierModels).toEqual([{ ref: "cheap#low#off" }]);
     });
     it("global ref가 논리적 참조로 로드됨을 검증함", () => {
       const { config, warnings } = normalizeConfig({
         classifierModels: ["@cheap#low"],
-        profiles: { cheap: { low: { models: ["c/m"] } } },
+        routers: { cheap: { low: { models: ["c/m"] } } },
       });
       expect(warnings).toEqual([]);
       expect(config.classifierModels).toEqual([{ ref: "cheap#low" }]);
@@ -413,22 +413,22 @@ describe("classifier를 검증함", () => {
     it("@@typesafe 항목이 체인에 유지됨을 검증함", () => {
       const { config, warnings } = normalizeConfig({
         classifierModels: ["@@typesafe/jev", "openai/a#low"],
-        profiles: { auto: { medium: { models: ["openai/m"] } } },
+        routers: { auto: { medium: { models: ["openai/m"] } } },
       });
       expect(warnings).toEqual([]);
       expect(config.classifierModels).toEqual([
         { typesafe: true, model: "jev" },
-        { model: "openai/a", thinking: "low" },
+        { model: "openai/a", effort: "low" },
       ]);
-      const r = resolveEffectiveClassifier(config.profiles.auto!, config.classifierModels);
+      const r = resolveEffectiveClassifier(config.routers.auto!, config.classifierModels);
       expect(r.classifiers).toEqual([
         { typesafe: true, model: "jev", source: "global" },
-        { model: "openai/a", thinking: "low", source: "global" },
+        { model: "openai/a", effort: "low", source: "global" },
       ]);
     });
     it("무효한 ref는 warning 남기고 비움함을 검증함", () => {
       const { warnings } = normalizeConfig({
-        profiles: {
+        routers: {
           auto: {
             classifierModels: ["@p#bad"],
             low: { models: ["auto/a"] },

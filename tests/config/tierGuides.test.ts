@@ -149,7 +149,7 @@ describe("normalizeConfig/mergeConfig 경유의 tierGuides를 검증함", () => 
   it("유효한 tierGuides를 그대로 전달함을 검증함", () => {
     const { config, warnings } = normalizeConfig({
       tierGuides: { low: "  custom low  " },
-      profiles: { p: { medium: { models: ["openai/gpt-4o"] } } },
+      routers: { p: { medium: { models: ["openai/gpt-4o"] } } },
     });
     expect(config.tierGuides).toEqual({ low: "custom low" });
     expect(warnings).toEqual([]);
@@ -160,7 +160,7 @@ describe("normalizeConfig/mergeConfig 경유의 tierGuides를 검증함", () => 
       expect(() =>
         normalizeConfig({
           tierGuides,
-          profiles: { p: { medium: { models: ["openai/gpt-4o"] } } },
+          routers: { p: { medium: { models: ["openai/gpt-4o"] } } },
         }),
       ).toThrow("Invalid tierGuides");
     }
@@ -168,11 +168,11 @@ describe("normalizeConfig/mergeConfig 경유의 tierGuides를 검증함", () => 
 
   it("tierGuides를 tier별로 병합함을 검증함", () => {
     const base: RouterConfig = {
-      profiles: {},
+      routers: {},
       tierGuides: { low: "a", high: "base" },
     };
     const merged = mergeConfig(base, { tierGuides: { high: "over" } });
     expect(merged.tierGuides).toEqual({ low: "a", high: "over" });
-    expect(mergeConfig({ profiles: {} }, {}).tierGuides).toBeUndefined();
+    expect(mergeConfig({ routers: {} }, {}).tierGuides).toBeUndefined();
   });
 });

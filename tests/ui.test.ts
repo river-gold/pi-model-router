@@ -10,13 +10,13 @@ describe("ui.ts UI는", () => {
   };
 
   const decision: RoutingDecision = {
-    profile: "balanced",
+    router: "balanced",
     tier: "high",
     targetProvider: "google",
     targetModelId: "gemini-2.5-pro",
     targetLabel: "google/gemini-2.5-pro",
     reasoning: "Exploratory prompts",
-    thinking: "high",
+    effort: "high",
     timestamp: Date.now(),
   };
 
@@ -28,7 +28,7 @@ describe("ui.ts UI는", () => {
     });
 
     it("thinking이 undefined이면 auto로 fallback한다", () => {
-      const withoutThinking: RoutingDecision = { ...decision, thinking: undefined };
+      const withoutThinking: RoutingDecision = { ...decision, effort: undefined };
       expect(formatDecision(withoutThinking)).toBe(
         "balanced: high -> google/gemini-2.5-pro [auto] (Exploratory prompts)",
       );
@@ -53,7 +53,7 @@ describe("ui.ts UI는", () => {
       expect(setStatus).toHaveBeenCalledWith("router", "🚥 router:balanced -> waiting");
     });
 
-    it("활성 profile의 마지막 라우팅된 decision을 표시한다", () => {
+    it("활성 router의 마지막 라우팅된 decision을 표시한다", () => {
       const { ctx, setStatus } = buildMockCtx();
       updateStatus(ctx, true, "balanced", decision);
       expect(setStatus).toHaveBeenCalledWith(
@@ -62,18 +62,18 @@ describe("ui.ts UI는", () => {
       );
     });
 
-    it("활성 profile이 decision과 다르면 waiting을 표시한다", () => {
+    it("활성 router이 decision과 다르면 waiting을 표시한다", () => {
       const { ctx, setStatus } = buildMockCtx();
       updateStatus(ctx, true, "balanced", {
         ...decision,
-        profile: "other-profile",
+        router: "other-router",
       });
       expect(setStatus).toHaveBeenCalledWith("router", "🚥 router:balanced -> waiting");
     });
 
     it("lastDecision thinking이 undefined이면 auto로 fallback한다", () => {
       const { ctx, setStatus } = buildMockCtx();
-      const withoutThinking: RoutingDecision = { ...decision, thinking: undefined };
+      const withoutThinking: RoutingDecision = { ...decision, effort: undefined };
       updateStatus(ctx, true, "balanced", withoutThinking);
       expect(setStatus).toHaveBeenCalledWith(
         "router",

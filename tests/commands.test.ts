@@ -35,12 +35,12 @@ const makeActs = () => {
   const persistState = vi.fn();
   const updateStatus = vi.fn();
   const reloadConfig = vi.fn();
-  const ensureValidActiveRouterProfile = vi.fn().mockResolvedValue(undefined);
-  const actions = { persistState, updateStatus, reloadConfig, ensureValidActiveRouterProfile };
-  return { actions, persistState, updateStatus, reloadConfig, ensureValidActiveRouterProfile };
+  const ensureValidActiveRouter = vi.fn().mockResolvedValue(undefined);
+  const actions = { persistState, updateStatus, reloadConfig, ensureValidActiveRouter };
+  return { actions, persistState, updateStatus, reloadConfig, ensureValidActiveRouter };
 };
 const makeCfg = (over: Partial<RouterConfig> = {}): RouterConfig => ({
-  profiles: {
+  routers: {
     balanced: { high: { models: ["openai/gpt"] } },
     cheap: { low: { models: ["openai/gpt-mini"] } },
   },
@@ -48,13 +48,13 @@ const makeCfg = (over: Partial<RouterConfig> = {}): RouterConfig => ({
 });
 const makeDecis = (over: Partial<RoutingDecision> = {}): RoutingDecision =>
   makeFakeDecision({
-    profile: "balanced",
+    router: "balanced",
     tier: "high",
     targetProvider: "openai",
     targetModelId: "gpt",
     targetLabel: "openai/gpt",
     reasoning: "r",
-    thinking: "high",
+    effort: "high",
     ...over,
   });
 const makeState = (over: Partial<Parameters<typeof registerCommands>[1]> = {}) =>
@@ -62,7 +62,7 @@ const makeState = (over: Partial<Parameters<typeof registerCommands>[1]> = {}) =
     {
       currentConfig: makeCfg(),
       routerEnabled: true,
-      selectedProfile: "balanced" as string | undefined,
+      selectedRouter: "balanced" as string | undefined,
       lastDecision: makeDecis() as RoutingDecision | undefined,
       lastNonRouterModel: "openai/gpt" as string | undefined,
       accumulatedCost: 0.01,
@@ -101,7 +101,7 @@ describe("commands 명령어는", () => {
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("Usage: /router status"), "error");
   });
   it("status는 lastDecision과 auto thinking을 표시한다", async () => {
-    const s = makeState({ lastDecision: makeDecis({ thinking: undefined }) });
+    const s = makeState({ lastDecision: makeDecis({ effort: undefined }) });
     const { actions } = makeActs();
     const { handler } = makePiAndCommand(s, actions);
     const { ctx, notify } = makeCtx();
@@ -112,7 +112,7 @@ describe("commands 명령어는", () => {
     const s = makeState({
       lastDecision: undefined,
       routerEnabled: false,
-      selectedProfile: undefined,
+      selectedRouter: undefined,
       currentConfig: makeCfg({ historySize: 5 }),
     });
     const { actions } = makeActs();
@@ -121,7 +121,7 @@ describe("commands 명령어는", () => {
     await handler("status", ctx);
     const msg = firstNotifyArg(notify);
     expect(msg).toContain("Router enabled: off");
-    expect(msg).toContain("Selected profile: none");
+    expect(msg).toContain("Selected router: none");
     expect(msg).toContain("History size: 5");
     expect(msg).not.toContain("Last routed tier");
   });
@@ -191,12 +191,12 @@ describe("commands 명령어는", () => {
   });
   it("reload는 성공과 인자 오류를 처리한다", async () => {
     const s = makeState();
-    const { actions, reloadConfig, ensureValidActiveRouterProfile } = makeActs();
+    const { actions, reloadConfig, ensureValidActiveRouter } = makeActs();
     const { handler } = makePiAndCommand(s, actions);
     const { ctx } = makeCtx();
     await handler("reload", ctx);
     expect(reloadConfig).toHaveBeenCalledWith(ctx, { preserveDebug: true });
-    expect(ensureValidActiveRouterProfile).toHaveBeenCalled();
+    expect(ensureValidActiveRouter).toHaveBeenCalled();
     const second = makeCtx();
     await handler("reload extra", second.ctx);
     expect(second.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");

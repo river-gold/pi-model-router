@@ -45,21 +45,21 @@ export const parseClassifierOutput = (
 
 export type ClassifierAttempt = {
   model: string;
-  thinking?: ThinkingLevel;
+  effort?: ThinkingLevel;
   error?: string;
 };
 
 export const runClassifierWithFallbacksDetailed = async (
   classifierModels: {
     model: string;
-    thinking?: ThinkingLevel;
+    effort?: ThinkingLevel;
     source?: string;
   }[],
   modelRegistry: ExtensionContext["modelRegistry"],
   context: Context,
   historySize = 0,
   signal?: AbortSignal,
-  onAttempt?: (entry: { model: string; thinking?: ThinkingLevel; source?: string }) => void,
+  onAttempt?: (entry: { model: string; effort?: ThinkingLevel; source?: string }) => void,
   failedSet?: Set<string>,
   tierGuides?: TierGuides,
   sessionId?: string,
@@ -73,7 +73,7 @@ export const runClassifierWithFallbacksDetailed = async (
     if (failedSet?.has(normalizedRef)) {
       attempts.push({
         model: entry.model,
-        thinking: entry.thinking,
+        effort: entry.effort,
         error: "skipped: failed this session (chain-local)",
       });
       continue;
@@ -84,7 +84,7 @@ export const runClassifierWithFallbacksDetailed = async (
       modelRegistry,
       context,
       historySize,
-      entry.thinking,
+      entry.effort,
       signal,
       tierGuides,
       sessionId,
@@ -92,12 +92,12 @@ export const runClassifierWithFallbacksDetailed = async (
     if (outcome.result) {
       return {
         result: outcome.result,
-        attempts: [...attempts, { model: entry.model, thinking: entry.thinking }],
+        attempts: [...attempts, { model: entry.model, effort: entry.effort }],
       };
     }
     attempts.push({
       model: entry.model,
-      thinking: entry.thinking,
+      effort: entry.effort,
       error: outcome.error,
     });
     if (outcome.skipSession) failedSet?.add(normalizedRef);
@@ -175,12 +175,12 @@ const buildClassifierContext = (
 
 const resolveReasoningOption = (
   model: { reasoning?: unknown },
-  thinking?: ThinkingLevel,
+  effort?: ThinkingLevel,
 ): Exclude<ThinkingLevel, "off"> | undefined => {
   if (!model.reasoning) return undefined;
-  if (!thinking) return undefined;
-  if (thinking === "off") return undefined;
-  return thinking;
+  if (!effort) return undefined;
+  if (effort === "off") return undefined;
+  return effort;
 };
 
 const isTextDeltaEvent = (event: unknown): event is { type: string; delta: string } => {
@@ -201,7 +201,7 @@ const runClassifierOutcome = async (
   modelRegistry: ExtensionContext["modelRegistry"],
   context: Context,
   historySize = 0,
-  thinking?: ThinkingLevel,
+  effort?: ThinkingLevel,
   signal?: AbortSignal,
   tierGuides?: TierGuides,
   sessionId?: string,
@@ -212,7 +212,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-        thinking,
+  effort,
         fullText: "",
         success: false,
         error: modelResolution.error,
@@ -226,7 +226,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-        thinking,
+  effort,
         fullText: "",
         success: false,
         error: authResolution.error,
@@ -235,7 +235,7 @@ const runClassifierOutcome = async (
     }
 
     const classifierContext = buildClassifierContext(context, historySize, tierGuides);
-    const reasoningOption = resolveReasoningOption(model as { reasoning?: unknown }, thinking);
+    const reasoningOption = resolveReasoningOption(model as { reasoning?: unknown }, effort);
 
     const stream = streamDelegated(modelRegistry, model, classifierContext, {
       apiKey: authResolution.apiKey,
@@ -251,7 +251,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-        thinking,
+  effort,
         fullText,
         tierLine: parsed.tierLine,
         reasoningLine: parsed.reasoningLine,
@@ -267,7 +267,7 @@ const runClassifierOutcome = async (
     logClassifierSync({
       timestamp: new Date().toISOString(),
       model: classifierModelRef,
-      thinking,
+  effort,
       fullText,
       success: false,
       error: PARSE_ERROR,
@@ -278,7 +278,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-        thinking,
+  effort,
         fullText: "",
         success: false,
         error: ABORT_ERROR,
@@ -289,7 +289,7 @@ const runClassifierOutcome = async (
     logClassifierSync({
       timestamp: new Date().toISOString(),
       model: classifierModelRef,
-      thinking,
+  effort,
       fullText: "",
       success: false,
       error,

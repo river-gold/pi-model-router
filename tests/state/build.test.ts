@@ -5,7 +5,7 @@ import type { RoutingDecision } from "../../src/types";
 describe("state/build 모듈", () => {
   it("모든 필드로 빌드한다", () => {
     const d: RoutingDecision = {
-      profile: "balanced",
+      router: "balanced",
       tier: "high",
       targetProvider: "google",
       targetModelId: "gemini",
@@ -15,18 +15,18 @@ describe("state/build 모듈", () => {
     };
     const s = buildPersistedState(true, "balanced", true, [d], d, "openai/gpt-4o", 1.23);
     expect(s.enabled).toBe(true);
-    expect(s.selectedProfile).toBe("balanced");
+    expect(s.selectedRouter).toBe("balanced");
     expect(s.timestamp).toBeDefined();
   });
 
-  it("selectedProfile이 undefined인 경우를 처리한다", () => {
+  it("selectedRouter이 undefined인 경우를 처리한다", () => {
     const s = buildPersistedState(false, undefined, false, [], undefined, undefined, 0);
-    expect(s.selectedProfile).toBe("");
+    expect(s.selectedRouter).toBe("");
   });
 
-  it("빈 문자열 profile을 처리한다", () => {
+  it("빈 문자열 router을 처리한다", () => {
     const s = buildPersistedState(true, "", false, [], undefined, undefined, 0);
-    expect(s.selectedProfile).toBe("");
+    expect(s.selectedRouter).toBe("");
   });
 
   it("Date.now를 사용한다", () => {

@@ -55,20 +55,20 @@ export const createTryRestoreFallback = (
   return fn;
 };
 
-export const createEnsureValidActiveRouterProfile = (
+export const createEnsureValidActiveRouter = (
   state: RouterState,
   tryRestoreFallback: (ctx: ExtensionContext) => Promise<boolean>,
 ) => {
   const fn = async (ctx: ExtensionContext): Promise<void> => {
     if (ctx.model?.provider !== "router") return;
-    if (ctx.model.id && state.currentConfig.profiles[ctx.model.id]) {
-      state.selectedProfile = ctx.model.id;
+    if (ctx.model.id && state.currentConfig.routers[ctx.model.id]) {
+      state.selectedRouter = ctx.model.id;
       state.routerEnabled = true;
       return;
     }
-    ctx.ui.notify(`Router profile "${ctx.model.id}" is no longer configured.`, "warning");
+    ctx.ui.notify(`Router router "${ctx.model.id}" is no longer configured.`, "warning");
     state.routerEnabled = false;
-    state.selectedProfile = undefined;
+    state.selectedRouter = undefined;
     if (await tryRestoreFallback(ctx)) return;
     ctx.ui.notify(
       "Router disabled: no fallback model available. Select a model manually.",

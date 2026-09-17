@@ -10,7 +10,7 @@ import {
   resolveDelegatedReasoning,
   resolveEffectiveClassifier,
 } from "../src/config";
-import type { RouterConfig, RouterProfile } from "../src/types";
+import type { RouterConfig, Router } from "../src/types";
 import { makeFakeModel } from "./helpers";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
@@ -28,13 +28,13 @@ vi.mock("node:fs", () => ({
     ) {
       return JSON.stringify({
         debug: true,
-        profiles: { globalProfile: { medium: { models: ["openai/gpt-4o"] } } },
+        routers: { globalRouter: { medium: { models: ["openai/gpt-4o"] } } },
       });
     }
     if (path.includes("project") || path.includes(".pi/pi-model-router.json")) {
       return JSON.stringify({
-        profiles: {
-          projectProfile: { high: { models: ["google/gemini-1.5-pro"] } },
+        routers: {
+          projectRouter: { high: { models: ["google/gemini-1.5-pro"] } },
         },
       });
     }
@@ -60,10 +60,10 @@ describe("config.ts 설정은", () => {
     });
   });
   describe("mergeConfig 병합은", () => {
-    it("profiles override를 병합한다", () => {
+    it("routers override를 병합한다", () => {
       const base: RouterConfig = {
         debug: false,
-        profiles: {
+        routers: {
           balanced: {
             medium: {
               models: ["openai/gpt-4o-mini"],
@@ -73,7 +73,7 @@ describe("config.ts 설정은", () => {
       };
       const override: Partial<RouterConfig> = {
         debug: true,
-        profiles: {
+        routers: {
           balanced: {
             high: { models: ["openai/gpt-4o"] },
           },
@@ -85,8 +85,8 @@ describe("config.ts 설정은", () => {
         },
       };
       const merged = mergeConfig(base, override);
-      expect(merged.profiles.balanced.medium?.models).toEqual(["openai/gpt-4o-mini"]);
-      expect(merged.profiles.balanced.high?.models).toEqual(["openai/gpt-4o"]);
+      expect(merged.routers.balanced.medium?.models).toEqual(["openai/gpt-4o-mini"]);
+      expect(merged.routers.balanced.high?.models).toEqual(["openai/gpt-4o"]);
     });
   });
   describe("parseCanonicalModelRef 참조 파싱은", () => {
@@ -98,14 +98,14 @@ describe("config.ts 설정은", () => {
       expect(parseCanonicalModelRef("openai/gpt-4o#high")).toEqual({
         provider: "openai",
         modelId: "gpt-4o",
-        thinking: "high",
+        effort: "high",
       });
       expect(parseCanonicalModelRef("openai/gpt-4o#max")).toEqual({
         provider: "openai",
         modelId: "gpt-4o",
-        thinking: "max",
+        effort: "max",
       });
-      expect(parseCanonicalModelRef("openai/gpt-4o").thinking).toBeUndefined();
+      expect(parseCanonicalModelRef("openai/gpt-4o").effort).toBeUndefined();
     });
     it("slash가 없으면 throw한다", () => {
       expect(() => parseCanonicalModelRef("gpt-4o")).toThrow();
@@ -123,7 +123,7 @@ describe("config.ts 설정은", () => {
     it("생략되면 thinking을 undefined로 둔다", () => {
       const w: string[] = [];
       expect(
-        normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.thinking,
+        normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.effort,
       ).toBeUndefined();
     });
     it("effort가 있으면 # 없는 모델의 기본값으로 적용한다", () => {
@@ -138,10 +138,10 @@ describe("config.ts 설정은", () => {
         w,
       );
       expect(w).toEqual([]);
-      expect(r?.thinking).toBe("high");
+      expect(r?.effort).toBe("high");
       expect(r?.models).toEqual(["openai/gpt-4o#max", "google/gemini-flash", "openai/gpt-4o-mini"]);
     });
-    it("thinking과 effort가 다르면 thinking 우선 + 경고한다", () => {
+    it("제거된 thinking 필드는 무시한다", () => {
       const w: string[] = [];
       const r = normalizeTierConfig(
         { models: ["openai/gpt-4o"], thinking: "low", effort: "high" },
@@ -149,8 +149,8 @@ describe("config.ts 설정은", () => {
         "medium",
         w,
       );
-      expect(r?.thinking).toBe("low");
-      expect(w.some((x) => x.includes('"thinking"'))).toBe(true);
+      expect(r?.effort).toBe("high");
+      expect(w).toEqual([]);
     });
     it("유효하지 않은 effort는 경고 + 무시한다", () => {
       const w: string[] = [];
@@ -160,7 +160,7 @@ describe("config.ts 설정은", () => {
         "medium",
         w,
       );
-      expect(r?.thinking).toBeUndefined();
+      expect(r?.effort).toBeUndefined();
       expect(w.some((x) => x.includes("invalid effort"))).toBe(true);
 
       const w2: string[] = [];
@@ -170,7 +170,7 @@ describe("config.ts 설정은", () => {
         "medium",
         w2,
       );
-      expect(r2?.thinking).toBeUndefined();
+      expect(r2?.effort).toBeUndefined();
       expect(w2.some((x) => x.includes("invalid effort"))).toBe(true);
     });
     it("세부 정보를 resolve하고 정규화한다", () => {
@@ -183,7 +183,7 @@ describe("config.ts 설정은", () => {
       const r = normalizeTierConfig(raw, "p", "high", w);
       expect(r?.models).toEqual(["openai/gpt-4o#high", "google/gemini-1.5-flash#low"]);
       // 모델별 `#`는 tier 강제값으로 승격되지 않음.
-      expect(r?.thinking).toBeUndefined();
+      expect(r?.effort).toBeUndefined();
       expect(w.some((x) => x.includes("Invalid model"))).toBe(true);
     });
   });
@@ -192,14 +192,14 @@ describe("config.ts 설정은", () => {
       const { config, warnings } = normalizeConfig({
         debug: true,
         classifierModels: ["openai/gpt-4o#medium"],
-        profiles: { balanced: { high: { models: ["google/gemini-2.5-pro"] } } },
+        routers: { balanced: { high: { models: ["google/gemini-2.5-pro"] } } },
       });
       expect(warnings).toEqual([]);
       expect(config.classifierModels?.[0].model).toBe("openai/gpt-4o");
     });
-    it("프로필 models를 effort만 있는 티어에 상속한다", () => {
+    it("라우터 models를 effort만 있는 티어에 상속한다", () => {
       const { config, warnings } = normalizeConfig({
-        profiles: {
+        routers: {
           deepseek: {
             models: ["openai/gpt-4o", "google/gemini-flash"],
             high: { effort: "max" },
@@ -208,34 +208,34 @@ describe("config.ts 설정은", () => {
         },
       });
       expect(warnings).toEqual([]);
-      expect(config.profiles.deepseek.models).toEqual(["openai/gpt-4o", "google/gemini-flash"]);
-      expect(config.profiles.deepseek.high?.models).toEqual([
+      expect(config.routers.deepseek.models).toEqual(["openai/gpt-4o", "google/gemini-flash"]);
+      expect(config.routers.deepseek.high?.models).toEqual([
         "openai/gpt-4o",
         "google/gemini-flash",
       ]);
-      expect(config.profiles.deepseek.high?.thinking).toBe("max");
-      expect(config.profiles.deepseek.low?.models).toEqual(["openai/gpt-4o-mini"]);
-      expect(config.profiles.deepseek.low?.thinking).toBe("low");
+      expect(config.routers.deepseek.high?.effort).toBe("max");
+      expect(config.routers.deepseek.low?.models).toEqual(["openai/gpt-4o-mini"]);
+      expect(config.routers.deepseek.low?.effort).toBe("low");
     });
-    it("무효한 프로필 models는 경고 후 무시한다", () => {
+    it("무효한 라우터 models는 경고 후 무시한다", () => {
       const { config, warnings } = normalizeConfig({
-        profiles: {
+        routers: {
           p: {
             models: ["bad", "also/bad#invalid"],
             high: { models: ["openai/gpt-4o"] },
           },
         },
       });
-      expect(config.profiles.p.models).toBeUndefined();
-      expect(config.profiles.p.high?.models).toEqual(["openai/gpt-4o"]);
-      expect(warnings.some((x) => x.includes('profile-level "models"'))).toBe(true);
+      expect(config.routers.p.models).toBeUndefined();
+      expect(config.routers.p.high?.models).toEqual(["openai/gpt-4o"]);
+      expect(warnings.some((x) => x.includes('router-level "models"'))).toBe(true);
     });
   });
   describe("historySize 히스토리 크기는", () => {
     it("historySize를 처리한다", () => {
       const { config } = normalizeConfig({
         historySize: 4,
-        profiles: {
+        routers: {
           balanced: {
             high: { models: ["openai/gpt-4o"] },
           },
@@ -247,18 +247,18 @@ describe("config.ts 설정은", () => {
   describe("classifierModels 분류 모델은", () => {
     it("생략되면 thinking을 undefined로 둔다", () => {
       const { config } = normalizeConfig({
-        profiles: {
+        routers: {
           balanced: {
             high: { models: ["openai/gpt-4o"] },
           },
         },
         classifierModels: ["openai/gpt-4o"],
       });
-      expect(config.classifierModels?.[0].thinking).toBeUndefined();
+      expect(config.classifierModels?.[0].effort).toBeUndefined();
     });
     it("문자열 배열 형태를 사용한다", () => {
       const { config } = normalizeConfig({
-        profiles: {
+        routers: {
           balanced: {
             high: { models: ["openai/gpt-4o"] },
           },
@@ -266,11 +266,11 @@ describe("config.ts 설정은", () => {
         classifierModels: ["openai/gpt-4o#low", "google/gemini-flash#off"],
       });
       expect(config.classifierModels?.length).toBe(2);
-      expect(config.classifierModels?.[0].thinking).toBe("low");
+      expect(config.classifierModels?.[0].effort).toBe("low");
     });
     it("classifierModels fallback 우선순위를 지원한다", () => {
       const { config } = normalizeConfig({
-        profiles: {
+        routers: {
           balanced: {
             high: { models: ["openai/gpt-4o"] },
           },
@@ -281,7 +281,7 @@ describe("config.ts 설정은", () => {
         ],
       });
       expect(config.classifierModels).toHaveLength(2);
-      expect(config.classifierModels?.[1].thinking).toBe("low");
+      expect(config.classifierModels?.[1].effort).toBe("low");
     });
   });
   describe("resolveDelegatedReasoning 위임 추론은", () => {
@@ -296,35 +296,35 @@ describe("config.ts 설정은", () => {
     });
   });
   describe("resolveEffectiveClassifier 유효 분류기는", () => {
-    it("profile classifier 다음 low tier를 연결한다", () => {
-      const profile: RouterProfile = {
-        classifierModels: [{ model: "openai/gpt-4o", thinking: "low" }],
+    it("router classifier 다음 low tier를 연결한다", () => {
+      const router: Router = {
+        classifierModels: [{ model: "openai/gpt-4o", effort: "low" }],
         low: { models: ["google/gemini-flash#low"] },
       };
-      const result = resolveEffectiveClassifier(profile, undefined);
+      const result = resolveEffectiveClassifier(router, undefined);
       expect(result.classifiers).toEqual([
-        { model: "openai/gpt-4o", thinking: "low", source: "profile" },
-        { model: "google/gemini-flash", thinking: "low", source: "low tier" },
+        { model: "openai/gpt-4o", effort: "low", source: "router" },
+        { model: "google/gemini-flash", effort: "low", source: "low tier" },
       ]);
-      expect(result.source).toBe("profile → low tier");
+      expect(result.source).toBe("router → low tier");
     });
     it("low tier 모델로 fallback한다 (low tier thinking을 따른다)", () => {
-      const profile: RouterProfile = {
+      const router: Router = {
         low: { models: ["google/gemini-flash#high", "openai/gpt-4o-mini#off"] },
       };
-      const result = resolveEffectiveClassifier(profile, undefined);
+      const result = resolveEffectiveClassifier(router, undefined);
       expect(result.classifiers).toEqual([
-        { model: "google/gemini-flash", thinking: "high", source: "low tier" },
-        { model: "openai/gpt-4o-mini", thinking: "off", source: "low tier" },
+        { model: "google/gemini-flash", effort: "high", source: "low tier" },
+        { model: "openai/gpt-4o-mini", effort: "off", source: "low tier" },
       ]);
       expect(result.source).toBe("low tier");
     });
     it("classifier와 low tier가 없으면 undefined를 반환한다", () => {
-      const profile: RouterProfile = {
+      const router: Router = {
         high: { models: ["openai/gpt-4o"] },
       };
-      expect(resolveEffectiveClassifier(profile, undefined).classifiers).toBeUndefined();
-      expect(resolveEffectiveClassifier(profile, undefined).source).toBe("none");
+      expect(resolveEffectiveClassifier(router, undefined).classifiers).toBeUndefined();
+      expect(resolveEffectiveClassifier(router, undefined).source).toBe("none");
     });
   });
 });

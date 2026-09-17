@@ -2,7 +2,7 @@ import type { RouterPersistedState, RoutingDecision } from "../types";
 
 export const buildPersistedState = (
   routerEnabled: boolean,
-  selectedProfile: string | undefined,
+  selectedRouter: string | undefined,
   debugEnabled: boolean,
   debugHistory: RoutingDecision[],
   lastDecision: RoutingDecision | undefined,
@@ -10,7 +10,7 @@ export const buildPersistedState = (
   accumulatedCost: number,
 ): RouterPersistedState => ({
   enabled: routerEnabled,
-  selectedProfile: selectedProfile ?? "",
+  selectedRouter: selectedRouter ?? "",
   debugEnabled,
   debugHistory,
   lastDecision,

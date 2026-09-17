@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { profileNames, resolveProfileName } from "../config";
+import { routerNames, resolveRouterName } from "../config";
 import { restoreStateFromSession } from "../session";
 import { updateStatus } from "../ui";
 import type { RouterState } from "../state";
@@ -18,11 +18,11 @@ export const handleSessionStart = async (
   };
   await restoreStateFromSession(ctx, state, helpers, {
     reloadConfig: actions.reloadConfig,
-    ensureValidActiveRouterProfile: actions.ensureValidActiveRouterProfile,
+    ensureValidActiveRouter: actions.ensureValidActiveRouter,
   });
   if (state.debugEnabled)
     ctx.ui.notify(
-      `Router initialized with profiles: ${profileNames(state.currentConfig).join(", ")}`,
+      `Router initialized with routers: ${routerNames(state.currentConfig).join(", ")}`,
       "info",
     );
 };
@@ -35,11 +35,11 @@ export const handleModelSelect = async (
 ): Promise<void> => {
   if (!state.isInitialized || state.isInternalModelSwitch > 0) return;
   if (event.model.provider === "router") {
-    const profileName = resolveProfileName(state.currentConfig, event.model.id);
-    if (!profileName) {
-      ctx.ui.notify(`Unknown router profile: ${event.model.id}`, "error");
+    const routerName = resolveRouterName(state.currentConfig, event.model.id);
+    if (!routerName) {
+      ctx.ui.notify(`Unknown router router: ${event.model.id}`, "error");
       state.routerEnabled = false;
-      state.selectedProfile = undefined;
+      state.selectedRouter = undefined;
       if (await actions.tryRestoreFallback(ctx)) return;
       ctx.ui.notify(
         "Router disabled: no fallback model available. Select a model manually.",
@@ -47,7 +47,7 @@ export const handleModelSelect = async (
       );
       return;
     }
-    const registryModel = ctx.modelRegistry.find("router", profileName);
+    const registryModel = ctx.modelRegistry.find("router", routerName);
     if (
       registryModel &&
       (registryModel.contextWindow !== event.model.contextWindow ||
@@ -56,14 +56,14 @@ export const handleModelSelect = async (
       await actions.setModelInternally(registryModel);
     }
     state.routerEnabled = true;
-    state.selectedProfile = profileName;
+    state.selectedRouter = routerName;
   } else {
     state.routerEnabled = false;
     state.lastNonRouterModel = `${event.model.provider}/${event.model.id}`;
     ctx.ui.setHiddenThinkingLabel?.();
   }
   actions.persistState();
-  updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision);
+  updateStatus(ctx, state.routerEnabled, state.selectedRouter, state.lastDecision);
 };
 
 export const handleTurnStart = (
@@ -92,10 +92,10 @@ export const handleTurnEnd = async (
     state.currentCwd = ctx.cwd;
     actions.reloadConfig(ctx);
   }
-  if (state.routerEnabled && state.selectedProfile && ctx.model?.provider !== "router") {
-    const routerModel = ctx.modelRegistry.find("router", state.selectedProfile);
+  if (state.routerEnabled && state.selectedRouter && ctx.model?.provider !== "router") {
+    const routerModel = ctx.modelRegistry.find("router", state.selectedRouter);
     if (routerModel) await actions.setModelInternally(routerModel);
   }
   actions.persistState();
-  updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision);
+  updateStatus(ctx, state.routerEnabled, state.selectedRouter, state.lastDecision);
 };

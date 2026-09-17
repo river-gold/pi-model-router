@@ -23,7 +23,7 @@ vi.mock("../src/config", async () => {
     ...actual,
     loadRouterConfig: vi.fn(() => ({
       config: {
-        profiles: {
+        routers: {
           balanced: {
             high: { models: ["openai/gpt-4o"] },
             medium: { models: ["openai/gpt-4o-mini"] },
@@ -116,7 +116,7 @@ describe("router extension 공개 동작은", () => {
     );
   });
 
-  it("model_select로 router profile을 선택한다", async () => {
+  it("model_select로 router router을 선택한다", async () => {
     const { pi, listeners: captured, appendEntry } = bundled;
     routerExtension(pi);
     const { ctx } = makeCtx();
@@ -126,7 +126,7 @@ describe("router extension 공개 동작은", () => {
       { model: makeFakeModel({ provider: "router", id: "balanced" }) },
       ctx,
     );
-    // dedup: same profile as already selected, no state change -> no append
+    // dedup: same router as already selected, no state change -> no append
     expect(appendEntry.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
@@ -147,7 +147,7 @@ describe("router extension 공개 동작은", () => {
     );
   });
 
-  it("unknown profile을 fallback 복원으로 처리한다", async () => {
+  it("unknown router을 fallback 복원으로 처리한다", async () => {
     const { pi, listeners: captured, setModel } = bundled;
     routerExtension(pi);
     const { ctx } = makeCtx();
@@ -171,7 +171,7 @@ describe("router extension 공개 동작은", () => {
       fallback.ctx,
     );
     expect(fallback.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Unknown router profile"),
+      expect.stringContaining("Unknown router router"),
       "error",
     );
     expect(setModel).toHaveBeenCalledWith(
@@ -179,7 +179,7 @@ describe("router extension 공개 동작은", () => {
     );
   });
 
-  it("unknown profile에 fallback이 없으면 경고한다", async () => {
+  it("unknown router에 fallback이 없으면 경고한다", async () => {
     const { pi, listeners: captured } = bundled;
     routerExtension(pi);
     const { ctx } = makeCtx();
@@ -194,7 +194,7 @@ describe("router extension 공개 동작은", () => {
       noFallback.ctx,
     );
     expect(noFallback.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Unknown router profile"),
+      expect.stringContaining("Unknown router router"),
       "error",
     );
     expect(noFallback.notify).toHaveBeenCalledWith(
@@ -214,7 +214,7 @@ describe("router extension 공개 동작은", () => {
             customType: "router-state",
             data: {
               enabled: true,
-              selectedProfile: "balanced",
+              selectedRouter: "balanced",
               debugEnabled: true,
               accumulatedCost: 0.5,
               timestamp: Date.now(),
@@ -294,7 +294,7 @@ describe("router extension 공개 동작은", () => {
           {
             type: "custom",
             customType: "router-state",
-            data: { enabled: true, selectedProfile: "balanced", timestamp: Date.now() },
+            data: { enabled: true, selectedRouter: "balanced", timestamp: Date.now() },
           },
         ],
       }),
@@ -328,7 +328,7 @@ describe("router extension 공개 동작은", () => {
       bad.ctx,
     );
     expect(bad.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Unknown router profile"),
+      expect.stringContaining("Unknown router router"),
       "error",
     );
   });

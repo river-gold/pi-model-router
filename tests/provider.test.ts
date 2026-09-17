@@ -21,7 +21,7 @@ import {
 } from "../src/provider/delegate";
 import { createCommitMutex } from "../src/provider/state";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { RouterConfig, RouterProfile, RouterTier, RoutingDecision } from "../src/types";
+import type { RouterConfig, Router, RouterTier, RoutingDecision } from "../src/types";
 import {
   makeFakeDecision,
   makeFakeExtensionContext,
@@ -89,19 +89,19 @@ const isRouterProviderConfig = (value: unknown): value is RouterProviderConfig =
 const wait = (ms = 90) => new Promise((r) => setTimeout(r, ms));
 
 describe("provider 순수 헬퍼는", () => {
-  it("registry와 profile이 없으면 validateProviderState가 throw한다", () => {
-    const profile: RouterProfile = { medium: { models: ["openai/a"] } };
-    expect(() => validateProviderState(undefined, profile, "balanced")).toThrow("not initialized");
+  it("registry와 router이 없으면 validateProviderState가 throw한다", () => {
+    const router: Router = { medium: { models: ["openai/a"] } };
+    expect(() => validateProviderState(undefined, router, "balanced")).toThrow("not initialized");
     expect(() => validateProviderState(makeReg(), undefined, "unknown")).toThrow(
-      "Unknown router profile",
+      "Unknown router router",
     );
-    expect(() => validateProviderState(makeReg(), profile, "balanced")).not.toThrow();
+    expect(() => validateProviderState(makeReg(), router, "balanced")).not.toThrow();
   });
   it("decideInitialDecision은 single tier, tool loop, thinking 매핑을 처리한다", () => {
-    const profile: RouterProfile = { high: { models: ["openai/h"] } };
+    const router: Router = { high: { models: ["openai/h"] } };
     const base: {
-      profileName: string;
-      profile: RouterProfile;
+      routerName: string;
+      router: Router;
       context: Context;
       snapshotLastDecision: RoutingDecision | undefined;
       thinkingLevel: ThinkingLevel;
@@ -109,8 +109,8 @@ describe("provider 순수 헬퍼는", () => {
       singleTier: RouterTier | undefined;
       validTierCount: number;
     } = {
-      profileName: "p",
-      profile,
+      routerName: "p",
+      router,
       context: ctxOf([userMsg("hi")]),
       snapshotLastDecision: undefined,
       thinkingLevel: "high",
@@ -119,15 +119,15 @@ describe("provider 순수 헬퍼는", () => {
       validTierCount: 1,
     };
     expect(decideInitialDecision(base).tier).toBe("high");
-    const loopSnap = makeFakeDecision({ profile: "p", tier: "high" });
+    const loopSnap = makeFakeDecision({ router: "p", tier: "high" });
     expect(
       decideInitialDecision({ ...base, isToolLoop: true, snapshotLastDecision: loopSnap })
         .reasoning,
     ).toContain("Preserved");
     expect(
       decideInitialDecision({
-        profileName: "p",
-        profile: { medium: { models: ["openai/m"] } },
+        routerName: "p",
+        router: { medium: { models: ["openai/m"] } },
         context: ctxOf([userMsg("hi")]),
         snapshotLastDecision: undefined,
         thinkingLevel: "off",
@@ -149,7 +149,7 @@ describe("provider 순수 헬퍼는", () => {
     expect(v).toBe(2);
   });
   it("resolveTargetLimit은 tier와 fallback을 찾는다", () => {
-    const profile: RouterProfile = { medium: { models: ["openai/a"] } };
+    const router: Router = { medium: { models: ["openai/a"] } };
     const decision = makeFakeDecision({
       tier: "medium",
       targetProvider: "openai",
@@ -158,16 +158,16 @@ describe("provider 순수 헬퍼는", () => {
     const reg = makeReg((_provider, id) =>
       id === "fallback" ? makeFakeModel({ contextWindow: 12345 }) : undefined,
     );
-    expect(resolveTargetLimit(profile, decision, "openai/a", reg, "openai", "a")).toBeGreaterThan(
+    expect(resolveTargetLimit(router, decision, "openai/a", reg, "openai", "a")).toBeGreaterThan(
       0,
     );
-    const emptyProfile: RouterProfile = {};
+    const emptyRouter: Router = {};
     expect(
-      resolveTargetLimit(emptyProfile, decision, "openai/fallback", reg, "openai", "fallback"),
+      resolveTargetLimit(emptyRouter, decision, "openai/fallback", reg, "openai", "fallback"),
     ).toBe(12345);
     const regNoWindow = makeReg(() => makeFakeModel({ id: "x" }));
     expect(
-      resolveTargetLimit(emptyProfile, decision, "openai/x", regNoWindow, "openai", "x"),
+      resolveTargetLimit(emptyRouter, decision, "openai/x", regNoWindow, "openai", "x"),
     ).toBeGreaterThan(0);
   });
   it("buildEffectiveContext는 필요할 때 잘라낸다", () => {
@@ -228,7 +228,7 @@ describe("provider 통합 동작은", () => {
       getThinkingLevel: thinkingLevelMock,
     });
     const cfg: RouterConfig = {
-      profiles: {
+      routers: {
         balanced: {
           high: { models: ["openai/gpt-4o"] },
           medium: { models: ["openai/gpt-4o-mini", "google/gemini-1.5-flash"] },
@@ -261,7 +261,7 @@ describe("provider 통합 동작은", () => {
   });
   it("single tier와 tool loop를 유지한다", async () => {
     state.lastDecision = makeFakeDecision({
-      profile: "balanced",
+      router: "balanced",
       tier: "high",
       targetProvider: "openai",
       targetModelId: "gpt",
@@ -291,7 +291,7 @@ describe("provider 통합 동작은", () => {
     await wait();
     expect(s.events.some((e) => e.type === "error")).toBe(true);
   });
-  it("unknown profile이면 error를 발생시킨다", async () => {
+  it("unknown router이면 error를 발생시킨다", async () => {
     registerRouterProvider(pi, state, acts);
     const s = new FakeStream();
     mockCreateStream.mockReturnValue(s);
@@ -303,7 +303,7 @@ describe("provider 통합 동작은", () => {
     state = {
       ...state,
       currentConfig: {
-        profiles: {
+        routers: {
           balanced: {
             high: { models: ["openai/gpt-high"] },
             medium: { models: ["openai/mini"] },
@@ -391,7 +391,7 @@ describe("provider 통합 동작은", () => {
     state = {
       ...state,
       currentConfig: {
-        profiles: { balanced: { medium: { models: ["openai/gpt"] } } },
+        routers: { balanced: { medium: { models: ["openai/gpt"] } } },
       },
       lastRegisteredModels: "",
     };
@@ -415,7 +415,7 @@ describe("provider 통합 동작은", () => {
       ...state,
       currentModelRegistry: makeReg(() => undefined),
       currentConfig: {
-        profiles: { balanced: { medium: { models: ["openai/missing"] } } },
+        routers: { balanced: { medium: { models: ["openai/missing"] } } },
       },
       lastRegisteredModels: "",
     };
@@ -449,7 +449,7 @@ describe("provider 통합 동작은", () => {
     state = {
       ...state,
       currentConfig: {
-        profiles: { balanced: { medium: { models: ["openai/gpt"] } } },
+        routers: { balanced: { medium: { models: ["openai/gpt"] } } },
       },
       lastRegisteredModels: "",
     };
@@ -470,7 +470,7 @@ describe("provider 통합 동작은", () => {
     state = {
       ...state,
       currentConfig: {
-        profiles: { balanced: { medium: { models: ["router/other", "openai/real"] } } },
+        routers: { balanced: { medium: { models: ["router/other", "openai/real"] } } },
       },
       lastRegisteredModels: "",
     };

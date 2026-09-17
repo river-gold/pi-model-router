@@ -8,7 +8,7 @@ describe("index/reload 모듈", () => {
   const makeState = () => {
     const s = createRouterState();
     s.currentCwd = "/cwd";
-    s.currentConfig = { profiles: {} };
+    s.currentConfig = { routers: {} };
     s.lastConfigWarnings = [];
     return s;
   };
@@ -21,22 +21,22 @@ describe("index/reload 모듈", () => {
 
   const makeDeps = (over: Partial<ReloadDeps> = {}) => {
     const loadRouterConfig = vi.fn().mockReturnValue({
-      config: { debug: true, profiles: { balanced: { medium: { models: ["openai/a"] } } } },
+      config: { debug: true, routers: { balanced: { medium: { models: ["openai/a"] } } } },
       warnings: [],
     });
-    const profileNames = vi.fn().mockReturnValue(["balanced"]);
-    const resolveProfileName = vi.fn().mockReturnValue("balanced");
+    const routerNames = vi.fn().mockReturnValue(["balanced"]);
+    const resolveRouterName = vi.fn().mockReturnValue("balanced");
     const registerRouterProvider = vi.fn();
     const updateStatus = vi.fn();
     const deps: ReloadDeps = Object.assign(
-      { loadRouterConfig, profileNames, resolveProfileName, registerRouterProvider, updateStatus },
+      { loadRouterConfig, routerNames, resolveRouterName, registerRouterProvider, updateStatus },
       over,
     );
     return {
       deps,
       loadRouterConfig,
-      profileNames,
-      resolveProfileName,
+      routerNames,
+      resolveRouterName,
       registerRouterProvider,
       updateStatus,
     };
@@ -58,7 +58,7 @@ describe("index/reload 모듈", () => {
     expect(loadRouterConfig).toHaveBeenCalledWith("/cwd");
     expect(state.currentConfig.debug).toBe(true);
     expect(state.debugEnabled).toBe(true);
-    expect(state.selectedProfile).toBe("balanced");
+    expect(state.selectedRouter).toBe("balanced");
     expect(registerRouterProvider).toHaveBeenCalled();
     // Exercise getters/setters on the state object passed to registerRouterProvider
     const firstCall = registerRouterProvider.mock.calls[0];
@@ -70,14 +70,14 @@ describe("index/reload 모듈", () => {
     expect(stateArg.currentConfig).toBe(state.currentConfig);
     expect(stateArg.currentModelRegistry).toBe(state.currentModelRegistry);
     expect(stateArg.lastExtensionContext).toBe(state.lastExtensionContext);
-    expect(stateArg.selectedProfile).toBe(state.selectedProfile);
-    stateArg.selectedProfile = "x";
-    expect(state.selectedProfile).toBe("x");
+    expect(stateArg.selectedRouter).toBe(state.selectedRouter);
+    stateArg.selectedRouter = "x";
+    expect(state.selectedRouter).toBe("x");
     expect(stateArg.routerEnabled).toBe(state.routerEnabled);
     stateArg.routerEnabled = true;
     expect(state.routerEnabled).toBe(true);
     expect(stateArg.lastDecision).toBe(state.lastDecision);
-    const d = makeFakeDecision({ profile: "p" });
+    const d = makeFakeDecision({ router: "p" });
     stateArg.lastDecision = d;
     expect(state.lastDecision).toBe(d);
     expect(stateArg.accumulatedCost).toBe(state.accumulatedCost);
@@ -96,7 +96,7 @@ describe("index/reload 모듈", () => {
     const { pi } = makePi();
     const loadRouterConfig = vi
       .fn()
-      .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] });
+      .mockReturnValue({ config: { debug: true, routers: {} }, warnings: [] });
     const { deps } = makeDeps({ loadRouterConfig });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     reload(undefined, { preserveDebug: true });
@@ -109,7 +109,7 @@ describe("index/reload 모듈", () => {
     const { pi } = makePi();
     const loadRouterConfig = vi
       .fn()
-      .mockReturnValue({ config: { debug: true, profiles: {} }, warnings: [] });
+      .mockReturnValue({ config: { debug: true, routers: {} }, warnings: [] });
     const { deps } = makeDeps({ loadRouterConfig });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     reload(undefined, { preserveDebug: false });
@@ -121,7 +121,7 @@ describe("index/reload 모듈", () => {
     const { pi } = makePi();
     const loadRouterConfig = vi
       .fn()
-      .mockReturnValue({ config: { profiles: {} }, warnings: ["warn1"] });
+      .mockReturnValue({ config: { routers: {} }, warnings: ["warn1"] });
     const { deps, updateStatus } = makeDeps({ loadRouterConfig });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     const { ctx, notify } = makeCtxWithNotify();
@@ -133,7 +133,7 @@ describe("index/reload 모듈", () => {
   it("ctx가 있어도 경고가 없으면 알림하지 않는다", () => {
     const state = makeState();
     const { pi } = makePi();
-    const loadRouterConfig = vi.fn().mockReturnValue({ config: { profiles: {} }, warnings: [] });
+    const loadRouterConfig = vi.fn().mockReturnValue({ config: { routers: {} }, warnings: [] });
     const { deps } = makeDeps({ loadRouterConfig });
     const reload = createReloadConfig(pi, state, vi.fn(), vi.fn(), deps);
     const { ctx, notify } = makeCtxWithNotify();

@@ -4,7 +4,7 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 
 ## What it does
 
-- **Logical Router Provider**: Registers a `router` provider that exposes stable profiles (e.g., `router/balanced`) as models.
+- **Logical Router Provider**: Registers a `router` provider that exposes stable routers (e.g., `router/balanced`) as models.
 - **Per-Turn Routing**: Intelligently chooses between `max` / `xhigh` / `high` / `medium` / `low` / `minimal` tiers for every turn based on task intent and complexity.
 - **Classifier-Based Routing**: Auto classifier maps to `minimal` / `low` / `medium` / `high` / `xhigh` / `max` (or `off` → classifier). Manual effort selects any tier directly.
 - **Manual Effort Override**: `minimal` / `low` / `medium` / `high` / `xhigh` / `max` thinking levels map directly to tiers; missing tier falls back to nearest available.
@@ -12,8 +12,9 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
   - **LLM Intent Classifier**: Optionally use a fast model to categorize intent.
   - **TypeSafe Classifier**: Alternatively classify intent with the [TypeSafe System One API](https://docs.typesafe.ai/api) (`"classifierModels": ["@@typesafe/jev-latest"]`), gated by calibrated confidence.
   - **Fallback Chains**: Automatic retry with alternative models if the primary choice fails.
-- **Thinking Control**: Per-tier `thinking` from `pi-model-router.json#thinking` is applied; delegated reasoning is clamped per target model.
-- **Persistent State**: Profiles, costs, and debug history are remembered across agent restarts and conversation branches.
+- **Effort Control**: Per-tier `effort` is forced onto all models of the tier (including model-level `#effort` and delegated models); delegated reasoning is clamped per target model.
+- **Router Delegation**: Tier `models` accept `@router`, `@router#tier`, and `@router#tier#effort` entries that expand live at routing time to the target router's tier models (tier-less delegation defaults to the target's `medium` tier; delegation targets never run the classifier again).
+- **Persistent State**: Routers, costs, and debug history are remembered across agent restarts and conversation branches.
 
 ## Installation
 
@@ -55,7 +56,7 @@ Copy the example config to one of:
     "low": "Quick, cheap answers: one-paragraph summaries, commit messages, tiny edits.",
     "high": "Needs real design judgment: tradeoffs, planning, risky refactors in this repo."
   },
-  "profiles": {
+  "routers": {
     "auto": {
       "high": { "models": ["openai/gpt-5.4-pro#high"] },
       "medium": { "models": ["google/gemini-flash-latest#medium"] },
@@ -69,6 +70,10 @@ Copy the example config to one of:
       "medium": { "models": ["xai/grok-4.6#medium"] },
       "low": { "models": ["xai/grok-4.6#low"] },
       "minimal": { "models": ["xai/grok-4.6#minimal"] }
+    },
+    "cheap": {
+      "models": ["@grok", "openai/gpt-5.4-nano"],
+      "high": { "models": ["@grok#high", "openai/gpt-5.4-pro"], "effort": "high" }
     }
   }
 }
@@ -90,10 +95,10 @@ Copy the example config to one of:
 
 | Field                                                                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `classifierModels`                                                      | (Optional) Classifier fallback chain (array only). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. **배열만 허용**하며 항목 순서가 곧 시도/폴백 순서임(단일 문자열 형식은 없음). 항목 형식: `"provider/model#thinking"`(로컬 LLM), `"@profile"` / `"@profile#tier"` / `"@profile#tier#effort"`(해당 프로필 tier 모델을 라우팅 시점에 실시간 참조, tier 생략 시 medium), `"@@typesafe/<model>"`(TypeSafe System One, 아래 참고). If omitted, defaults to `medium` or falls back to `low` tier models. `off` = auto. |
+| `classifierModels`                                                      | (Optional) Classifier fallback chain (array only). Auto classifier returns `minimal`/`low`/`medium`/`high`/`xhigh`/`max`. **배열만 허용**하며 항목 순서가 곧 시도/폴백 순서임(단일 문자열 형식은 없음). 항목 형식: `"provider/model#effort"`(로컬 LLM), `"@router"` / `"@router#tier"` / `"@router#tier#effort"`(해당 라우터 tier 모델을 라우팅 시점에 실시간 참조, tier 생략 시 medium), `"@@typesafe/<model>"`(TypeSafe System One, 아래 참고). 체인은 라우터 체인 → 전역 체인 → 라우터 low tier 모델 순으로 이어짐. 모두 없으면 분류기 없이 `medium` 기본 라우팅. `off` = auto. |
 | `typesafeConfidenceThreshold`                                           | (Optional) 0~1 (기본 `0.5`). TypeSafe Choice 응답의 `confidence`가 이 값보다 낮으면 한 단계 위 tier로 승격함 (`max`가 상한). 자세한 동작은 [Confidence-Gated Routing](https://docs.typesafe.ai/confidence).                                                                                                                                                                                                                                                                                                                   |
-| `profiles`                                                              | Map of profile definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required). Optional profile-level `models` is inherited by tiers without their own `models`.                                                                                                                                                                                                                                                                                                      |
-| `profiles.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#thinking", ...], "thinking"?, "effort"?, "contextWindow"?, "maxTokens"? }`. `#thinking` suffix sets delegated reasoning per model; tier-level `thinking` (alias `effort`) is the default for models without `#` (`thinking` wins if both set); profile-level `models` is inherited by tiers without their own `models`.                                                                                                                                                            |
+| `routers`                                                              | Map of router definitions, each containing optional `max`, `xhigh`, `high`, `medium`, `low`, `minimal` tiers (at least one required). Optional router-level `models` is inherited by tiers without their own `models`.                                                                                                                                                                                                                                                                                                      |
+| `routers.<name>.max` / `xhigh` / `high` / `medium` / `low` / `minimal` | Tier config: `{ "models": ["provider/model#effort", ...], "effort"?, "contextWindow"?, "maxTokens"? }`. `#effort` suffix sets delegated reasoning per model; tier-level `effort` is forced onto all tier models (overriding model-level `#` and delegation results); router-level `models` is inherited by tiers without their own `models`.                                                                                                                                                            |
 | `tierGuides`                                                            | (Optional) Top-level map of tier name → classifier description (`minimal`/`low`/`medium`/`high`/`xhigh`/`max`). Injected into the classifier system prompt in place of the built-in tier lines. Partial overrides keep built-in defaults; values are trimmed. Invalid tierGuides (non-object, unknown tier keys, non-string or empty/whitespace-only values) fail config load with an error. Hot-reloadable via `/router reload`.                                                                                             |
 | `historySize`                                                           | 0–20, classifier에 전달할 직전 턴 요약 수 (기본 0).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
@@ -121,16 +126,17 @@ Copy the example config to one of:
 
 | Command                   | Description                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------- |
-| `/router`                 | Show detailed status, current profile, spend, and settings.                     |
+| `/router`                 | Show detailed status, current router, spend, and settings.                      |
 | `/router status`          | Alias for `/router` (show current status).                                      |
-| `/router debug <on\|off>` | Toggle turn-by-turn routing notifications (supports `toggle`, `clear`, `show`). |
+| `/router debug <on\|off\|toggle\|show\|clear>` | Toggle turn-by-turn routing notifications, show or clear debug history.         |
 | `/router reload`          | Hot-reload the configuration JSON.                                              |
+| `/router reset-failures`  | Clear session failure memory (chain-local, in-memory).                          |
 | `/router help`            | Show usage help for all subcommands.                                            |
 
 ## Documentation
 
 - [Architecture Guide](docs/ARCHITECTURE.md): Deep dive into the routing logic and modular design.
-- [Sample Configuration](docs/model-router.example.jsonc): Diverse profile examples (`cheap`, `deep`, `balanced`, `refTier`/`refEffort`/`refMixed` for `@profile[#tier[#effort]]` delegation in tier `models`, `refClassifier` for `@profile` `classifierModels` refs, `@@typesafe/<model>` for the TypeSafe classifier).
+- [Sample Configuration](docs/pi-model-router.example.jsonc): Diverse router examples (`auto`, `cheap`, `deep`, `minimal`, `effort`, `grok`, and delegation cases `refTier`/`refEffort`/`refMixed` for `@router[#tier[#effort]]` in tier `models`, `refClassifier` for `@router` `classifierModels` refs, `@@typesafe/<model>` for the TypeSafe classifier).
 
 ## Credits
 

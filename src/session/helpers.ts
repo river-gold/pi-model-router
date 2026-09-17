@@ -26,7 +26,7 @@ export const createPersistState = (
   const fn = (): void => {
     const s = buildPersistedState(
       state.routerEnabled,
-      state.selectedProfile,
+      state.selectedRouter,
       state.debugEnabled,
       state.debugHistory,
       state.lastDecision,

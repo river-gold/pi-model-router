@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadRouterConfig, profileNames, resolveProfileName } from "../config";
+import { loadRouterConfig, routerNames, resolveRouterName } from "../config";
 import { registerRouterProvider } from "../provider";
 import { updateStatus } from "../ui";
 import type { RouterState } from "../state";
@@ -7,8 +7,8 @@ import type { RoutingDecision } from "../types";
 
 export type ReloadDeps = {
   loadRouterConfig: typeof loadRouterConfig;
-  profileNames: typeof profileNames;
-  resolveProfileName: typeof resolveProfileName;
+  routerNames: typeof routerNames;
+  resolveRouterName: typeof resolveRouterName;
   registerRouterProvider: typeof registerRouterProvider;
   updateStatus: typeof updateStatus;
 };
@@ -20,8 +20,8 @@ export const createReloadConfig = (
   recordDebugDecision: (d: RoutingDecision) => void,
   deps: ReloadDeps = {
     loadRouterConfig,
-    profileNames,
-    resolveProfileName,
+    routerNames,
+    resolveRouterName,
     registerRouterProvider,
     updateStatus,
   },
@@ -31,7 +31,7 @@ export const createReloadConfig = (
     state.currentConfig = loaded.config;
     state.lastConfigWarnings = loaded.warnings;
     if (!options?.preserveDebug) state.debugEnabled = state.currentConfig.debug ?? false;
-    state.selectedProfile = deps.resolveProfileName(state.currentConfig, state.selectedProfile);
+    state.selectedRouter = deps.resolveRouterName(state.currentConfig, state.selectedRouter);
     deps.registerRouterProvider(
       pi,
       {
@@ -50,11 +50,11 @@ export const createReloadConfig = (
         get lastExtensionContext() {
           return state.lastExtensionContext;
         },
-        get selectedProfile() {
-          return state.selectedProfile;
+        get selectedRouter() {
+          return state.selectedRouter;
         },
-        set selectedProfile(v) {
-          state.selectedProfile = v;
+        set selectedRouter(v) {
+          state.selectedRouter = v;
         },
         get routerEnabled() {
           return state.routerEnabled;
@@ -82,11 +82,11 @@ export const createReloadConfig = (
         persistState,
         recordDebugDecision,
         updateStatus: (c) =>
-          deps.updateStatus(c, state.routerEnabled, state.selectedProfile, state.lastDecision),
+          deps.updateStatus(c, state.routerEnabled, state.selectedRouter, state.lastDecision),
       },
     );
     if (ctx) {
-      deps.updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision);
+      deps.updateStatus(ctx, state.routerEnabled, state.selectedRouter, state.lastDecision);
       if (state.lastConfigWarnings.length > 0)
         ctx.ui.notify(
           `Router Configuration Warnings:\n${state.lastConfigWarnings.join("\n")}`,

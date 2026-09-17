@@ -29,7 +29,7 @@ describe("non-Error throw 분기를 검증함", () => {
     expect(r).toBeUndefined();
     expect(w[0]).toMatch(/Invalid model/);
     expect(w[0]).toBe(
-      'Invalid model "openai/gpt-4o" in profile "p" high tier: expected "provider/model[#thinking]" or "@profile[#tier[#effort]]".',
+      'Invalid model "openai/gpt-4o" in router "p" high tier: expected "provider/model[#effort]" or "@router[#tier[#effort]]".',
     );
   });
 });

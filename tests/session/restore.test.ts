@@ -27,8 +27,8 @@ describe("session/restore 모듈", () => {
         extractSavedState([{ type: "custom", customType: "other", data: {} }]),
       ).toBeUndefined());
     it("마지막 저장 값을 찾는다", () => {
-      const data1 = { enabled: true, selectedProfile: "a", timestamp: 1 };
-      const data2 = { enabled: false, selectedProfile: "b", timestamp: 2 };
+      const data1 = { enabled: true, selectedRouter: "a", timestamp: 1 };
+      const data2 = { enabled: false, selectedRouter: "b", timestamp: 2 };
       const entries = [
         { type: "custom", customType: "router-state", data: data1 },
         { type: "custom", customType: "router-state", data: data2 },
@@ -41,12 +41,12 @@ describe("session/restore 모듈", () => {
         {
           type: "custom",
           customType: "router-state",
-          data: { enabled: true, selectedProfile: "a", timestamp: 1 },
+          data: { enabled: true, selectedRouter: "a", timestamp: 1 },
         },
       ];
       expect(extractSavedState(entries)).toEqual({
         enabled: true,
-        selectedProfile: "a",
+        selectedRouter: "a",
         timestamp: 1,
       });
     });
@@ -59,25 +59,25 @@ describe("session/restore 모듈", () => {
   describe("applySavedState 함수", () => {
     it("debugHistory 슬라이스와 함께 적용한다", () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: { balanced: { high: { models: ["openai/gpt"] } } } };
+      state.currentConfig = { routers: { balanced: { high: { models: ["openai/gpt"] } } } };
       const savedState: any = {
         enabled: true,
-        selectedProfile: "balanced",
+        selectedRouter: "balanced",
         debugEnabled: true,
         debugHistory: Array.from({ length: 20 }, (_, i) => ({
-          profile: "p",
+          router: "p",
           tier: "high",
           reasoning: "r",
           timestamp: i,
         })),
         lastNonRouterModel: "openai/gpt-4o",
         accumulatedCost: 5,
-        lastDecision: { profile: "balanced", tier: "high" },
+        lastDecision: { router: "balanced", tier: "high" },
         timestamp: Date.now(),
       };
       applySavedState(state, savedState);
       expect(state.routerEnabled).toBe(true);
-      expect(state.selectedProfile).toBe("balanced");
+      expect(state.selectedRouter).toBe("balanced");
       expect(state.debugEnabled).toBe(true);
       expect(state.debugHistory.length).toBeLessThanOrEqual(12); // MAX_DEBUG_HISTORY
       expect(state.lastNonRouterModel).toBe("openai/gpt-4o");
@@ -87,13 +87,13 @@ describe("session/restore 모듈", () => {
 
     it("없는 선택 필드를 처리한다", () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       state.debugEnabled = false;
       state.lastNonRouterModel = "orig";
       state.accumulatedCost = 10;
       const savedState: any = {
         enabled: false,
-        selectedProfile: "missing",
+        selectedRouter: "missing",
         timestamp: Date.now(),
         // no debugEnabled, debugHistory, lastNonRouterModel, accumulatedCost, lastDecision
       };
@@ -105,16 +105,16 @@ describe("session/restore 모듈", () => {
       expect(state.lastDecision).toBeUndefined();
     });
 
-    it("알 수 없는 profile을 처리한다", () => {
+    it("알 수 없는 router을 처리한다", () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const savedState: any = {
         enabled: true,
-        selectedProfile: "unknown",
+        selectedRouter: "unknown",
         timestamp: Date.now(),
       };
       applySavedState(state, savedState);
-      expect(state.selectedProfile).toBeUndefined();
+      expect(state.selectedRouter).toBeUndefined();
     });
   });
 
@@ -139,7 +139,7 @@ describe("session/restore 모듈", () => {
 
     const makeActions = () => ({
       reloadConfig: vi.fn(),
-      ensureValidActiveRouterProfile: vi.fn().mockResolvedValue(undefined),
+      ensureValidActiveRouter: vi.fn().mockResolvedValue(undefined),
     });
 
     const makeHelpers = (over: any = {}) => ({
@@ -150,7 +150,7 @@ describe("session/restore 모듈", () => {
 
     it("router model 복원에 성공한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: { balanced: { high: { models: ["openai/gpt"] } } } };
+      state.currentConfig = { routers: { balanced: { high: { models: ["openai/gpt"] } } } };
       const ctx = makeCtx();
       const actions = makeActions();
       const helpers = makeHelpers();
@@ -163,7 +163,7 @@ describe("session/restore 모듈", () => {
 
     it("non-router model을 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: { balanced: { high: { models: ["openai/gpt"] } } } };
+      state.currentConfig = { routers: { balanced: { high: { models: ["openai/gpt"] } } } };
       const ctx = makeCtx({ model: { provider: "openai", id: "gpt-4o" } });
       const actions = makeActions();
       const helpers = makeHelpers();
@@ -175,7 +175,7 @@ describe("session/restore 모듈", () => {
 
     it("model이 없으면 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const ctx = makeCtx({ model: undefined });
       const actions = makeActions();
       const helpers = makeHelpers();
@@ -185,10 +185,10 @@ describe("session/restore 모듈", () => {
 
     it("savedState가 있으면 적용한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: { balanced: { high: { models: ["openai/gpt"] } } } };
+      state.currentConfig = { routers: { balanced: { high: { models: ["openai/gpt"] } } } };
       const savedData = {
         enabled: true,
-        selectedProfile: "balanced",
+        selectedRouter: "balanced",
         debugEnabled: true,
         debugHistory: [],
         timestamp: Date.now(),
@@ -206,8 +206,8 @@ describe("session/restore 모듈", () => {
 
     it("debugHistory 없는 savedState를 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
-      const savedData = { enabled: true, selectedProfile: "balanced", timestamp: Date.now() };
+      state.currentConfig = { routers: {} };
+      const savedData = { enabled: true, selectedRouter: "balanced", timestamp: Date.now() };
       const ctx = makeCtx({
         sessionManager: {
           getBranch: () => [{ type: "custom", customType: "router-state", data: savedData }],
@@ -221,7 +221,7 @@ describe("session/restore 모듈", () => {
 
     it("setModelInternally 실패를 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: { balanced: { high: { models: ["openai/gpt"] } } } };
+      state.currentConfig = { routers: { balanced: { high: { models: ["openai/gpt"] } } } };
       const ctx = makeCtx();
       const actions = makeActions();
       const helpers = makeHelpers({ setModelInternally: vi.fn().mockResolvedValue(false) });
@@ -235,7 +235,7 @@ describe("session/restore 모듈", () => {
 
     it("routerModel을 찾지 못하면 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: { balanced: { high: { models: ["openai/gpt"] } } } };
+      state.currentConfig = { routers: { balanced: { high: { models: ["openai/gpt"] } } } };
       const ctx = makeCtx({
         modelRegistry: { find: vi.fn(() => undefined) },
       });
@@ -252,7 +252,7 @@ describe("session/restore 모듈", () => {
 
     it("routerEnabled가 아닐 때를 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const ctx = makeCtx({ model: { provider: "openai", id: "gpt-4o" } });
       const actions = makeActions();
       const helpers = makeHelpers();
@@ -260,14 +260,14 @@ describe("session/restore 모듈", () => {
       expect(ctx.ui.setHiddenThinkingLabel).toHaveBeenCalled();
     });
 
-    it("selectedProfile이 undefined일 때를 처리한다", async () => {
+    it("selectedRouter이 undefined일 때를 처리한다", async () => {
       const state = createRouterState();
-      state.currentConfig = { profiles: {} };
+      state.currentConfig = { routers: {} };
       const ctx = makeCtx({ model: { provider: "router", id: "unknown" } });
       const actions = makeActions();
       const helpers = makeHelpers();
       await restoreStateFromSession(ctx, state, helpers, actions);
-      // should still call persist and updateStatus, and setHiddenThinkingLabel because not enabled or no profile
+      // should still call persist and updateStatus, and setHiddenThinkingLabel because not enabled or no router
       expect(helpers.persistState).toHaveBeenCalled();
     });
   });

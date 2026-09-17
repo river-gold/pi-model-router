@@ -1,7 +1,7 @@
 export type ClassifierLogEntry = {
   timestamp: string;
   model: string;
-  thinking?: string;
+  effort?: string;
   fullText: string;
   tierLine?: string;
   reasoningLine?: string;

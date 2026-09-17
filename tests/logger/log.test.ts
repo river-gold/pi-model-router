@@ -101,7 +101,7 @@ describe("logger/log 분류 로그 기록", () => {
     const entry: ClassifierLogEntry = {
       timestamp: "t",
       model: "m",
-      thinking: "high",
+      effort: "high",
       fullText: "x".repeat(5000),
       tierLine: "tier",
       reasoningLine: "reason",

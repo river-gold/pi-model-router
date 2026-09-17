@@ -4,7 +4,7 @@ import { applyClassifierIfNeeded } from "../../src/provider/classifier";
 import { CLASSIFIER_CHAIN_KEY } from "../../src/failureMemory";
 import type * as ClassifierBranchModule from "../../src/provider/classifierBranch";
 import type * as RoutingModule from "../../src/routing";
-import type { RouterProfile } from "../../src/types";
+import type { Router } from "../../src/types";
 import { makeFakeRegistry, makeFakeProviderState, makeFakeDecision } from "../helpers";
 
 const {
@@ -38,11 +38,11 @@ vi.mock("../../src/routing", async () => {
 
 describe("provider/classifier 분류기 적용", () => {
   const mockDecision = makeFakeDecision({ tier: "medium", reasoning: "orig" });
-  const mockProfile: RouterProfile = { medium: { models: ["openai/a"] } };
+  const mockRouter: Router = { medium: { models: ["openai/a"] } };
   const baseContext: Context = { messages: [{ role: "user", content: "hi", timestamp: 1 }] };
   const makeState = (historySize?: number, failedSet?: Set<string>) =>
     makeFakeProviderState({
-      currentConfig: { profiles: {}, historySize },
+      currentConfig: { routers: {}, historySize },
       failedByChain: new Map<string, Set<string>>(
         failedSet === undefined ? [] : [[CLASSIFIER_CHAIN_KEY, failedSet]],
       ),
@@ -51,14 +51,14 @@ describe("provider/classifier 분류기 적용", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolveAvailableTier.mockImplementation((_, t) => t);
-    mockBuildRoutingDecision.mockImplementation((modelId, profile, tier, reasoning) => ({
-      profile: modelId,
+    mockBuildRoutingDecision.mockImplementation((modelId, router, tier, reasoning) => ({
+      router: modelId,
       tier,
       reasoning,
     }));
     mockBuildRoutingDecisionLive.mockImplementation(
-      (profiles, modelId, tier, reasoning, isClassifier) => ({
-        profile: modelId,
+      (routers, modelId, tier, reasoning, isClassifier) => ({
+        router: modelId,
         tier,
         reasoning,
         isClassifier,
@@ -72,7 +72,7 @@ describe("provider/classifier 분류기 적용", () => {
   it("isSingleTier일 때 기존 decision 반환", async () => {
     const state = makeState();
     const result = await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "modelId",
       makeFakeRegistry(),
@@ -91,7 +91,7 @@ describe("provider/classifier 분류기 적용", () => {
   it("isToolLoopNow일 때 기존 decision 반환", async () => {
     const state = makeState();
     const result = await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "modelId",
       makeFakeRegistry(),
@@ -110,7 +110,7 @@ describe("provider/classifier 분류기 적용", () => {
     const state = makeState();
     for (const lvl of ["high", "low", "medium", "max", "minimal", "xhigh"] as const) {
       const r = await applyClassifierIfNeeded(
-        mockProfile,
+        mockRouter,
         mockDecision,
         "modelId",
         makeFakeRegistry(),
@@ -129,7 +129,7 @@ describe("provider/classifier 분류기 적용", () => {
   it("historySize가 undefined이면 0 사용", async () => {
     const state = makeState(undefined);
     await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "modelId",
       makeFakeRegistry(),
@@ -159,7 +159,7 @@ describe("provider/classifier 분류기 적용", () => {
   it("historySize가 정의되어 있으면 해당 값 사용", async () => {
     const state = makeState(5);
     await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "modelId",
       makeFakeRegistry(),
@@ -190,7 +190,7 @@ describe("provider/classifier 분류기 적용", () => {
     const set = new Set(["a"]);
     const state = makeState(0, set);
     await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "modelId",
       makeFakeRegistry(),
@@ -220,7 +220,7 @@ describe("provider/classifier 분류기 적용", () => {
   it("sessionId가 주어지면 runClassifierBranch에 전달한다", async () => {
     const state = makeState(0);
     await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "modelId",
       makeFakeRegistry(),
@@ -251,7 +251,7 @@ describe("provider/classifier 분류기 적용", () => {
   it("map에 없으면 새로운 Set 생성", async () => {
     const state = makeState(0, undefined);
     await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "modelId",
       makeFakeRegistry(),
@@ -275,7 +275,7 @@ describe("provider/classifier 분류기 적용", () => {
     });
     const state = makeState();
     const result = await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "myModel",
       makeFakeRegistry(),
@@ -289,7 +289,7 @@ describe("provider/classifier 분류기 적용", () => {
     );
     expect(mockBuildRoutingDecision).toHaveBeenCalledWith(
       "myModel",
-      mockProfile,
+      mockRouter,
       "high",
       "Classifier: r",
       true,
@@ -301,7 +301,7 @@ describe("provider/classifier 분류기 적용", () => {
     mockRunClassifierBranch.mockRejectedValue(new Error("Classifier failed to determine a tier."));
     const state = makeState();
     const result = await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "myModel",
       makeFakeRegistry(),
@@ -321,7 +321,7 @@ describe("provider/classifier 분류기 적용", () => {
     });
     const state = makeState();
     const result = await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "myModel",
       makeFakeRegistry(),
@@ -340,7 +340,7 @@ describe("provider/classifier 분류기 적용", () => {
     const state = makeState();
     await expect(
       applyClassifierIfNeeded(
-        mockProfile,
+        mockRouter,
         mockDecision,
         "myModel",
         makeFakeRegistry(),
@@ -361,7 +361,7 @@ describe("provider/classifier 분류기 적용", () => {
     });
     const state = makeState();
     const result = await applyClassifierIfNeeded(
-      mockProfile,
+      mockRouter,
       mockDecision,
       "myModel",
       makeFakeRegistry(),
@@ -376,7 +376,7 @@ describe("provider/classifier 분류기 적용", () => {
     expect(result.reasoning).toContain("Resolved from high to medium");
     expect(mockBuildRoutingDecision).toHaveBeenCalledWith(
       "myModel",
-      mockProfile,
+      mockRouter,
       "medium",
       expect.stringContaining("Resolved from high"),
       true,
@@ -388,14 +388,14 @@ describe("provider/classifier 논리적 ref", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-  const liveProfiles: Record<string, RouterProfile> = {
+  const liveRouters: Record<string, Router> = {
     myModel: { high: { ref: "base#high" } },
     base: { high: { models: ["openai/gpt-base"] } },
   };
   const baseContext: Context = { messages: [{ role: "user", content: "hi", timestamp: 1 }] };
-  const callLive = (profiles: Record<string, RouterProfile>, modelId = "myModel") => {
+  const callLive = (routers: Record<string, Router>, modelId = "myModel") => {
     const state = makeFakeProviderState({
-      currentConfig: { historySize: 0, profiles: {} },
+      currentConfig: { historySize: 0, routers: {} },
       failedByChain: new Map(),
     });
     return applyClassifierIfNeeded(
@@ -411,26 +411,26 @@ describe("provider/classifier 논리적 ref", () => {
       "off",
       "source",
       undefined,
-      profiles,
+      routers,
     );
   };
-  it("profiles가 있으면 live 결정으로 반환함", async () => {
+  it("routers가 있으면 live 결정으로 반환함", async () => {
     mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
     });
-    const result = await callLive(liveProfiles);
+    const result = await callLive(liveRouters);
     expect(mockBuildRoutingDecisionLive).toHaveBeenCalledWith(
-      liveProfiles,
+      liveRouters,
       "myModel",
       "high",
       expect.stringContaining("Classifier:"),
       true,
     );
     expect(result).toEqual(
-      expect.objectContaining({ profile: "myModel", tier: "high", isClassifier: true }),
+      expect.objectContaining({ router: "myModel", tier: "high", isClassifier: true }),
     );
   });
-  it("profiles에 없어도 요청 tier로 live 결정함", async () => {
+  it("routers에 없어도 요청 tier로 live 결정함", async () => {
     mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
     });
@@ -442,23 +442,23 @@ describe("provider/classifier 논리적 ref", () => {
       expect.stringContaining("Classifier:"),
       true,
     );
-    expect(result).toEqual(expect.objectContaining({ profile: "myModel" }));
+    expect(result).toEqual(expect.objectContaining({ router: "myModel" }));
   });
   it("기본 tier 자리가 위임 models면 분류기를 실행함", async () => {
     mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
     });
-    const profiles: Record<string, RouterProfile> = {
+    const routers: Record<string, Router> = {
       myModel: { medium: { ref: "base#medium" } },
       base: { medium: { models: ["openai/gpt-base"] } },
     };
     const state = makeFakeProviderState({
-      currentConfig: { historySize: 0, profiles: {} },
+      currentConfig: { historySize: 0, routers: {} },
       failedByChain: new Map(),
     });
     await applyClassifierIfNeeded(
-      profiles.myModel,
-      makeFakeDecision({ profile: "myModel", tier: "medium", reasoning: "orig" }),
+      routers.myModel,
+      makeFakeDecision({ router: "myModel", tier: "medium", reasoning: "orig" }),
       "myModel",
       makeFakeRegistry(),
       state,
@@ -469,25 +469,25 @@ describe("provider/classifier 논리적 ref", () => {
       "off",
       "source",
       undefined,
-      profiles,
+      routers,
     );
     expect(mockRunClassifierBranch).toHaveBeenCalled();
   });
-  it("profileName과 profiles를 branch에 전달함을 검증함", async () => {
+  it("routerName과 routers를 branch에 전달함을 검증함", async () => {
     mockRunClassifierBranch.mockResolvedValue({
       result: { tier: "high", reasoning: "classifier reason" },
     });
-    const profiles: Record<string, RouterProfile> = {
+    const routers: Record<string, Router> = {
       myModel: { medium: { ref: "base#medium" } },
       base: { medium: { models: ["openai/gpt-base"] } },
     };
     const state = makeFakeProviderState({
-      currentConfig: { historySize: 0, profiles: {} },
+      currentConfig: { historySize: 0, routers: {} },
       failedByChain: new Map(),
     });
     await applyClassifierIfNeeded(
-      profiles.myModel,
-      makeFakeDecision({ profile: "myModel", tier: "medium", reasoning: "orig" }),
+      routers.myModel,
+      makeFakeDecision({ router: "myModel", tier: "medium", reasoning: "orig" }),
       "myModel",
       makeFakeRegistry(),
       state,
@@ -498,11 +498,11 @@ describe("provider/classifier 논리적 ref", () => {
       "off",
       "source",
       undefined,
-      profiles,
+      routers,
     );
     expect(mockRunClassifierBranch).toHaveBeenCalledWith(
       expect.anything(),
-      profiles.myModel,
+      routers.myModel,
       expect.anything(),
       expect.anything(),
       undefined,
@@ -511,7 +511,7 @@ describe("provider/classifier 논리적 ref", () => {
       "source",
       undefined,
       "myModel",
-      profiles,
+      routers,
     );
   });
 });

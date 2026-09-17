@@ -15,7 +15,7 @@ describe("state.ts 상태는", () => {
       expect(
         isRouterPersistedState({
           enabled: "yes",
-          selectedProfile: "p",
+          selectedRouter: "p",
           timestamp: 123,
         }),
       ).toBe(false);
@@ -24,7 +24,7 @@ describe("state.ts 상태는", () => {
     it("유효한 persisted state 객체이면 true를 반환한다", () => {
       const state = {
         enabled: true,
-        selectedProfile: "balanced",
+        selectedRouter: "balanced",
         timestamp: Date.now(),
       };
       expect(isRouterPersistedState(state)).toBe(true);
@@ -34,13 +34,13 @@ describe("state.ts 상태는", () => {
   describe("buildPersistedState 영속 상태 생성은", () => {
     it("인터페이스 요구사항에 맞는 state 객체를 생성한다", () => {
       const decision: RoutingDecision = {
-        profile: "balanced",
+        router: "balanced",
         tier: "high",
         targetProvider: "google",
         targetModelId: "gemini-2.5-pro",
         targetLabel: "google/gemini-2.5-pro",
         reasoning: "Rules matched",
-        thinking: "high",
+        effort: "high",
         timestamp: Date.now(),
       };
 
@@ -55,7 +55,7 @@ describe("state.ts 상태는", () => {
       );
 
       expect(state.enabled).toBe(true);
-      expect(state.selectedProfile).toBe("balanced");
+      expect(state.selectedRouter).toBe("balanced");
       expect(state.debugEnabled).toBe(true);
       expect(state.debugHistory).toEqual([decision]);
       expect(state.lastDecision).toEqual(decision);
@@ -64,9 +64,9 @@ describe("state.ts 상태는", () => {
       expect(state.timestamp).toBeGreaterThan(0);
     });
 
-    it("undefined selectedProfile을 처리한다", () => {
+    it("undefined selectedRouter을 처리한다", () => {
       const state = buildPersistedState(false, undefined, false, [], undefined, undefined, 0);
-      expect(state.selectedProfile).toBe("");
+      expect(state.selectedRouter).toBe("");
     });
   });
 });

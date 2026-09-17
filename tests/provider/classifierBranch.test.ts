@@ -6,7 +6,7 @@ import { CLASSIFIER_CHAIN_KEY } from "../../src/failureMemory";
 import type * as ConfigModule from "../../src/config";
 import type * as ClassifierModule from "../../src/classifier";
 import type * as TypesafeEntryModule from "../../src/provider/typesafeEntry";
-import type { ClassifierConfig, RouterProfile, TierGuides } from "../../src/types";
+import type { ClassifierConfig, Router, TierGuides } from "../../src/types";
 import { makeFakeRegistry, makeFakeUi, makeFakeExtensionContext, fakeSignal } from "../helpers";
 
 vi.mock("../../src/config", async () => {
@@ -28,7 +28,7 @@ import { runClassifierWithFallbacksDetailed } from "../../src/classifier";
 const { mockRunTypesafeEntry } = vi.hoisted(() => ({ mockRunTypesafeEntry: vi.fn() }));
 
 const mockRegistry = makeFakeRegistry();
-const baseProfile: RouterProfile = { high: { models: ["openai/gpt"] } };
+const baseRouter: Router = { high: { models: ["openai/gpt"] } };
 
 const makeState = (
   over: {
@@ -63,7 +63,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     await expect(
       runClassifierBranch(
         mockRegistry,
-        baseProfile,
+        baseRouter,
         makeState(),
         ctx,
         undefined,
@@ -81,7 +81,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     const signal = fakeSignal(true);
     await expect(
-      runClassifierBranch(mockRegistry, baseProfile, makeState(), ctx, signal, 0, new Set(), "src"),
+      runClassifierBranch(mockRegistry, baseRouter, makeState(), ctx, signal, 0, new Set(), "src"),
     ).rejects.toThrow("aborted");
   });
 
@@ -93,7 +93,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     const failedSet = new Set<string>(["x"]);
     vi.mocked(runClassifierWithFallbacksDetailed).mockImplementation(
       async (_a, _b, _c, _d, _e, onAttempt, _f) => {
-        onAttempt?.({ model: "openai/gpt", thinking: "high", source: "global" });
+        onAttempt?.({ model: "openai/gpt", effort: "high", source: "global" });
         return { result: { tier: "high", reasoning: "r" }, attempts: [] };
       },
     );
@@ -103,7 +103,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     state.failedByChain = new Map();
     const res = await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       state,
       ctx,
       undefined,
@@ -119,14 +119,14 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     expect(setWorkingMessage).toHaveBeenCalledWith(undefined);
   });
 
-  it("entry.source fallback으로 성공하고 thinking이 없을 때 처리", async () => {
+  it("entry.source fallback으로 성공하고 effort가 없을 때 처리", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt", source: "global" }],
       source: "global",
     });
     vi.mocked(runClassifierWithFallbacksDetailed).mockImplementation(
       async (_a, _b, _c, _d, _e, onAttempt) => {
-        onAttempt?.({ model: "openai/gpt" }); // no source, no thinking
+        onAttempt?.({ model: "openai/gpt" }); // no source, no effort
         return { result: { tier: "low", reasoning: "r" }, attempts: [] };
       },
     );
@@ -135,7 +135,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     const state = makeState({ lastExtensionContext: makeFakeExtensionContext({ ui }) });
     const res = await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       state,
       ctx,
       undefined,
@@ -166,7 +166,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     const state = makeState({ lastExtensionContext: makeFakeExtensionContext({ ui }) });
     const res = await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       state,
       ctx,
       undefined,
@@ -185,11 +185,11 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
       result: undefined,
-      attempts: [{ model: "openai/gpt", thinking: "high", error: "no tier" }],
+      attempts: [{ model: "openai/gpt", effort: "high", error: "no tier" }],
     });
     const state = makeState();
     await expect(
-      runClassifierBranch(mockRegistry, baseProfile, state, ctx, undefined, 0, new Set(), "src"),
+      runClassifierBranch(mockRegistry, baseRouter, state, ctx, undefined, 0, new Set(), "src"),
     ).rejects.toThrow("Classifier failed");
   });
 
@@ -204,11 +204,11 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     const state = makeState();
     await expect(
-      runClassifierBranch(mockRegistry, baseProfile, state, ctx, undefined, 0, new Set(), "src"),
+      runClassifierBranch(mockRegistry, baseRouter, state, ctx, undefined, 0, new Set(), "src"),
     ).rejects.toThrow("none");
   });
 
-  it("thinking 없는 attempts 매핑", async () => {
+  it("effort 없는 attempts 매핑", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
       classifiers: [{ model: "openai/gpt", source: "global" }],
       source: "global",
@@ -219,7 +219,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     const state = makeState();
     await expect(
-      runClassifierBranch(mockRegistry, baseProfile, state, ctx, undefined, 0, new Set(), "src"),
+      runClassifierBranch(mockRegistry, baseRouter, state, ctx, undefined, 0, new Set(), "src"),
     ).rejects.toThrow("openai/gpt (e)");
   });
 
@@ -235,7 +235,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     const state = makeState();
     state.failedByChain = new Map();
     const emptySet = new Set<string>();
-    await runClassifierBranch(mockRegistry, baseProfile, state, ctx, undefined, 0, emptySet, "src");
+    await runClassifierBranch(mockRegistry, baseRouter, state, ctx, undefined, 0, emptySet, "src");
     expect(state.failedByChain.has(CLASSIFIER_CHAIN_KEY)).toBe(false);
   });
 
@@ -252,7 +252,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     const state = makeState({ currentConfig: { tierGuides: guides } });
     await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       state,
       ctx,
       undefined,
@@ -276,7 +276,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     const state = makeState({ lastExtensionContext: undefined });
     const res = await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       state,
       ctx,
       undefined,
@@ -297,7 +297,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     const res = await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       makeState(),
       ctx,
       undefined,
@@ -326,7 +326,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     const res = await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       makeState(),
       ctx,
       undefined,
@@ -359,7 +359,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     const res = await runClassifierBranch(
       mockRegistry,
-      baseProfile,
+      baseRouter,
       makeState(),
       ctx,
       undefined,
@@ -389,7 +389,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     await expect(
       runClassifierBranch(
         mockRegistry,
-        baseProfile,
+        baseRouter,
         makeState(),
         ctx,
         undefined,
@@ -416,7 +416,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     await expect(
       runClassifierBranch(
         mockRegistry,
-        baseProfile,
+        baseRouter,
         makeState(),
         ctx,
         controller.signal,
@@ -427,23 +427,23 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     ).rejects.toThrow("aborted");
   });
 
-  it("profiles를 resolveEffectiveClassifier에 전달함", async () => {
+  it("routers를 resolveEffectiveClassifier에 전달함", async () => {
     vi.mocked(resolveEffectiveClassifier).mockReturnValue({
-      classifiers: [{ model: "openai/gpt", source: "profile" }],
-      source: "profile",
+      classifiers: [{ model: "openai/gpt", source: "router" }],
+      source: "router",
     });
     vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
       result: { tier: "low", reasoning: "r" },
       attempts: [],
     });
-    const profiles: Record<string, RouterProfile> = {
+    const routers: Record<string, Router> = {
       myModel: { classifierModels: { ref: "base#low#off" } },
       base: { low: { models: ["openai/gpt"] } },
     };
     const state = makeState();
     const res = await runClassifierBranch(
       mockRegistry,
-      profiles.myModel!,
+      routers.myModel!,
       state,
       ctx,
       undefined,
@@ -452,13 +452,13 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
       "src",
       undefined,
       "myModel",
-      profiles,
+      routers,
     );
     expect(res.result?.tier).toBe("low");
     expect(resolveEffectiveClassifier).toHaveBeenCalledWith(
-      profiles.myModel,
+      routers.myModel,
       state.currentConfig.classifierModels,
-      profiles,
+      routers,
     );
   });
 });

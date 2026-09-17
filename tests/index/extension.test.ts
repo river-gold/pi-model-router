@@ -144,9 +144,9 @@ describe("index/extension 모듈", () => {
     expect(typeof stateArg.routerEnabled).toBe("boolean");
     stateArg.routerEnabled = true;
     expect(stateArg.routerEnabled).toBe(true);
-    expect(stateArg.selectedProfile).toBeUndefined();
-    stateArg.selectedProfile = "balanced";
-    expect(stateArg.selectedProfile).toBe("balanced");
+    expect(stateArg.selectedRouter).toBeUndefined();
+    stateArg.selectedRouter = "balanced";
+    expect(stateArg.selectedRouter).toBe("balanced");
     expect(stateArg.lastDecision).toBeUndefined();
     // lastDecision has no setter in this object, so we don't set it
     expect(stateArg.lastNonRouterModel).toBeUndefined();
@@ -159,7 +159,7 @@ describe("index/extension 모듈", () => {
     stateArg.debugEnabled = !origDebug;
     expect(stateArg.debugEnabled).toBe(!origDebug);
     expect(stateArg.debugHistory).toEqual([]);
-    stateArg.debugHistory = [makeFakeDecision({ profile: "p" })];
+    stateArg.debugHistory = [makeFakeDecision({ router: "p" })];
     expect(stateArg.debugHistory.length).toBe(1);
     expect(stateArg.lastConfigWarnings).toEqual([]);
     expect(stateArg.failedByChain).toBeInstanceOf(Map);
@@ -170,7 +170,7 @@ describe("index/extension 모듈", () => {
     const { ctx } = makeCtx();
     expect(() => actionsArg.updateStatus(ctx)).not.toThrow();
     expect(() => actionsArg.reloadConfig(ctx)).not.toThrow();
-    expect(typeof actionsArg.ensureValidActiveRouterProfile).toBe("function");
+    expect(typeof actionsArg.ensureValidActiveRouter).toBe("function");
   });
 
   it("session_start 시 debugEnabled 알림을 처리한다", async () => {
@@ -181,7 +181,7 @@ describe("index/extension 모듈", () => {
       return {
         ...actual,
         loadRouterConfig: vi.fn().mockReturnValue({
-          config: { debug: true, profiles: { balanced: { medium: { models: ["openai/a"] } } } },
+          config: { debug: true, routers: { balanced: { medium: { models: ["openai/a"] } } } },
           warnings: [],
         }),
       };
@@ -308,7 +308,7 @@ describe("index/extension 모듈", () => {
     routerExtension(pi);
     const { ctx, setStatus } = makeCtx();
     await getHandler(listeners, "session_start")({}, ctx);
-    // Set routerEnabled and selectedProfile, but make find return undefined for turn_end
+    // Set routerEnabled and selectedRouter, but make find return undefined for turn_end
     ctx.model = makeFakeModel({ provider: "openai", id: "gpt-4o" });
     ctx.modelRegistry.find = vi.fn().mockReturnValue(undefined);
     await getHandler(listeners, "turn_end")({}, ctx);

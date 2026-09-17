@@ -215,7 +215,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     expect(
       (
         await runClassifierWithFallbacksDetailed(
-          [{ model: "openai/gpt", thinking: "off" }],
+          [{ model: "openai/gpt", effort: "off" }],
           reg,
           baseCtx,
           0,
@@ -240,7 +240,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     expect(
       (
         await runClassifierWithFallbacksDetailed(
-          [{ model: "openai/gpt", thinking: "high" }],
+          [{ model: "openai/gpt", effort: "high" }],
           reg,
           histCtx,
           1,
@@ -256,7 +256,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     expect(
       (
         await runClassifierWithFallbacksDetailed(
-          [{ model: "openai/plain", thinking: "off" }],
+          [{ model: "openai/plain", effort: "off" }],
           reg,
           singleCtx,
           1,

@@ -1,12 +1,12 @@
 # Architecture: Pi Model Router Extension
 
-The `pi-model-router` is an extension-first model router for the `pi` coding agent. It registers a custom logical provider (`router`) that exposes "profiles" as models (e.g., `router/balanced`). For every turn, the router intelligently selects an underlying concrete model based on task complexity and optional classifier.
+The `pi-model-router` is an extension-first model router for the `pi` coding agent. It registers a custom logical provider (`router`) that exposes "routers" as models (e.g., `router/balanced`). For every turn, the router intelligently selects an underlying concrete model based on task complexity and optional classifier.
 
 ## Core Concepts
 
-### 1. Profiles & Tiers
+### 1. Routers & Tiers
 
-The router is organized into **Profiles** (e.g., `balanced`, `cheap`, `deep`, `grok`). Each profile defines up to six **Tiers** (at least one required):
+The router is organized into **Routers** (e.g., `balanced`, `cheap`, `deep`, `grok`). Each router defines up to six **Tiers** (at least one required):
 
 - **minimal**: Mechanical transforms with no judgment: format, typo, rename, indent, template fill, quote-from-context. Classifier `minimal` or manual `minimal`.
 - **low**: Cheap language/lookup work: summaries, changelogs, commit messages, quick explanations, small bounded transforms, simple read-only lookup. Classifier `low` or manual `low`.
@@ -30,31 +30,37 @@ For every request sent to a `router/*` model, the following logic is executed:
    - **TypeSafe System One** (`"@@typesafe/<model>"` entry): one `choice` question over `minimal`~`max` (`POST https://api.typesafe.ai/v1/systemone`, `model` = the entry's `<model>`). The returned `confidence` gates routing: below `typesafeConfidenceThreshold` the tier escalates one step up. A failure moves on to the next chain entry (LLM model or low tier fallback).
    - **LLM classifier** (default): `classifierModels` entries (or the `low` tier fallback) classify to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
 
-   The `classifierModels` array is the fallback chain: entries are tried in order (`@profile#tier` refs are expanded at routing time) until one returns a tier.
+   The `classifierModels` array is the fallback chain: entries are tried in order (`@router#tier` refs are expanded at routing time) until one returns a tier.
 
 3. **Default**: If no classifier is configured or it fails, defaults to `medium` (with `resolveAvailableTier()` fallback).
+4. **Delegation & Effort**: The selected tier's `models` list may contain `@router`, `@router#tier`, `@router#tier#effort` entries; these expand live (with nearest-tier fallback and cycle skipping) to the target router's tier models. A tier-level `effort` is forced onto every model of the tier, overriding model-level `#effort` and delegation results. Delegation targets never run the classifier again — tier-less delegation goes straight to the target's `medium` tier.
 
 ## Module Architecture
 
 The extension is modularized for maintainability:
 
-- `src/index.ts`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together (re-exported via `index.ts` and `src/extension.ts` shim).
-- `src/provider.ts`: Implements the `router` provider and the delegation/retry loop.
+- `src/index.ts` + `src/index/`: Orchestrator. Manages state, hooks into `pi` events, and wires modules together (provider/commands/handlers/persist/reload/fallback/actions).
+- `src/provider.ts` + `src/provider/`: Implements the `router` provider and the delegation/retry loop (routing decision, classifier branch, delegate fallback, model/limit resolution).
 - `src/routing.ts`: Core decision logic (tier resolution) and routing helpers.
-- `src/config/`: Loads, merges, and normalizes the JSON configuration (modularized from `src/config.ts`).
+- `src/config/`: Loads, merges, and normalizes the JSON configuration (normalize/tier/ref delegation expansion/classifier/tierGuides/registry/io).
+- `src/classifier.ts`: LLM classifier fallback chain (tries each `classifierModels` entry, then the low tier models).
 - `src/typesafe/`: TypeSafe System One classifier (request building, response parsing, confidence gating, HTTP client, orchestration) used by `"@@typesafe/<model>"` chain entries.
 - `src/commands.ts`: Registers all `/router` subcommands and their autocompletions.
 - `src/ui.ts`: Manages the router status line.
-- `src/state.ts`: Handles session-persisted state and snapshots.
+- `src/session/` + `src/state/`: Session-persisted state, restore, and snapshots.
+- `src/failureMemory/`: Per-session, chain-local failure memory for fallback chains.
+- `src/logger/`: Classifier/delegation sync logs (`~/.pi/logs/pi-model-router.log`).
+- `src/context/`: Context extraction/truncation helpers.
+- `src/stream.ts`: Delegated streaming helpers.
 - `src/types.ts`: Centralized interface and type definitions.
 
 ## State & Persistence
 
 The router state is persisted using `pi.appendEntry` with a custom type `router-state`. This allows the router to:
 
-- Restore the active profile across agent relaunches.
+- Restore the active router across agent relaunches.
 - Track accumulated session costs safely.
 
 ## Reliability: Fallback Chains
 
-Each tier in a profile can define an optional `fallbacks` list. If the primary model fails (e.g., due to rate limits or provider downtime), the router automatically retries the next model in the chain before surfacing an error to the user.
+A tier's `models` array **is** the fallback chain. If the primary model fails (e.g., due to rate limits or provider downtime), the router automatically retries the next model in the list before surfacing an error to the user. Failures are remembered per session and per chain (in-memory) so repeatedly failing models are skipped for the rest of the session. Delegated `@router` entries expand to the target tier's full model list, so delegation composes with fallback automatically.

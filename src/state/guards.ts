@@ -5,7 +5,7 @@ export const isRouterPersistedState = (value: unknown): value is RouterPersisted
   if (!isObjectRecord(value)) return false;
   return (
     typeof value.enabled === "boolean" &&
-    typeof value.selectedProfile === "string" &&
+    typeof value.selectedRouter === "string" &&
     typeof value.timestamp === "number"
   );
 };

@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import type { RouterConfig, RoutingDecision } from "./types";
-import { profileNames } from "./config";
+import { routerNames } from "./config";
 import { clearRateLimitCooldowns } from "./failureMemory";
 import { formatModelRef, formatDecision } from "./ui";
 
@@ -21,7 +21,7 @@ const USAGE_HELP = "Usage: /router help (no arguments)";
 
 const HELP_LINES = [
   "Router Subcommands:",
-  "  status                           Show current status, profile, cost, and last decision.",
+  "  status                           Show current status, router, cost, and last decision.",
   "  debug <on|off|toggle|show|clear> Control routing debug logging to notifications and history.",
   "  reload                           Hot-reload the configuration JSON from .pi/pi-model-router.json.",
   "  reset-failures                 Clear session failure memory (in-memory, chain-local).",
@@ -31,7 +31,7 @@ const HELP_LINES = [
 type RouterStateView = {
   readonly currentConfig: RouterConfig;
   routerEnabled: boolean;
-  selectedProfile: string | undefined;
+  selectedRouter: string | undefined;
   readonly lastDecision: RoutingDecision | undefined;
   lastNonRouterModel: string | undefined;
   readonly accumulatedCost: number;
@@ -41,16 +41,16 @@ type RouterStateView = {
   readonly failedByChain: Map<string, Set<string>>;
 };
 
-const formatThinking = (thinking: string | undefined): string => thinking ?? "auto";
+const formatEffort = (effort: string | undefined): string => effort ?? "auto";
 
 export const formatStatusLines = (state: RouterStateView): string[] => {
-  const names = profileNames(state.currentConfig).join(", ");
+  const names = routerNames(state.currentConfig).join(", ");
   const lines = [
     "Model Router Status:",
     `Router enabled: ${state.routerEnabled ? "yes" : "off"}`,
-    `Selected profile: ${state.selectedProfile ?? "none"}`,
+    `Selected router: ${state.selectedRouter ?? "none"}`,
     `Session cost: $${state.accumulatedCost.toFixed(4)}`,
-    `Available profiles: ${names}`,
+    `Available routers: ${names}`,
     `Last non-router model: ${formatModelRef(state.lastNonRouterModel)}`,
     `Debug: ${state.debugEnabled ? "on" : "off"}`,
     `Debug history: ${state.debugHistory.length} decisions`,
@@ -58,7 +58,7 @@ export const formatStatusLines = (state: RouterStateView): string[] => {
   if (state.lastDecision) {
     lines.push(
       `Last routed tier: ${state.lastDecision.tier}`,
-      `Last model: ${state.lastDecision.targetProvider}/${state.lastDecision.targetModelId} (${formatThinking(state.lastDecision.thinking)})`,
+      `Last model: ${state.lastDecision.targetProvider}/${state.lastDecision.targetModelId} (${formatEffort(state.lastDecision.effort)})`,
       `Reason: ${state.lastDecision.reasoning}`,
     );
   }
@@ -126,7 +126,7 @@ export const registerCommands = (
     persistState: () => void;
     updateStatus: (ctx: ExtensionContext) => void;
     reloadConfig: (ctx?: ExtensionContext, options?: { preserveDebug?: boolean }) => void;
-    ensureValidActiveRouterProfile: (ctx: ExtensionContext) => Promise<void>;
+    ensureValidActiveRouter: (ctx: ExtensionContext) => Promise<void>;
   },
 ) => {
   const handleStatus = async (args: string[], ctx: ExtensionContext) => {
@@ -171,9 +171,9 @@ export const registerCommands = (
       return;
     }
     actions.reloadConfig(ctx, { preserveDebug: true });
-    await actions.ensureValidActiveRouterProfile(ctx);
+    await actions.ensureValidActiveRouter(ctx);
     ctx.ui.notify(
-      `Router config reloaded. Profiles: ${profileNames(state.currentConfig).join(", ")}`,
+      `Router config reloaded. Routers: ${routerNames(state.currentConfig).join(", ")}`,
       "info",
     );
   };

@@ -188,7 +188,7 @@ export const makeFakePi = (over: Partial<ExtensionAPI> = {}): ExtensionAPI =>
 export const makeFakeDecision = (over: Partial<RoutingDecision> = {}): RoutingDecision =>
   Object.assign(
     {
-      profile: "balanced",
+      router: "balanced",
       tier: "high",
       targetProvider: "openai",
       targetModelId: "gpt",
@@ -205,10 +205,10 @@ export const makeFakeProviderState = (
   Object.assign(
     {
       lastRegisteredModels: "",
-      currentConfig: { profiles: {} },
+      currentConfig: { routers: {} },
       currentModelRegistry: undefined,
       lastExtensionContext: undefined,
-      selectedProfile: undefined,
+      selectedRouter: undefined,
       routerEnabled: false,
       lastDecision: undefined,
       accumulatedCost: 0,

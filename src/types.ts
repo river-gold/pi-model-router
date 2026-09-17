@@ -4,7 +4,7 @@ export type RouterTier = "max" | "xhigh" | "high" | "medium" | "low" | "minimal"
 
 export interface ClassifierConfig {
   model: string;
-  thinking?: ThinkingLevel;
+  effort?: ThinkingLevel;
 }
 
 /**
@@ -17,8 +17,8 @@ export interface TypesafeClassifierConfig {
 }
 
 /**
- * `"@profile"` / `"@profile#tier"` / `"@profile#tier#effort"` 항목을 정규화한 형태.
- * 라우팅 시점에 해당 profile/tier 모델로 실시간 확장됨. tier 생략 시 기본 티어(medium).
+ * `"@router"` / `"@router#tier"` / `"@router#tier#effort"` 항목을 정규화한 형태.
+ * 라우팅 시점에 해당 router/tier 모델로 실시간 확장됨. tier 생략 시 기본 티어(medium).
  */
 export interface ClassifierRefConfig {
   ref: string;
@@ -36,8 +36,6 @@ export type ClassifierModelsSetting = ClassifierSettingEntry[];
 export interface RoutedTierConfig {
   models?: string[];
   /** tier 강제 effort: 이 tier로 선택되면 모델별 `#`와 위임 결과보다 우선 적용됨. */
-  thinking?: ThinkingLevel;
-  /** `thinking`의 별칭. 둘 다 있으면 `thinking` 우선. */
   effort?: ThinkingLevel;
   contextWindow?: number;
   maxTokens?: number;
@@ -46,8 +44,8 @@ export interface RoutedTierConfig {
   resolvedMaxTokens?: number;
 }
 
-export interface RouterProfile {
-  /** 프로필 기본 모델. 티어에 `models`가 없으면 상속됨 (명시된 티어 키에 한함). */
+export interface Router {
+  /** 라우터 기본 모델. 티어에 `models`가 없으면 상속됨 (명시된 티어 키에 한함). */
   models?: string[];
   max?: RoutedTierConfig;
   xhigh?: RoutedTierConfig;
@@ -64,8 +62,8 @@ export interface RouterConfig {
   debug?: boolean;
   /**
    * 분류기 후보 체인 (선언 순서대로 시도하고, 실패하면 다음 항목으로 폴백함).
-   * - `"provider/model#thinking"`: 로컬 LLM 분류기
-   * - `"@profile"` / `"@profile#tier"`: 다른 profile/tier 모델을 라우팅 시점에 실시간 참조 (tier 생략 시 medium)
+   * - `"provider/model#effort"`: 로컬 LLM 분류기
+   * - `"@router"` / `"@router#tier"`: 다른 router/tier 모델을 라우팅 시점에 실시간 참조 (tier 생략 시 medium)
    * - `"@@typesafe/<model>"`: TypeSafe System One API
    */
   classifierModels?: ClassifierModelsSetting;
@@ -73,17 +71,18 @@ export interface RouterConfig {
   typesafeConfidenceThreshold?: number;
   historySize?: number;
   tierGuides?: TierGuides;
-  profiles: Record<string, RouterProfile>;
+  routers: Record<string, Router>;
 }
 
 export interface RoutingDecision {
-  profile: string;
+  router: string;
   tier: RouterTier;
   targetProvider: string;
   targetModelId: string;
   targetLabel: string;
   reasoning: string;
-  thinking?: ThinkingLevel;
+  /** 이 결정으로 적용할 effort (pi thinking level). 미지정 시 모델 기본값을 따름. */
+  effort?: ThinkingLevel;
   timestamp: number;
   isClassifier?: boolean;
   isFallback?: boolean;
@@ -91,7 +90,7 @@ export interface RoutingDecision {
 
 export interface RouterPersistedState {
   enabled: boolean;
-  selectedProfile: string;
+  selectedRouter: string;
   debugEnabled?: boolean;
   debugHistory?: RoutingDecision[];
   lastDecision?: RoutingDecision;

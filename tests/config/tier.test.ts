@@ -20,12 +20,12 @@ describe("tier를 검증함", () => {
       ]);
     });
     it("resolveAvailableTier와 같은 결과를 검증함", () => {
-      const profile: Partial<Record<RouterTier, unknown>> = {
+      const router: Partial<Record<RouterTier, unknown>> = {
         high: { models: ["a"] },
         low: { models: ["b"] },
       };
-      expect(resolveAvailableTier(profile, "medium")).toBe(
-        nearbyTierOrder("medium").find((t) => profile[t]),
+      expect(resolveAvailableTier(router, "medium")).toBe(
+        nearbyTierOrder("medium").find((t) => router[t]),
       );
     });
   });
@@ -123,13 +123,13 @@ describe("tier를 검증함", () => {
     it("모델별 #는 tier 강제값으로 승격하지 않음을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig({ models: ["openai/gpt-4o#high"] }, "p", "high", w);
-      expect(r?.thinking).toBeUndefined();
+      expect(r?.effort).toBeUndefined();
       expect(r?.models).toEqual(["openai/gpt-4o#high"]);
     });
-    it("thinking 없는 유효한 입력을 처리함을 검증함", () => {
+    it("effort 없는 유효한 입력을 처리함을 검증함", () => {
       const w: string[] = [];
       expect(
-        normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.thinking,
+        normalizeTierConfig({ models: ["openai/gpt-4o"] }, "p", "high", w)?.effort,
       ).toBeUndefined();
     });
     it("유효한 contextWindow를 처리함을 검증함", () => {
@@ -198,7 +198,7 @@ describe("tier를 검증함", () => {
           ?.reasoning,
       ).toBeUndefined();
     });
-    it("프로필 기본 모델을 상속함을 검증함", () => {
+    it("라우터 기본 모델을 상속함을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig({ effort: "max" }, "p", "high", w, [
         "openai/gpt-4o",
@@ -206,9 +206,9 @@ describe("tier를 검증함", () => {
       ]);
       expect(w).toEqual([]);
       expect(r?.models).toEqual(["openai/gpt-4o", "google/gemini-flash#low"]);
-      expect(r?.thinking).toBe("max");
+      expect(r?.effort).toBe("max");
     });
-    it("티어 models가 있으면 프로필 기본값보다 우선함을 검증함", () => {
+    it("티어 models가 있으면 라우터 기본값보다 우선함을 검증함", () => {
       const r = normalizeTierConfig(
         { models: ["openai/gpt-4o-mini"], effort: "low" },
         "p",
@@ -217,7 +217,7 @@ describe("tier를 검증함", () => {
         ["openai/gpt-4o"],
       );
       expect(r?.models).toEqual(["openai/gpt-4o-mini"]);
-      expect(r?.thinking).toBe("low");
+      expect(r?.effort).toBe("low");
     });
     it("상속 없이 models 없으면 비활성화됨을 검증함", () => {
       const w: string[] = [];

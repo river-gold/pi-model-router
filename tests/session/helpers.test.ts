@@ -40,7 +40,7 @@ describe("session/helpers 모듈", () => {
     it("저장하고 스냅샷을 업데이트한다", () => {
       const state = createRouterState();
       state.routerEnabled = true;
-      state.selectedProfile = "balanced";
+      state.selectedRouter = "balanced";
       const pi = { appendEntry: vi.fn() };
       const fn = createPersistState(pi, state);
       fn();

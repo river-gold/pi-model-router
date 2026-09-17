@@ -1,6 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterProfile, RouterTier, RoutingDecision } from "../types";
+import type { Router, RouterTier, RoutingDecision } from "../types";
 import { resolveAvailableTier, buildRoutingDecision, buildRoutingDecisionLive } from "../routing";
 import { resolveAvailableTierLive } from "../config";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
@@ -8,7 +8,7 @@ import { runClassifierBranch } from "./classifierBranch";
 import type { RouterProviderState } from "./state";
 
 export const applyClassifierIfNeeded = async (
-  profile: RouterProfile,
+  router: Router,
   decision: RoutingDecision,
   modelId: string,
   registry: ExtensionContext["modelRegistry"],
@@ -20,7 +20,7 @@ export const applyClassifierIfNeeded = async (
   thinkingLevel: ReturnType<ExtensionAPI["getThinkingLevel"]>,
   classifierSource: string,
   sessionId?: string,
-  profiles?: Record<string, RouterProfile>,
+  routers?: Record<string, Router>,
 ): Promise<RoutingDecision> => {
   if (isSingleTier || isToolLoopNow || thinkingLevel !== "off") return decision;
   const effectiveHistorySize = state.currentConfig.historySize ?? 0;
@@ -29,7 +29,7 @@ export const applyClassifierIfNeeded = async (
   try {
     ({ result } = await runClassifierBranch(
       registry,
-      profile,
+      router,
       state,
       context,
       signal,
@@ -38,7 +38,7 @@ export const applyClassifierIfNeeded = async (
       classifierSource,
       sessionId,
       modelId,
-      profiles,
+      routers,
     ));
   } catch (e) {
     if (e instanceof Error && e.message === "aborted") throw e;
@@ -46,14 +46,14 @@ export const applyClassifierIfNeeded = async (
   }
   if (!result) return decision;
   const requestedTier = result.tier;
-  const resolvedTier = profiles
-    ? (resolveAvailableTierLive(profiles, modelId, requestedTier)?.tier ?? requestedTier)
-    : resolveAvailableTier(profile, requestedTier);
+  const resolvedTier = routers
+    ? (resolveAvailableTierLive(routers, modelId, requestedTier)?.tier ?? requestedTier)
+    : resolveAvailableTier(router, requestedTier);
   let reasoning = `Classifier: ${result.reasoning}`;
   if (resolvedTier !== requestedTier) {
     reasoning = `Resolved from ${requestedTier} to ${resolvedTier} tier (${requestedTier} tier is not configured). Original: ${reasoning}`;
   }
-  return profiles
-    ? buildRoutingDecisionLive(profiles, modelId, resolvedTier, reasoning, true)
-    : buildRoutingDecision(modelId, profile, resolvedTier, reasoning, true);
+  return routers
+    ? buildRoutingDecisionLive(routers, modelId, resolvedTier, reasoning, true)
+    : buildRoutingDecision(modelId, router, resolvedTier, reasoning, true);
 };

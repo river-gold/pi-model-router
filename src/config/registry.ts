@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { RouterProfile, RouterTier } from "../types";
+import type { Router, RouterTier } from "../types";
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS } from "../constants";
 import { parseCanonicalModelRef } from "./modelRef";
 import { dereferenceTier } from "./ref";
@@ -36,10 +36,10 @@ const limitFromConfig = (
 
 export const resolveContextWindow = (
   tier: RouterTier,
-  profile: RouterProfile,
+  router: Router,
   modelRegistry: ExtensionContext["modelRegistry"] | undefined,
 ): number => {
-  const tierConfig = profile[tier];
+  const tierConfig = router[tier];
   if (!tierConfig) return DEFAULT_CONTEXT_WINDOW;
 
   return (
@@ -51,10 +51,10 @@ export const resolveContextWindow = (
 
 export const resolveMaxTokens = (
   tier: RouterTier,
-  profile: RouterProfile,
+  router: Router,
   modelRegistry: ExtensionContext["modelRegistry"] | undefined,
 ): number => {
-  const tierConfig = profile[tier];
+  const tierConfig = router[tier];
   if (!tierConfig) return DEFAULT_MAX_TOKENS;
 
   return (
@@ -66,12 +66,12 @@ export const resolveMaxTokens = (
 
 /** ref를 실시간 추적해서 context window를 구함. */
 export const resolveContextWindowLive = (
-  profiles: Record<string, RouterProfile>,
-  profileName: string,
+  routers: Record<string, Router>,
+  routerName: string,
   tier: RouterTier,
   modelRegistry: ExtensionContext["modelRegistry"] | undefined,
 ): number => {
-  const resolved = dereferenceTier(profiles, profileName, tier);
+  const resolved = dereferenceTier(routers, routerName, tier);
   if (!resolved) return DEFAULT_CONTEXT_WINDOW;
   return (
     limitFromConfig(resolved.config, "contextWindow", modelRegistry) ??
@@ -82,12 +82,12 @@ export const resolveContextWindowLive = (
 
 /** ref를 실시간 추적해서 max tokens를 구함. */
 export const resolveMaxTokensLive = (
-  profiles: Record<string, RouterProfile>,
-  profileName: string,
+  routers: Record<string, Router>,
+  routerName: string,
   tier: RouterTier,
   modelRegistry: ExtensionContext["modelRegistry"] | undefined,
 ): number => {
-  const resolved = dereferenceTier(profiles, profileName, tier);
+  const resolved = dereferenceTier(routers, routerName, tier);
   if (!resolved) return DEFAULT_MAX_TOKENS;
   return (
     limitFromConfig(resolved.config, "maxTokens", modelRegistry) ??

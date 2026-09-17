@@ -23,13 +23,13 @@ describe("index/actions 모듈", () => {
 
   it("register 경유로 모든 actions를 생성하고 getters/setters를 커버한다", async () => {
     const state = createRouterState();
-    state.currentConfig = { profiles: { balanced: { medium: { models: ["openai/a"] } } } };
+    state.currentConfig = { routers: { balanced: { medium: { models: ["openai/a"] } } } };
     state.lastRegisteredModels = "old";
     state.currentModelRegistry = makeFakeRegistry();
     state.lastExtensionContext = makeFakeExtensionContext();
-    state.selectedProfile = "balanced";
+    state.selectedRouter = "balanced";
     state.routerEnabled = true;
-    state.lastDecision = makeFakeDecision({ profile: "balanced", tier: "high" });
+    state.lastDecision = makeFakeDecision({ router: "balanced", tier: "high" });
     state.accumulatedCost = 5;
     state.failedByChain = new Map([["k", new Set(["v"])]]);
 
@@ -51,14 +51,14 @@ describe("index/actions 모듈", () => {
     expect(stateArg.currentConfig).toBe(state.currentConfig);
     expect(stateArg.currentModelRegistry).toBe(state.currentModelRegistry);
     expect(stateArg.lastExtensionContext).toBe(state.lastExtensionContext);
-    expect(stateArg.selectedProfile).toBe("balanced");
-    stateArg.selectedProfile = "x";
-    expect(state.selectedProfile).toBe("x");
+    expect(stateArg.selectedRouter).toBe("balanced");
+    stateArg.selectedRouter = "x";
+    expect(state.selectedRouter).toBe("x");
     expect(stateArg.routerEnabled).toBe(true);
     stateArg.routerEnabled = false;
     expect(state.routerEnabled).toBe(false);
     expect(stateArg.lastDecision).toBe(state.lastDecision);
-    const newDecision = makeFakeDecision({ profile: "p" });
+    const newDecision = makeFakeDecision({ router: "p" });
     stateArg.lastDecision = newDecision;
     expect(state.lastDecision).toBe(newDecision);
     expect(stateArg.accumulatedCost).toBe(5);
@@ -101,9 +101,9 @@ describe("index/actions 모듈", () => {
     expect(await actions.tryRestoreFallback(ctx)).toBe(true);
   });
 
-  it("ensureValidActiveRouterProfile을 처리한다", async () => {
+  it("ensureValidActiveRouter을 처리한다", async () => {
     const state = createRouterState();
-    state.currentConfig = { profiles: { balanced: {} } };
+    state.currentConfig = { routers: { balanced: {} } };
     const setModel = vi.fn().mockResolvedValue(true);
     const pi = makeFakePi({ setModel });
     const actions = createRouterActions(pi, state);
@@ -111,7 +111,7 @@ describe("index/actions 모듈", () => {
       model: makeFakeModel({ provider: "router", id: "balanced" }),
       modelRegistry: makeFakeRegistry(),
     });
-    await actions.ensureValidActiveRouterProfile(ctx);
+    await actions.ensureValidActiveRouter(ctx);
     expect(state.routerEnabled).toBe(true);
   });
 });

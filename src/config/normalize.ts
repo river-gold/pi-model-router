@@ -1,4 +1,4 @@
-import type { ConfigLoadResult, RouterConfig, RouterProfile } from "../types";
+import type { ConfigLoadResult, RouterConfig, Router } from "../types";
 import { DEFAULT_HISTORY_SIZE, MAX_HISTORY_SIZE } from "./constants";
 import { isObjectRecord } from "./guards";
 import { normalizeClassifierModels } from "./classifier";
@@ -15,7 +15,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       "typesafeConfidenceThreshold",
       "historySize",
       "tierGuides",
-      "profiles",
+      "routers",
     ]);
     for (const key of Object.keys(raw)) {
       if (!allowedKeys.has(key)) {
@@ -24,37 +24,37 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     }
   }
 
-  const normalizedProfiles: Record<string, RouterProfile> = {};
+  const normalizedRouters: Record<string, Router> = {};
 
-  const rawProfiles: Record<string, Record<string, unknown>> = {};
-  for (const [name, profile] of Object.entries(raw.profiles ?? {})) {
-    if (!isObjectRecord(profile)) {
-      warnings.push(`Profile "${name}" is not an object. Skipped.`);
+  const rawRouters: Record<string, Record<string, unknown>> = {};
+  for (const [name, router] of Object.entries(raw.routers ?? {})) {
+    if (!isObjectRecord(router)) {
+      warnings.push(`Router "${name}" is not an object. Skipped.`);
       continue;
     }
-    rawProfiles[name] = { ...profile };
+    rawRouters[name] = { ...router };
   }
 
-  for (const [name, record] of Object.entries(rawProfiles)) {
-    // 프로필 기본 모델: 티어 `models`가 없을 때 상속됨.
-    let profileModels: string[] | undefined;
+  for (const [name, record] of Object.entries(rawRouters)) {
+    // 라우터 기본 모델: 티어 `models`가 없을 때 상속됨.
+    let routerModels: string[] | undefined;
     if (record.models !== undefined) {
-      const parsed = normalizeModelList(record.models, name, "profile models", warnings);
+      const parsed = normalizeModelList(record.models, name, "router models", warnings);
       if (!parsed) {
-        warnings.push(`Profile "${name}" has no valid profile-level "models". Ignored.`);
+        warnings.push(`Router "${name}" has no valid router-level "models". Ignored.`);
       } else {
-        profileModels = parsed;
+        routerModels = parsed;
       }
     }
-    const max = normalizeTierConfig(record.max, name, "max", warnings, profileModels);
-    const xhigh = normalizeTierConfig(record.xhigh, name, "xhigh", warnings, profileModels);
-    const high = normalizeTierConfig(record.high, name, "high", warnings, profileModels);
-    const medium = normalizeTierConfig(record.medium, name, "medium", warnings, profileModels);
-    const low = normalizeTierConfig(record.low, name, "low", warnings, profileModels);
-    const minimal = normalizeTierConfig(record.minimal, name, "minimal", warnings, profileModels);
+    const max = normalizeTierConfig(record.max, name, "max", warnings, routerModels);
+    const xhigh = normalizeTierConfig(record.xhigh, name, "xhigh", warnings, routerModels);
+    const high = normalizeTierConfig(record.high, name, "high", warnings, routerModels);
+    const medium = normalizeTierConfig(record.medium, name, "medium", warnings, routerModels);
+    const low = normalizeTierConfig(record.low, name, "low", warnings, routerModels);
+    const minimal = normalizeTierConfig(record.minimal, name, "minimal", warnings, routerModels);
 
     if (!max && !xhigh && !high && !medium && !low && !minimal) {
-      warnings.push(`Profile "${name}" has no valid tiers. Skipped.`);
+      warnings.push(`Router "${name}" has no valid tiers. Skipped.`);
       continue;
     }
 
@@ -62,11 +62,11 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     const classifierModels = normalizeClassifierModels(
       rawClassifier,
       warnings,
-      `Profile "${name}" classifierModels`,
+      `Router "${name}" classifierModels`,
     );
 
-    normalizedProfiles[name] = {
-      ...(profileModels ? { models: profileModels } : {}),
+    normalizedRouters[name] = {
+      ...(routerModels ? { models: routerModels } : {}),
       ...(max ? { max } : {}),
       ...(xhigh ? { xhigh } : {}),
       high,
@@ -128,7 +128,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       ...(typesafeConfidenceThreshold !== undefined ? { typesafeConfidenceThreshold } : {}),
       historySize: historySize ?? DEFAULT_HISTORY_SIZE,
       ...(tierGuides ? { tierGuides } : {}),
-      profiles: normalizedProfiles,
+      routers: normalizedRouters,
     },
     warnings,
   };

@@ -1,6 +1,6 @@
-import type { RouterConfig, RouterProfile, RouterTier } from "../types";
+import type { RouterConfig, Router, RouterTier } from "../types";
 import {
-  profileNames,
+  routerNames,
   ROUTER_TIERS,
   resolveContextWindowLive,
   resolveMaxTokensLive,
@@ -21,14 +21,14 @@ export const buildModelDefinitions = (
   contextWindow: number;
   maxTokens: number;
 }> => {
-  const profileList = profileNames(config);
-  return profileList.map((name) => {
-    const profile = config.profiles[name] as RouterProfile;
+  const routerList = routerNames(config);
+  return routerList.map((name) => {
+    const router = config.routers[name] as Router;
     let maxContextWindow = DEFAULT_CONTEXT_WINDOW;
     let maxMaxTokens = DEFAULT_MAX_TOKENS;
-    for (const tier of ROUTER_TIERS.filter((t) => profile[t])) {
-      const cw = resolveContextWindowLive(config.profiles, name, tier as RouterTier, registry);
-      const mot = resolveMaxTokensLive(config.profiles, name, tier as RouterTier, registry);
+    for (const tier of ROUTER_TIERS.filter((t) => router[t])) {
+      const cw = resolveContextWindowLive(config.routers, name, tier as RouterTier, registry);
+      const mot = resolveMaxTokensLive(config.routers, name, tier as RouterTier, registry);
       if (cw > maxContextWindow) maxContextWindow = cw;
       if (mot > maxMaxTokens) maxMaxTokens = mot;
     }

@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { resolveProfileName } from "../config/profile";
+import { resolveRouterName } from "../config/router";
 import { MAX_DEBUG_HISTORY } from "../constants";
 import { isRouterPersistedState } from "../state/guards";
 import type { RouterState } from "../state/create";
@@ -17,7 +17,7 @@ export const extractSavedState = (entries: CustomSessionEntry[]): unknown =>
     .findLast((data) => isRouterPersistedState(data));
 
 export const applySavedState = (state: RouterState, savedState: RouterPersistedState): void => {
-  state.selectedProfile = resolveProfileName(state.currentConfig, savedState.selectedProfile);
+  state.selectedRouter = resolveRouterName(state.currentConfig, savedState.selectedRouter);
   state.routerEnabled = savedState.enabled;
   state.debugEnabled = savedState.debugEnabled ?? state.debugEnabled;
   state.debugHistory = savedState.debugHistory
@@ -37,7 +37,7 @@ export const restoreStateFromSession = async (
   },
   actions: {
     reloadConfig: (ctx?: ExtensionContext, opts?: { preserveDebug?: boolean }) => void;
-    ensureValidActiveRouterProfile: (ctx: ExtensionContext) => Promise<void>;
+    ensureValidActiveRouter: (ctx: ExtensionContext) => Promise<void>;
   },
 ): Promise<void> => {
   state.lastExtensionContext = ctx;
@@ -46,10 +46,10 @@ export const restoreStateFromSession = async (
   actions.reloadConfig(ctx);
   await delay(SESSION_RESTORE_DELAY_MS);
   state.routerEnabled = ctx.model?.provider === "router";
-  state.selectedProfile =
+  state.selectedRouter =
     ctx.model?.provider === "router"
-      ? resolveProfileName(state.currentConfig, ctx.model.id)
-      : resolveProfileName(state.currentConfig, state.selectedProfile);
+      ? resolveRouterName(state.currentConfig, ctx.model.id)
+      : resolveRouterName(state.currentConfig, state.selectedRouter);
   state.debugHistory = [];
   state.accumulatedCost = 0;
   state.lastNonRouterModel =
@@ -62,21 +62,21 @@ export const restoreStateFromSession = async (
   if (isRouterPersistedState(savedState)) {
     applySavedState(state, savedState);
   }
-  await actions.ensureValidActiveRouterProfile(ctx);
-  if (state.routerEnabled && state.selectedProfile) {
-    const routerModel = ctx.modelRegistry.find("router", state.selectedProfile);
+  await actions.ensureValidActiveRouter(ctx);
+  if (state.routerEnabled && state.selectedRouter) {
+    const routerModel = ctx.modelRegistry.find("router", state.selectedRouter);
     if (routerModel) {
       const success = await helpers.setModelInternally(routerModel);
       if (!success) {
         ctx.ui.notify(
-          `Failed to restore router/${state.selectedProfile} after relaunch.`,
+          `Failed to restore router/${state.selectedRouter} after relaunch.`,
           "warning",
         );
         state.routerEnabled = false;
       }
     } else {
       ctx.ui.notify(
-        `Unable to restore router/${state.selectedProfile}; model is unavailable.`,
+        `Unable to restore router/${state.selectedRouter}; model is unavailable.`,
         "warning",
       );
       state.routerEnabled = false;
@@ -86,5 +86,5 @@ export const restoreStateFromSession = async (
     ctx.ui.setHiddenThinkingLabel?.();
   }
   helpers.persistState();
-  updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision);
+  updateStatus(ctx, state.routerEnabled, state.selectedRouter, state.lastDecision);
 };

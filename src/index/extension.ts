@@ -25,11 +25,11 @@ const routerExtension = (pi: ExtensionAPI): void => {
       set routerEnabled(v) {
         state.routerEnabled = v;
       },
-      get selectedProfile() {
-        return state.selectedProfile;
+      get selectedRouter() {
+        return state.selectedRouter;
       },
-      set selectedProfile(v) {
-        state.selectedProfile = v;
+      set selectedRouter(v) {
+        state.selectedRouter = v;
       },
       get lastDecision() {
         return state.lastDecision;
@@ -65,9 +65,9 @@ const routerExtension = (pi: ExtensionAPI): void => {
     {
       persistState: actions.persistState,
       updateStatus: (ctx) =>
-        updateStatus(ctx, state.routerEnabled, state.selectedProfile, state.lastDecision),
+        updateStatus(ctx, state.routerEnabled, state.selectedRouter, state.lastDecision),
       reloadConfig: actions.reloadConfig,
-      ensureValidActiveRouterProfile: actions.ensureValidActiveRouterProfile,
+      ensureValidActiveRouter: actions.ensureValidActiveRouter,
     },
   );
 

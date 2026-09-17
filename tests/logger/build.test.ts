@@ -6,7 +6,7 @@ describe("logger/build 로그 라인 생성", () => {
   const base: ClassifierLogEntry = {
     timestamp: "2024-01-01T00:00:00Z",
     model: "openai/gpt-4o",
-    thinking: "high",
+    effort: "high",
     fullText: "hello world",
     tierLine: "tier: high",
     reasoningLine: "reason: test",
@@ -18,7 +18,7 @@ describe("logger/build 로그 라인 생성", () => {
   it("모든 필드로 로그 라인을 생성한다", () => {
     const line = buildLogLine(base);
     expect(line).toContain("model=openai/gpt-4o");
-    expect(line).toContain("thinking=high");
+    expect(line).toContain("effort=high");
     expect(line).toContain("success=true");
     expect(line).toContain('tierLine="tier: high"');
     expect(line).toContain("parsedTier=high");
@@ -34,7 +34,7 @@ describe("logger/build 로그 라인 생성", () => {
       success: false,
     };
     const line = buildLogLine(entry);
-    expect(line).toContain("thinking=-");
+    expect(line).toContain("effort=-");
     expect(line).toContain('tierLine=""');
     expect(line).toContain('reasoningLine=""');
     expect(line).toContain("parsedTier=-");
@@ -46,7 +46,7 @@ describe("logger/build 로그 라인 생성", () => {
     const entry: ClassifierLogEntry = {
       timestamp: "2024-01-01T00:00:00Z",
       model: "m",
-      thinking: "",
+      effort: "",
       fullText: "x",
       tierLine: "",
       reasoningLine: "",
@@ -56,7 +56,7 @@ describe("logger/build 로그 라인 생성", () => {
     };
     const line = buildLogLine(entry);
     // empty string is not nullish, so ?? does not fallback for "" (only undefined/null)
-    expect(line).toContain("thinking=");
+    expect(line).toContain("effort=");
     expect(line).toContain("parsedTier=");
     expect(line).toContain("error=");
   });

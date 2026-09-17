@@ -1,6 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { RouterTier, RouterProfile, RoutingDecision } from "./types";
+import type { RouterTier, Router, RoutingDecision } from "./types";
 import {
   parseCanonicalModelRef,
   formatModelRef,
@@ -21,29 +21,29 @@ export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
 };
 
 export const buildRoutingDecision = (
-  profileName: string,
-  profile: RouterProfile,
+  routerName: string,
+  router: Router,
   tier: RouterTier,
   reasoning: string,
   isClassifier?: boolean,
 ): RoutingDecision => {
-  const routed = profile[tier];
+  const routed = router[tier];
   if (!routed) {
-    throw new Error(`Profile "${profileName}" has no configuration for the ${tier} tier.`);
+    throw new Error(`Router "${routerName}" has no configuration for the ${tier} tier.`);
   }
   const primaryRef = routed.models![0];
-  const { provider, modelId, thinking } = parseCanonicalModelRef(primaryRef);
+  const { provider, modelId, effort } = parseCanonicalModelRef(primaryRef);
   // tier 강제 effort가 모델별 `#`보다 우선함.
-  const effectiveThinking = routed.thinking ?? thinking;
+  const effectiveEffort = routed.effort ?? effort;
 
   return {
-    profile: profileName,
+    router: routerName,
     tier,
     targetProvider: provider,
     targetModelId: modelId,
     targetLabel: formatModelRef(provider, modelId),
     reasoning,
-    thinking: effectiveThinking,
+    effort: effectiveEffort,
     timestamp: Date.now(),
     isClassifier,
   };
@@ -51,41 +51,41 @@ export const buildRoutingDecision = (
 
 /**
  * tier의 `@` 위임을 실시간으로 펼쳐서 라우팅 결정을 만듦.
- * decision.profile/tier는 요청한 원본 좌표를 유지하고, reasoning에 실제 해석 경로를 남김.
+ * decision.router/tier는 요청한 원본 좌표를 유지하고, reasoning에 실제 해석 경로를 남김.
  */
 export const buildRoutingDecisionLive = (
-  profiles: Record<string, RouterProfile>,
-  profileName: string,
+  routers: Record<string, Router>,
+  routerName: string,
   tier: RouterTier,
   reasoning: string,
   isClassifier?: boolean,
 ): RoutingDecision => {
-  const found = resolveAvailableTierLive(profiles, profileName, tier);
+  const found = resolveAvailableTierLive(routers, routerName, tier);
   if (!found) {
-    throw new Error(`Profile "${profileName}" has no resolvable configuration for ${tier} tier.`);
+    throw new Error(`Router "${routerName}" has no resolvable configuration for ${tier} tier.`);
   }
-  const { provider, modelId, thinking } = parseCanonicalModelRef(found.resolved.config.models![0]!);
+  const { provider, modelId, effort } = parseCanonicalModelRef(found.resolved.config.models![0]!);
   // tier 강제 effort가 모델별 `#`보다 우선함.
-  const effectiveThinking = found.resolved.config.thinking ?? thinking;
+  const effectiveEffort = found.resolved.config.effort ?? effort;
   let finalReasoning = reasoning;
   if (found.tier !== tier) {
     finalReasoning = `Resolved from ${tier} to ${found.tier} tier (${tier} tier is not configured). Original: ${reasoning}`;
   }
   if (
-    found.resolved.profileName !== profileName ||
+    found.resolved.routerName !== routerName ||
     found.resolved.tier !== found.tier ||
     found.resolved.chain.length > 1
   ) {
     finalReasoning = `${finalReasoning} [ref: ${found.resolved.chain.join(" -> ")}]`;
   }
   return {
-    profile: profileName,
+    router: routerName,
     tier: found.tier,
     targetProvider: provider,
     targetModelId: modelId,
     targetLabel: formatModelRef(provider, modelId),
     reasoning: finalReasoning,
-    thinking: effectiveThinking,
+    effort: effectiveEffort,
     timestamp: Date.now(),
     isClassifier,
   };
@@ -93,18 +93,18 @@ export const buildRoutingDecisionLive = (
 
 export const decideRouting = (
   _context: Context,
-  profileName: string,
-  profile: RouterProfile,
+  routerName: string,
+  router: Router,
   _previousDecision: RoutingDecision | undefined,
-  profiles?: Record<string, RouterProfile>,
+  routers?: Record<string, Router>,
 ): RoutingDecision => {
   // Intentionally simplified: _context and _previousDecision are currently unused.
   // Routing defaults to medium; classifier (if configured) overrides this via provider.ts.
   // Future heuristics / phase-bias may use these parameters.
-  if (profiles) {
+  if (routers) {
     return buildRoutingDecisionLive(
-      profiles,
-      profileName,
+      routers,
+      routerName,
       "medium",
       "Defaulted to medium tier for general coding work.",
       false,
@@ -113,19 +113,19 @@ export const decideRouting = (
   const tier: RouterTier = "medium";
   let reasoning = "Defaulted to medium tier for general coding work.";
 
-  const resolvedTier = resolveAvailableTier(profile, tier);
+  const resolvedTier = resolveAvailableTier(router, tier);
   if (resolvedTier !== tier) {
     reasoning = `Resolved from ${tier} to ${resolvedTier} tier (${tier} tier is not configured). Original: ${reasoning}`;
-    return buildRoutingDecision(profileName, profile, resolvedTier, reasoning, false);
+    return buildRoutingDecision(routerName, router, resolvedTier, reasoning, false);
   }
 
-  const decision = buildRoutingDecision(profileName, profile, tier, reasoning, false);
+  const decision = buildRoutingDecision(routerName, router, tier, reasoning, false);
   return decision;
 };
 
 /** 결정된 tier의 실제 모델 목록을 실시간 추적해서 반환함 (delegate 폴백용). */
 export const resolveTierModelsLive = (
-  profiles: Record<string, RouterProfile>,
-  profileName: string,
+  routers: Record<string, Router>,
+  routerName: string,
   tier: RouterTier,
-): string[] | undefined => dereferenceTier(profiles, profileName, tier)?.config.models;
+): string[] | undefined => dereferenceTier(routers, routerName, tier)?.config.models;

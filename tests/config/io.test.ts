@@ -18,11 +18,11 @@ describe("io를 검증함", () => {
     it("유효한 JSON object를 파싱함을 검증함", () => {
       const fs = {
         existsSync: () => true,
-        readFileSync: () => JSON.stringify({ debug: true, profiles: {} }),
+        readFileSync: () => JSON.stringify({ debug: true, routers: {} }),
       };
       const parse = createParseConfigFile({ fs: fs, parseJsonc: (s) => JSON.parse(s) });
       const r = parse("/exists.json");
-      expect(r.config).toEqual({ debug: true, profiles: {} });
+      expect(r.config).toEqual({ debug: true, routers: {} });
       expect(r.warnings).toEqual([]);
     });
     it("parseJsonc를 사용함을 검증함", () => {
@@ -106,28 +106,28 @@ describe("io를 검증함", () => {
           .mockReturnValueOnce({
             config: {
               debug: true,
-              profiles: { a: { medium: { models: ["openai/a"] } } },
+              routers: { a: { medium: { models: ["openai/a"] } } },
             },
             warnings: ["w1"],
           })
           .mockReturnValueOnce({
             config: {
-              profiles: { b: { high: { models: ["openai/b"] } } },
+              routers: { b: { high: { models: ["openai/b"] } } },
             },
             warnings: ["w2"],
           })
           .mockReturnValueOnce({
-            config: { profiles: { c: { low: { models: ["openai/c"] } } } },
+            config: { routers: { c: { low: { models: ["openai/c"] } } } },
             warnings: [],
           })
           .mockReturnValueOnce({
             config: {
-              profiles: { d: { minimal: { models: ["openai/d"] } } },
+              routers: { d: { minimal: { models: ["openai/d"] } } },
             },
             warnings: ["w4"],
           }),
         mergeConfig: vi.fn((base: RouterConfig, override: Partial<RouterConfig>) => ({
-          profiles: { ...base.profiles, ...override.profiles },
+          routers: { ...base.routers, ...override.routers },
           debug: override.debug ?? base.debug,
         })),
         normalizeConfig: vi.fn((c: RouterConfig) => ({ config: c, warnings: ["norm"] })),
@@ -138,8 +138,8 @@ describe("io를 검증함", () => {
       expect(deps.mergeConfig).toHaveBeenCalledTimes(4);
       expect(deps.normalizeConfig).toHaveBeenCalled();
       expect(result.warnings).toEqual(["w1", "w2", "w4", "norm"]);
-      expect(result.config.profiles.a).toBeDefined();
-      expect(result.config.profiles.b).toBeDefined();
+      expect(result.config.routers.a).toBeDefined();
+      expect(result.config.routers.b).toBeDefined();
     });
     it("빈 설정을 처리함을 검증함", () => {
       const deps = {
@@ -150,7 +150,7 @@ describe("io를 검증함", () => {
         mergeConfig: (b: RouterConfig, o: Partial<RouterConfig>) => ({
           ...b,
           ...o,
-          profiles: { ...b.profiles, ...o.profiles },
+          routers: { ...b.routers, ...o.routers },
         }),
         normalizeConfig: (c: any) => ({ config: c, warnings: [] }),
       };
@@ -172,7 +172,7 @@ describe("io를 검증함", () => {
         normalizeConfig: (c: any) => ({ config: c, warnings: [] }),
       };
       createLoadRouterConfig(deps)("/cwd");
-      expect(firstBase).toEqual({ profiles: {} });
+      expect(firstBase).toEqual({ routers: {} });
     });
   });
 });

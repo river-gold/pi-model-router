@@ -3,7 +3,7 @@ import type {
   ClassifierModelsSetting,
   ClassifierRefConfig,
   ClassifierSettingEntry,
-  RouterProfile,
+  Router,
   TypesafeClassifierConfig,
 } from "../types";
 import { CLASSIFIER_REF_PREFIX, TYPESAFE_ENTRY_PREFIX } from "./constants";
@@ -19,8 +19,8 @@ export const normalizeClassifierConfig = (
   if (typeof raw !== "string") return undefined;
   if (raw.trim() === "") return undefined;
   try {
-    const { provider, modelId, thinking } = parseCanonicalModelRef(raw.trim());
-    return { model: formatModelRef(provider, modelId), thinking };
+    const { provider, modelId, effort } = parseCanonicalModelRef(raw.trim());
+    return { model: formatModelRef(provider, modelId), effort };
   } catch (error) {
     warnings.push(
       `Invalid ${contextLabel}: ${error instanceof Error ? error.message : String(error)}`,
@@ -29,7 +29,7 @@ export const normalizeClassifierConfig = (
   }
 };
 
-const ENTRY_HINT = `expected "provider/model#thinking", "@profile", "@profile#tier", "@profile#tier#effort", or "@@typesafe/<model>"`;
+const ENTRY_HINT = `expected "provider/model#effort", "@router", "@router#tier", "@router#tier#effort", or "@@typesafe/<model>"`;
 
 const normalizeClassifierRef = (
   raw: string,
@@ -39,7 +39,7 @@ const normalizeClassifierRef = (
   const ref = raw.slice(CLASSIFIER_REF_PREFIX.length).trim();
   if (!parseDelegatedRef(ref)) {
     warnings.push(
-      `Invalid ${contextLabel} "${raw}": expected "@profile", "@profile#tier", or "@profile#tier#effort".`,
+      `Invalid ${contextLabel} "${raw}": expected "@router", "@router#tier", or "@router#tier#effort".`,
     );
     return undefined;
   }
@@ -101,7 +101,7 @@ export const normalizeClassifierModels = (
   return out.length > 0 ? out : undefined;
 };
 
-export type ClassifierSource = "profile" | "global" | "low tier";
+export type ClassifierSource = "router" | "global" | "low tier";
 
 export type ClassifierEntry =
   | (ClassifierConfig & { source: ClassifierSource })
@@ -109,25 +109,25 @@ export type ClassifierEntry =
 
 /**
  * classifierModels ref를 실시간 추적해서 분류기 후보 목록으로 펼침.
- * tier 생략 시 대상 profile의 기본 티어(medium)를 따라감.
+ * tier 생략 시 대상 router의 기본 티어(medium)를 따라감.
  * `#effort` 직접 지정은 최종 모델에 그대로 반영됨 (dereferenceTier가 강제 effort를 적용함).
  */
 export const resolveClassifierRefModels = (
   ref: string,
-  profiles: Record<string, RouterProfile>,
+  routers: Record<string, Router>,
 ): ClassifierConfig[] | undefined => {
   const parsed = parseDelegatedRef(ref.trim());
   if (!parsed) return undefined;
-  const resolved = dereferenceTier(profiles, parsed.profile, parsed.tier);
+  const resolved = dereferenceTier(routers, parsed.router, parsed.tier);
   if (!resolved) return undefined;
   // ref 자리에 직접 적힌 #effort가 위임 경로의 강제값보다 우선함 (first-wins).
   const config = parsed.effort
     ? applyEffortOverride(resolved.config, parsed.effort)
     : resolved.config;
-  const fallbackThinking = config.thinking;
+  const fallbackEffort = config.effort;
   return config.models!.map((m) => {
-    const { provider, modelId, thinking } = parseCanonicalModelRef(m);
-    return { model: formatModelRef(provider, modelId), thinking: thinking ?? fallbackThinking };
+    const { provider, modelId, effort } = parseCanonicalModelRef(m);
+    return { model: formatModelRef(provider, modelId), effort: effort ?? fallbackEffort };
   });
 };
 
@@ -137,7 +137,7 @@ type ExpandedClassifierEntry = ClassifierConfig | TypesafeClassifierConfig;
 /** ref 항목을 실시간 추적해서 순서를 유지한 채 실제 후보로 펼침. */
 const expandClassifierModels = (
   value: ClassifierModelsSetting | undefined,
-  profiles: Record<string, RouterProfile> | undefined,
+  routers: Record<string, Router> | undefined,
 ): ExpandedClassifierEntry[] => {
   if (!value) return [];
   const out: ExpandedClassifierEntry[] = [];
@@ -147,7 +147,7 @@ const expandClassifierModels = (
       continue;
     }
     if ("ref" in entry) {
-      if (profiles) out.push(...(resolveClassifierRefModels(entry.ref, profiles) ?? []));
+      if (routers) out.push(...(resolveClassifierRefModels(entry.ref, routers) ?? []));
       continue;
     }
     out.push(entry);
@@ -156,35 +156,35 @@ const expandClassifierModels = (
 };
 
 /**
- * profile → global → low tier 순서로 분류기 체인을 만듦.
+ * router → global → low tier 순서로 분류기 체인을 만듦.
  * 항목 순서가 그대로 시도 순서가 되고, 실패하면 다음 항목으로 폴백함.
  */
 export const resolveEffectiveClassifier = (
-  profile: RouterProfile,
+  router: Router,
   globalClassifiers: ClassifierModelsSetting | undefined,
-  profiles?: Record<string, RouterProfile>,
+  routers?: Record<string, Router>,
 ): { classifiers: ClassifierEntry[] | undefined; source: string } => {
   const chain: ClassifierEntry[] = [];
   const sources: string[] = [];
 
-  const profileEntries = expandClassifierModels(profile.classifierModels, profiles);
-  if (profileEntries.length > 0) {
-    chain.push(...profileEntries.map((c) => ({ ...c, source: "profile" as const })));
-    sources.push("profile");
+  const routerEntries = expandClassifierModels(router.classifierModels, routers);
+  if (routerEntries.length > 0) {
+    chain.push(...routerEntries.map((c) => ({ ...c, source: "router" as const })));
+    sources.push("router");
   }
-  const globalEntries = expandClassifierModels(globalClassifiers, profiles);
+  const globalEntries = expandClassifierModels(globalClassifiers, routers);
   if (globalEntries.length > 0) {
     chain.push(...globalEntries.map((c) => ({ ...c, source: "global" as const })));
     sources.push("global");
   }
-  const lowModels = profile.low?.models;
+  const lowModels = router.low?.models;
   if (lowModels && lowModels.length > 0) {
     chain.push(
       ...lowModels.map((m) => {
-        const { provider, modelId, thinking } = parseCanonicalModelRef(m);
+        const { provider, modelId, effort } = parseCanonicalModelRef(m);
         return {
           model: formatModelRef(provider, modelId),
-          thinking,
+          effort,
           source: "low tier" as const,
         };
       }),

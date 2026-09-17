@@ -8,7 +8,7 @@ export type RouterState = {
   lastDecision: RoutingDecision | undefined;
   debugEnabled: boolean;
   routerEnabled: boolean;
-  selectedProfile: string | undefined;
+  selectedRouter: string | undefined;
   lastRegisteredModels: string;
   debugHistory: RoutingDecision[];
   lastNonRouterModel: string | undefined;
@@ -22,13 +22,13 @@ export type RouterState = {
 };
 
 export const createRouterState = (): RouterState => ({
-  currentConfig: { profiles: {} },
+  currentConfig: { routers: {} },
   currentModelRegistry: undefined,
   currentCwd: process.cwd(),
   lastDecision: undefined,
   debugEnabled: false,
   routerEnabled: false,
-  selectedProfile: undefined,
+  selectedRouter: undefined,
   lastRegisteredModels: "",
   debugHistory: [],
   lastNonRouterModel: undefined,

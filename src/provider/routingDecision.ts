@@ -1,6 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { RouterProfile, RoutingDecision, RouterTier } from "../types";
+import type { Router, RoutingDecision, RouterTier } from "../types";
 import {
   buildRoutingDecision,
   buildRoutingDecisionLive,
@@ -10,8 +10,8 @@ import {
 } from "../routing";
 
 export type ResolveRoutingDecisionParams = {
-  profileName: string;
-  profile: RouterProfile;
+  routerName: string;
+  router: Router;
   context: Context;
   snapshotLastDecision: RoutingDecision | undefined;
   thinkingLevel: ThinkingLevel;
@@ -19,32 +19,32 @@ export type ResolveRoutingDecisionParams = {
   singleTier: RouterTier | undefined;
   validTierCount: number;
   /** 있으면 ref를 실시간 추적함. 없으면 기존 concrete 동작. */
-  profiles?: Record<string, RouterProfile>;
+  routers?: Record<string, Router>;
 };
 
 // resolveRoutingDecision: thinking single-tier and effort mapping
-// Signature keeps profile, thinkingLevel, isToolLoop, singleTier, validTierCount
-// as core inputs; additional context/profileName needed for RoutingDecision.
+// Signature keeps router, thinkingLevel, isToolLoop, singleTier, validTierCount
+// as core inputs; additional context/routerName needed for RoutingDecision.
 export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): RoutingDecision => {
   const {
-    profileName,
-    profile,
+    routerName,
+    router,
     context,
     snapshotLastDecision,
     thinkingLevel,
     isToolLoop,
     singleTier,
     validTierCount,
-    profiles,
+    routers,
   } = params;
   const build = (tier: RouterTier, reasoning: string, isClassifier?: boolean): RoutingDecision =>
-    profiles
-      ? buildRoutingDecisionLive(profiles, profileName, tier, reasoning, isClassifier)
-      : buildRoutingDecision(profileName, profile, tier, reasoning, isClassifier);
+    routers
+      ? buildRoutingDecisionLive(routers, routerName, tier, reasoning, isClassifier)
+      : buildRoutingDecision(routerName, router, tier, reasoning, isClassifier);
 
-  let decision: RoutingDecision = profiles
-    ? decideRouting(context, profileName, profile, snapshotLastDecision, profiles)
-    : decideRouting(context, profileName, profile, snapshotLastDecision);
+  let decision: RoutingDecision = routers
+    ? decideRouting(context, routerName, router, snapshotLastDecision, routers)
+    : decideRouting(context, routerName, router, snapshotLastDecision);
   const isSingleTier = validTierCount === 1 && singleTier !== undefined;
   if (isToolLoop && snapshotLastDecision) {
     decision = build(
@@ -61,7 +61,7 @@ export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): Ro
     );
   } else if (thinkingLevel !== "off" && !isToolLoop) {
     const preferred = thinkingToTier(thinkingLevel);
-    if (profiles) {
+    if (routers) {
       // live 빌드가 가까운 tier 폴백과 ref 경로 표기를 직접 처리함.
       decision = build(
         preferred,
@@ -69,7 +69,7 @@ export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): Ro
         false,
       );
     } else {
-      const tier = resolveAvailableTier(profile, preferred);
+      const tier = resolveAvailableTier(router, preferred);
       let reasoning = `Thinking level ${thinkingLevel} mapped to ${tier} tier.`;
       if (tier !== preferred) {
         reasoning = `Thinking level ${thinkingLevel} mapped to ${preferred} tier, resolved to ${tier} (${preferred} tier is not configured).`;
