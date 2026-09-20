@@ -3,6 +3,7 @@ import {
   extractTextFromContent,
   getLastUserText,
   getHistoryPairsText,
+  getCurrentTurnProgressText,
   estimateTokens,
   truncateContext,
 } from "../src/context";
@@ -80,6 +81,54 @@ describe("context.ts 컨텍스트는", () => {
         ],
       };
       expect(getHistoryPairsText(ctx, 1)).toBe("u1\ntool out");
+    });
+  });
+
+  describe("getCurrentTurnProgressText 현재 턴 진행상황은", () => {
+    it("마지막 메시지가 user이면(일반 유저 턴) 빈 문자열을 반환한다", () => {
+      const ctx: Context = {
+        messages: [
+          { role: "user", content: "u1", timestamp: 1 },
+          fakeMessage({ content: [{ type: "text", text: "a1" }], timestamp: 2 }),
+          { role: "user", content: "current", timestamp: 3 },
+        ],
+      };
+      expect(getCurrentTurnProgressText(ctx)).toBe("");
+    });
+    it("user 메시지가 없으면 빈 문자열을 반환한다", () => {
+      const ctx: Context = {
+        messages: [fakeMessage({ content: [{ type: "text", text: "a1" }], timestamp: 1 })],
+      };
+      expect(getCurrentTurnProgressText(ctx)).toBe("");
+    });
+    it("툴 루프 중이면 마지막 user 이후의 최신 assistant/toolResult 텍스트를 반환한다", () => {
+      const ctx: Context = {
+        messages: [
+          { role: "user", content: "do it", timestamp: 1 },
+          fakeMessage({ content: [{ type: "text", text: "step1" }], timestamp: 2 }),
+          {
+            role: "toolResult",
+            toolCallId: "1",
+            toolName: "t",
+            content: [{ type: "text", text: "tool out" }],
+            isError: false,
+            timestamp: 3,
+          },
+        ],
+      };
+      expect(getCurrentTurnProgressText(ctx)).toBe("tool out");
+    });
+    it("상한 초과 시 뒤쪽만 남긴다", () => {
+      const long = "x".repeat(4200);
+      const ctx: Context = {
+        messages: [
+          { role: "user", content: "do it", timestamp: 1 },
+          fakeMessage({ content: [{ type: "text", text: long }], timestamp: 2 }),
+        ],
+      };
+      const r = getCurrentTurnProgressText(ctx);
+      expect(r.length).toBe(4000);
+      expect(r.endsWith(long.slice(-4000))).toBe(true);
     });
   });
 

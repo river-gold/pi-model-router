@@ -32,6 +32,8 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
         : typeof base.historySize === "number"
           ? base.historySize
           : undefined,
+    routeEveryTurn:
+      typeof override.routeEveryTurn === "boolean" ? override.routeEveryTurn : base.routeEveryTurn,
     tierGuides: mergeTierGuides(base.tierGuides, override.tierGuides),
     routers: mergedRouters,
   };

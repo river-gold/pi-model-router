@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseClassifierOutput, runClassifierWithFallbacksDetailed } from "../src/classifier";
 import type { Context } from "@earendil-works/pi-ai";
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
-import { makeFakeRegistry, makeFakeModel, makeFakeProvider } from "./helpers";
+import { makeFakeRegistry, makeFakeModel, makeFakeProvider, fakeMessage } from "./helpers";
 const streamSimple = vi.fn();
 const makeRegistry = (
   over: {
@@ -264,6 +264,48 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
       ).result?.tier,
     ).toBe("low");
   });
+  it("툴 루프 중이면 현재 턴 진행상황을 프롬프트에 포함한다", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockReturnValue(
+      (async function* () {
+        yield { type: "text_delta", delta: "low" };
+      })(),
+    );
+    const loopCtx: Context = {
+      messages: [
+        { role: "user", content: "do it", timestamp: 1 },
+        fakeMessage({ content: [{ type: "text", text: "step1" }], timestamp: 2 }),
+        {
+          role: "toolResult",
+          toolCallId: "1",
+          toolName: "t",
+          content: [{ type: "text", text: "tool out" }],
+          isError: false,
+          timestamp: 3,
+        },
+      ],
+    };
+    await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, loopCtx, 0);
+    const sentContext: Context = streamSimple.mock.calls[0]![1];
+    const userContent = sentContext.messages[0]!.content as string;
+    expect(userContent).toContain(
+      "Current turn progress (latest assistant/tool output):\ntool out",
+    );
+  });
+
+  it("일반 유저 턴에서는 진행상황 블록을 포함하지 않는다", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockReturnValue(
+      (async function* () {
+        yield { type: "text_delta", delta: "low" };
+      })(),
+    );
+    await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0);
+    const sentContext: Context = streamSimple.mock.calls[0]![1];
+    const userContent = sentContext.messages[0]!.content as string;
+    expect(userContent).not.toContain("Current turn progress");
+  });
+
   it("custom tierGuides가 주어지면 systemPrompt에 override가 반영된다", async () => {
     const reg = makeRegistry();
     streamSimple.mockReturnValue(

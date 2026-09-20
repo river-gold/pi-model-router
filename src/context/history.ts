@@ -1,5 +1,7 @@
 import type { Context } from "@earendil-works/pi-ai";
 import { extractTextFromContent } from "./extract";
+import { findLastUserIndex } from "./lastUser";
+import { MAX_TURN_PROGRESS_CHARS } from "../constants";
 
 export const collectUserIndices = (messages: Context["messages"]): number[] => {
   const out: number[] = [];
@@ -71,4 +73,17 @@ export const getHistoryPairsText = (context: Context, pairCount: number): string
     }
   }
   return pairs.join("\n---\n");
+};
+
+/**
+ * 현재 턴(마지막 user 메시지 이후)의 최신 assistant/toolResult 텍스트를 반환함.
+ * 툴 루프 중 재분류 입력으로 쓰이며, 일반 유저 턴(마지막 메시지가 user)에서는 빈 문자열임.
+ * 최근 내용이 중요하므로 상한 초과 시 뒤쪽만 남김.
+ */
+export const getCurrentTurnProgressText = (context: Context): string => {
+  const lastUserIdx = findLastUserIndex(context.messages);
+  if (lastUserIdx === -1) return "";
+  const text = findFinalTextBetween(context.messages, lastUserIdx, context.messages.length);
+  if (text.length <= MAX_TURN_PROGRESS_CHARS) return text;
+  return text.slice(-MAX_TURN_PROGRESS_CHARS);
 };

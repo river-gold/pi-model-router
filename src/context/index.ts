@@ -8,6 +8,7 @@ export {
   findFinalTextBetween,
   isAssistantOrToolResult,
   getNextUserIdx,
+  getCurrentTurnProgressText,
 } from "./history";
 export { estimateTokens } from "./tokens";
 export {

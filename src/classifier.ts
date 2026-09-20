@@ -5,7 +5,7 @@ import type { RouterTier } from "./types";
 import { isObjectRecord, parseCanonicalModelRef, isRouterTier } from "./config";
 import { buildClassifierSystemPrompt } from "./config/tierGuides";
 import type { TierGuides } from "./types";
-import { getLastUserText, getHistoryPairsText } from "./context";
+import { getLastUserText, getHistoryPairsText, getCurrentTurnProgressText } from "./context";
 import { logClassifierSync } from "./logger";
 import { modelWithAuthBaseUrl, streamDelegated } from "./stream";
 import { mergeDelegatedHeaders } from "./provider/attribution";
@@ -152,11 +152,19 @@ const fetchClassifierAuth = async (
 
 const buildClassifierPromptBody = (context: Context, historySize: number): string => {
   const promptText = getLastUserText(context);
-  if (historySize <= 0) return `Latest user message:\n${promptText}`.trim();
+  // 툴 루프 중 재분류(routeEveryTurn)일 때만 존재: 이번 턴의 최신 assistant/tool 출력.
+  const progressBlock = buildTurnProgressBlock(context);
+  if (historySize <= 0) return `Latest user message:\n${promptText}${progressBlock}`.trim();
   const historyText = getHistoryPairsText(context, historySize);
   if (historyText)
-    return `Recent history (user+final result pairs):\n${historyText}\n\nLatest user message:\n${promptText}`.trim();
-  return `Latest user message:\n${promptText}`.trim();
+    return `Recent history (user+final result pairs):\n${historyText}\n\nLatest user message:\n${promptText}${progressBlock}`.trim();
+  return `Latest user message:\n${promptText}${progressBlock}`.trim();
+};
+
+const buildTurnProgressBlock = (context: Context): string => {
+  const progressText = getCurrentTurnProgressText(context);
+  if (!progressText) return "";
+  return `\n\nCurrent turn progress (latest assistant/tool output):\n${progressText}`;
 };
 
 const buildClassifierContext = (
@@ -212,7 +220,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-  effort,
+        effort,
         fullText: "",
         success: false,
         error: modelResolution.error,
@@ -226,7 +234,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-  effort,
+        effort,
         fullText: "",
         success: false,
         error: authResolution.error,
@@ -251,7 +259,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-  effort,
+        effort,
         fullText,
         tierLine: parsed.tierLine,
         reasoningLine: parsed.reasoningLine,
@@ -267,7 +275,7 @@ const runClassifierOutcome = async (
     logClassifierSync({
       timestamp: new Date().toISOString(),
       model: classifierModelRef,
-  effort,
+      effort,
       fullText,
       success: false,
       error: PARSE_ERROR,
@@ -278,7 +286,7 @@ const runClassifierOutcome = async (
       logClassifierSync({
         timestamp: new Date().toISOString(),
         model: classifierModelRef,
-  effort,
+        effort,
         fullText: "",
         success: false,
         error: ABORT_ERROR,
@@ -289,7 +297,7 @@ const runClassifierOutcome = async (
     logClassifierSync({
       timestamp: new Date().toISOString(),
       model: classifierModelRef,
-  effort,
+      effort,
       fullText: "",
       success: false,
       error,

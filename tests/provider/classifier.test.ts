@@ -106,6 +106,50 @@ describe("provider/classifier 분류기 적용", () => {
     expect(result).toBe(mockDecision);
   });
 
+  it("isToolLoopNow + routeEveryTurn이 true면 분류기를 실행해 decision을 재구성한다", async () => {
+    const state = makeState();
+    state.currentConfig.routeEveryTurn = true;
+    const result = await applyClassifierIfNeeded(
+      mockRouter,
+      mockDecision,
+      "modelId",
+      makeFakeRegistry(),
+      state,
+      baseContext,
+      undefined,
+      false,
+      true,
+      "off",
+      "source",
+    );
+    expect(mockRunClassifierBranch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      router: "modelId",
+      tier: "high",
+      reasoning: "Classifier: classifier reason",
+    });
+  });
+
+  it("isToolLoopNow + routeEveryTurn이 true여도 thinkingLevel이 off가 아니면 기존 decision 반환", async () => {
+    const state = makeState();
+    state.currentConfig.routeEveryTurn = true;
+    const result = await applyClassifierIfNeeded(
+      mockRouter,
+      mockDecision,
+      "modelId",
+      makeFakeRegistry(),
+      state,
+      baseContext,
+      undefined,
+      false,
+      true,
+      "high",
+      "source",
+    );
+    expect(mockRunClassifierBranch).not.toHaveBeenCalled();
+    expect(result).toBe(mockDecision);
+  });
+
   it("thinkingLevel이 off가 아니면 기존 decision 반환", async () => {
     const state = makeState();
     for (const lvl of ["high", "low", "medium", "max", "minimal", "xhigh"] as const) {

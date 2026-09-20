@@ -4,6 +4,8 @@ import type { RouterTier } from "../types";
 export interface TypesafeState {
   message: string;
   history?: string;
+  /** 툴 루프 중 재분류(routeEveryTurn)일 때의 이번 턴 최신 assistant/tool 출력. */
+  progress?: string;
 }
 
 export interface TypesafeChoiceQuestion {

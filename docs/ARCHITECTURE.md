@@ -35,6 +35,8 @@ For every request sent to a `router/*` model, the following logic is executed:
 3. **Default**: If no classifier is configured or it fails, defaults to `medium` (with `resolveAvailableTier()` fallback).
 4. **Delegation & Effort**: The selected tier's `models` list may contain `@router`, `@router#tier`, `@router#tier#effort` entries; these expand live (with nearest-tier fallback and cycle skipping) to the target router's tier models. A tier-level `effort` is forced onto every model of the tier, overriding model-level `#effort` and delegation results. Delegation targets never run the classifier again — tier-less delegation goes straight to the target's `medium` tier.
 
+During a tool loop (follow-up requests whose latest message is a `toolResult`), the classifier is skipped and the turn's initial tier is preserved. With `"routeEveryTurn": true`, the classifier re-runs on every tool-loop request instead; its input includes the turn's latest assistant/tool output (up to 4,000 chars), so the tier can escalate or de-escalate mid-task. This is ignored when `thinkingLevel !== 'off'` or the router has a single tier, and classification failure keeps the previous tier.
+
 ## Module Architecture
 
 The extension is modularized for maintainability:

@@ -22,7 +22,12 @@ export const applyClassifierIfNeeded = async (
   sessionId?: string,
   routers?: Record<string, Router>,
 ): Promise<RoutingDecision> => {
-  if (isSingleTier || isToolLoopNow || thinkingLevel !== "off") return decision;
+  if (
+    isSingleTier ||
+    (isToolLoopNow && !state.currentConfig.routeEveryTurn) ||
+    thinkingLevel !== "off"
+  )
+    return decision;
   const effectiveHistorySize = state.currentConfig.historySize ?? 0;
   const failedSet = state.failedByChain.get(CLASSIFIER_CHAIN_KEY) ?? new Set<string>();
   let result: { tier: RouterTier; reasoning: string } | undefined;

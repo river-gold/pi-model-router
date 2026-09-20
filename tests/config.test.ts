@@ -244,6 +244,46 @@ describe("config.ts 설정은", () => {
       expect(config.historySize).toBe(4);
     });
   });
+  describe("routeEveryTurn 매턴 재분류는", () => {
+    it("생략하면 false를 사용한다", () => {
+      const { config, warnings } = normalizeConfig({
+        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
+      });
+      expect(config.routeEveryTurn).toBe(false);
+      expect(warnings).toEqual([]);
+    });
+    it("boolean이면 그 값을 유지한다", () => {
+      const { config } = normalizeConfig({
+        routeEveryTurn: true,
+        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
+      });
+      expect(config.routeEveryTurn).toBe(true);
+    });
+    it("boolean이 아니면 경고 후 false를 사용한다", () => {
+      const { config, warnings } = normalizeConfig({
+        routeEveryTurn: "yes" as unknown as boolean,
+        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
+      });
+      expect(config.routeEveryTurn).toBe(false);
+      expect(warnings).toContainEqual(expect.stringContaining("Invalid routeEveryTurn"));
+    });
+    it("override의 routeEveryTurn을 우선한다", () => {
+      const base: RouterConfig = {
+        routeEveryTurn: true,
+        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
+      };
+      expect(mergeConfig(base, { routeEveryTurn: false }).routeEveryTurn).toBe(false);
+      expect(mergeConfig(base, {}).routeEveryTurn).toBe(true);
+      expect(
+        mergeConfig(
+          { routers: { balanced: { high: { models: ["openai/gpt-4o"] } } } },
+          {
+            routeEveryTurn: true,
+          },
+        ).routeEveryTurn,
+      ).toBe(true);
+    });
+  });
   describe("classifierModels 분류 모델은", () => {
     it("생략되면 thinking을 undefined로 둔다", () => {
       const { config } = normalizeConfig({

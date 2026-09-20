@@ -1,6 +1,9 @@
 {
   "debug": false,
   "historySize": 0,
+  // true면 툴 루프의 매 LLM 호출마다 분류기를 다시 실행해 tier를 재결정함.
+  // 분류기 입력에 이번 턴의 최신 assistant/tool 진행상황이 포함됨 (thinking != off, 단일 tier 라우터에서는 무시).
+  "routeEveryTurn": false,
   "classifierModels": ["@@typesafe/jev-latest", "google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
   // @@typesafe/<model> 항목은 TypeSafe System One 분류기를 씀 (TYPESAFE_API_KEY 필요).
   // <model>은 API model 필드로 그대로 전달됨 (jev-latest, jev-1.13.0 등. `jev`는 400).

@@ -70,6 +70,8 @@ export interface RouterConfig {
   /** TypeSafe Choice confidence 임계값 (0~1). 이 값보다 낮으면 한 단계 위 tier로 승격함. 기본 0.5. */
   typesafeConfidenceThreshold?: number;
   historySize?: number;
+  /** true면 툴 루프의 매 LLM 호출마다 분류기를 다시 실행해 tier를 재결정함 (기본 false). */
+  routeEveryTurn?: boolean;
   tierGuides?: TierGuides;
   routers: Record<string, Router>;
 }

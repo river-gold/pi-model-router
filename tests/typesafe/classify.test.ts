@@ -117,6 +117,29 @@ describe("classifyWithTypesafe를 검증함", () => {
     expect(readBody(fetchFn)).toEqual(expect.objectContaining({ state: { message: "do it" } }));
   });
 
+  it("툴 루프 중이면 현재 턴 진행상황을 state.progress로 보냄을 검증함", async () => {
+    const fetchFn = vi
+      .fn<TypesafeFetch>()
+      .mockResolvedValue(response(200, choiceBody("high", 0.9)));
+    const context = {
+      messages: [
+        { role: "user", content: "do it", timestamp: 1 },
+        {
+          role: "toolResult",
+          toolCallId: "1",
+          toolName: "t",
+          content: [{ type: "text", text: "tool out" }],
+          isError: false,
+          timestamp: 2,
+        },
+      ],
+    } as Context;
+    await classifyWithTypesafe({ ...baseParams, context, fetchFn });
+    expect(readBody(fetchFn)).toEqual(
+      expect.objectContaining({ state: { message: "do it", progress: "tool out" } }),
+    );
+  });
+
   it("confidence가 낮으면 한 단계 위 tier로 승격함을 검증함", async () => {
     const fetchFn = vi
       .fn<TypesafeFetch>()

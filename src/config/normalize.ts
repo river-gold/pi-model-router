@@ -14,6 +14,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       "classifierModels",
       "typesafeConfidenceThreshold",
       "historySize",
+      "routeEveryTurn",
       "tierGuides",
       "routers",
     ]);
@@ -104,6 +105,13 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
 
   const tierGuides = normalizeTierGuides(raw.tierGuides);
 
+  const routeEveryTurn = typeof raw.routeEveryTurn === "boolean" ? raw.routeEveryTurn : false;
+  if (raw.routeEveryTurn !== undefined && typeof raw.routeEveryTurn !== "boolean") {
+    warnings.push(
+      `Invalid routeEveryTurn "${JSON.stringify(raw.routeEveryTurn)}": expected boolean. Using default false.`,
+    );
+  }
+
   let typesafeConfidenceThreshold: number | undefined = undefined;
   const rawTypesafeThreshold: unknown = raw.typesafeConfidenceThreshold;
   if (rawTypesafeThreshold !== undefined) {
@@ -127,6 +135,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       classifierModels,
       ...(typesafeConfidenceThreshold !== undefined ? { typesafeConfidenceThreshold } : {}),
       historySize: historySize ?? DEFAULT_HISTORY_SIZE,
+      routeEveryTurn,
       ...(tierGuides ? { tierGuides } : {}),
       routers: normalizedRouters,
     },

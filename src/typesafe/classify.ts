@@ -1,6 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
 import type { TierGuides } from "../types";
-import { getHistoryPairsText, getLastUserText } from "../context";
+import { getCurrentTurnProgressText, getHistoryPairsText, getLastUserText } from "../context";
 import { applyConfidenceGate } from "./confidence";
 import { callTypesafe } from "./client";
 import type { TypesafeFetch, TypesafeSleep } from "./client";
@@ -11,9 +11,12 @@ import type { TypesafeClassificationResult, TypesafeOutcome, TypesafeState } fro
 
 export const buildTypesafeState = (context: Context, historySize: number): TypesafeState => {
   const message = getLastUserText(context);
-  if (historySize <= 0) return { message };
+  // 툴 루프 중 재분류(routeEveryTurn)일 때만 존재: 이번 턴의 최신 assistant/tool 출력.
+  const progress = getCurrentTurnProgressText(context);
+  const base: TypesafeState = progress ? { message, progress } : { message };
+  if (historySize <= 0) return base;
   const history = getHistoryPairsText(context, historySize);
-  return history ? { message, history } : { message };
+  return history ? { ...base, history } : base;
 };
 
 export const classifyWithTypesafe = async (params: {
