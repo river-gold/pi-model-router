@@ -27,7 +27,7 @@ For every request sent to a `router/*` model, the following logic is executed:
 
 1. **Manual Effort Override**: If `pi.getThinkingLevel() !== 'off'`, map `minimal`→`minimal`, `low`→`low`, `medium`→`medium`, `high`→`high`, `xhigh`→`xhigh`, `max`→`max`, then `resolveAvailableTier()` to nearest configured tier.
 2. **Classifier**: If `thinkingLevel === 'off'`, classify the turn into a tier.
-   - **TypeSafe System One** (`"@@typesafe/<model>"` entry): one `choice` question over `minimal`~`max` (`POST https://api.typesafe.ai/v1/systemone`, `model` = the entry's `<model>`). The returned `confidence` gates routing: below `typesafeConfidenceThreshold` the tier escalates one step up. A failure moves on to the next chain entry (LLM model or low tier fallback).
+   - **TypeSafe System One** (`"@@typesafe/<model>"` entry): one `choice` question over `minimal`~`max` (`POST https://api.typesafe.ai/v1/systemone`, `model` = the entry's `<model>`). The returned `confidence` gates routing: below `typesafeConfidenceThreshold` the tier escalates one step up. A failure moves on to the next chain entry (LLM model or low tier fallback). The `state.history` sent to Jev is truncated (2,000 chars per pair, 8,000 chars total) to stay under Jev's 32,000-token state budget, which otherwise returns 400 `max_tokens_exceeded`.
    - **LLM classifier** (default): `classifierModels` entries (or the `low` tier fallback) classify to `minimal`/`low`/`medium`/`high`/`xhigh`/`max`.
 
    The `classifierModels` array is the fallback chain: entries are tried in order (`@router#tier` refs are expanded at routing time) until one returns a tier.

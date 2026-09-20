@@ -140,6 +140,64 @@ describe("classifyWithTypesafe를 검증함", () => {
     );
   });
 
+  it("history pair가 2,000자를 넘으면 뒤쪽만 남겨 자름을 검증함", async () => {
+    const longFinal = "a".repeat(3_000);
+    const context = {
+      messages: [
+        { role: "user", content: "first", timestamp: 1 },
+        { role: "assistant", content: longFinal, timestamp: 2 },
+        { role: "user", content: "second", timestamp: 3 },
+      ],
+    } as Context;
+    const fetchFn = vi.fn<TypesafeFetch>().mockResolvedValue(response(200, choiceBody("low", 0.9)));
+    await classifyWithTypesafe({ ...baseParams, context, historySize: 1, fetchFn });
+    const state = (readBody(fetchFn) as { state: { history: string } }).state;
+    expect(state.history.length).toBe(2_000);
+    expect(state.history.startsWith("…")).toBe(true);
+    // 남은 부분은 최종 결과 텍스트의 뒤쪽(모두 a)이어야 함.
+    expect(state.history.slice(1)).toBe("a".repeat(1_999));
+  });
+
+  it("history 전체가 8,000자를 넘으면 최신 쌍 위주로 뒤쪽만 남김을 검증함", async () => {
+    const pair = (n: number, size: number) => [
+      { role: "user", content: `${n}`.padEnd(20, "u"), timestamp: n * 2 },
+      { role: "assistant", content: `${n}`.padEnd(size, "a"), timestamp: n * 2 + 1 },
+    ];
+    const context = {
+      messages: [
+        ...pair(1, 1_900),
+        ...pair(2, 1_900),
+        ...pair(3, 1_900),
+        ...pair(4, 1_900),
+        ...pair(5, 1_900),
+        { role: "user", content: "current", timestamp: 99 },
+      ],
+    } as Context;
+    const fetchFn = vi.fn<TypesafeFetch>().mockResolvedValue(response(200, choiceBody("low", 0.9)));
+    await classifyWithTypesafe({ ...baseParams, context, historySize: 5, fetchFn });
+    const state = (readBody(fetchFn) as { state: { history: string } }).state;
+    expect(state.history.length).toBe(8_000);
+    expect(state.history.startsWith("…")).toBe(true);
+    // 가장 최근(5번) 쌍의 user 텍스트는 남고, 가장 오래된(1번) 쌍은 잘려 나가야 함.
+    expect(state.history).toContain("5".padEnd(20, "u"));
+    expect(state.history).not.toContain("1".padEnd(20, "u"));
+  });
+
+  it("history가 상한 이내면 자르지 않음을 검증함", async () => {
+    const context = {
+      messages: [
+        { role: "user", content: "first", timestamp: 1 },
+        { role: "assistant", content: "done", timestamp: 2 },
+        { role: "user", content: "second", timestamp: 3 },
+      ],
+    } as Context;
+    const fetchFn = vi.fn<TypesafeFetch>().mockResolvedValue(response(200, choiceBody("low", 0.9)));
+    await classifyWithTypesafe({ ...baseParams, context, historySize: 1, fetchFn });
+    expect(readBody(fetchFn)).toEqual(
+      expect.objectContaining({ state: { message: "second", history: "first\ndone" } }),
+    );
+  });
+
   it("confidence가 낮으면 한 단계 위 tier로 승격함을 검증함", async () => {
     const fetchFn = vi
       .fn<TypesafeFetch>()

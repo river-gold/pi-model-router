@@ -51,12 +51,12 @@ export const findFinalTextBetween = (
   return "";
 };
 
-export const getHistoryPairsText = (context: Context, pairCount: number): string => {
-  if (!pairCount || pairCount <= 0) return "";
+export const getHistoryPairs = (context: Context, pairCount: number): string[] => {
+  if (!pairCount || pairCount <= 0) return [];
   const messages = context.messages;
   const userIndices = collectUserIndices(messages);
   const historyUserIndices = resolveHistoryUserIndices(userIndices, pairCount);
-  if (historyUserIndices.length === 0) return "";
+  if (historyUserIndices.length === 0) return [];
   const userPosByIndex = buildUserPosMap(userIndices);
 
   const pairs: string[] = [];
@@ -72,8 +72,11 @@ export const getHistoryPairsText = (context: Context, pairCount: number): string
       pairs.push(userText);
     }
   }
-  return pairs.join("\n---\n");
+  return pairs;
 };
+
+export const getHistoryPairsText = (context: Context, pairCount: number): string =>
+  getHistoryPairs(context, pairCount).join("\n---\n");
 
 /**
  * 현재 턴(마지막 user 메시지 이후)의 최신 assistant/toolResult 텍스트를 반환함.

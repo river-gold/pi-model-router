@@ -135,6 +135,14 @@ describe("commands 명령어는", () => {
     await handler("status", ctx);
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("History size: 0"), "info");
   });
+  it("status는 routeEveryTurn이 켜져 있으면 on을 표시한다", async () => {
+    const s = makeState({ currentConfig: makeCfg({ routeEveryTurn: true }) });
+    const { actions } = makeActs();
+    const { handler } = makePiAndCommand(s, actions);
+    const { ctx, notify } = makeCtx();
+    await handler("status", ctx);
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Route every turn: on"), "info");
+  });
   it("status는 failures와 warnings를 표시한다", async () => {
     const s = makeState({
       failedByChain: new Map([

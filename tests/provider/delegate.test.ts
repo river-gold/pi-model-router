@@ -771,6 +771,16 @@ describe("delegate 논리적 ref 실시간 추적", () => {
       ),
     ).toEqual(["openai/fallback"]);
   });
+  it("getInitialModelsToTry 추적 실패 + 로컬 모델이 없으면 원본 tier 목록을 그대로 반환함", () => {
+    const routers: Record<string, Router> = { balanced: {} };
+    expect(
+      getInitialModelsToTry(
+        { high: { models: ["@missing#high"] } },
+        decision({ router: "balanced", tier: "high" }),
+        routers,
+      ),
+    ).toEqual(["@missing#high"]);
+  });
   it("resolveTargetLimit이 추적된 tier limit을 반환함", () => {
     const registry = makeFakeRegistry({
       find: vi.fn().mockReturnValue(makeFakeModel({ contextWindow: 2000 })),

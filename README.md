@@ -114,6 +114,7 @@ Copy the example config to one of:
 - **요청**: `state`에 `message`(최신 user 메시지)와 `history`(`historySize`만큼의 직전 user+final 결과 쌍), `questions.tier`에 `minimal`~`max` 6개 선택지(`tierGuides`가 있으면 그 설명)를 담아 `POST https://api.typesafe.ai/v1/systemone`로 보냅니다. 인증은 `Authorization: Bearer $TYPESAFE_API_KEY`입니다.
 - **라우팅**: 응답의 `choice`를 tier로 쓰고, `confidence`가 `typesafeConfidenceThreshold`보다 낮으면 한 단계 위 tier로 승격합니다(불확실하면 더 강한 모델 쪽으로 기울임).
 - **재시도**: 429/529/5xx는 지수 백오프로 1회 재시도하고, 그 밖의 실패는 즉시 다음 체인 항목으로 넘어갑니다. API 키가 없어도 마찬가지입니다.
+- **state 크기 상한**: Jev는 state + 가장 긴 질문이 32,000 토큰(or state + 모든 질문 64,000 토큰)을 넘으면 400 `max_tokens_exceeded`를 반환합니다. `history`는 pair별 2,000자, 전체 8,000자로 잘라 보내고(잘린 경우 앞에 `…`), 초과분은 버립니다.
 - **로그**: 결과는 `~/.pi/logs/pi-model-router.log`에 `typesafe/<model>` 이름으로 기록됩니다.
 
 ```json

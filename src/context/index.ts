@@ -2,6 +2,7 @@ export { extractTextFromContent, extractPartText } from "./extract";
 export { getLastUserText, findLastUserIndex } from "./lastUser";
 export {
   getHistoryPairsText,
+  getHistoryPairs,
   collectUserIndices,
   resolveHistoryUserIndices,
   buildUserPosMap,

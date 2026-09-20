@@ -3,6 +3,7 @@ import {
   extractTextFromContent,
   getLastUserText,
   getHistoryPairsText,
+  getHistoryPairs,
   getCurrentTurnProgressText,
   estimateTokens,
   truncateContext,
@@ -81,6 +82,27 @@ describe("context.ts 컨텍스트는", () => {
         ],
       };
       expect(getHistoryPairsText(ctx, 1)).toBe("u1\ntool out");
+    });
+  });
+
+  describe("getHistoryPairs 히스토리 쌍 배열은", () => {
+    it("pairCount가 0 이하면 빈 배열을 반환한다", () => {
+      const ctx: Context = { messages: [{ role: "user", content: "hello", timestamp: 1 }] };
+      expect(getHistoryPairs(ctx, 0)).toEqual([]);
+      expect(getHistoryPairs(ctx, -1)).toEqual([]);
+    });
+    it("user+final 쌍을 배열로 반환한다", () => {
+      const ctx: Context = {
+        messages: [
+          { role: "user", content: "u1", timestamp: 1 },
+          fakeMessage({ content: [{ type: "text", text: "a1" }], timestamp: 2 }),
+          { role: "user", content: "u2", timestamp: 3 },
+          fakeMessage({ content: [{ type: "text", text: "a2" }], timestamp: 4 }),
+          { role: "user", content: "current", timestamp: 5 },
+        ],
+      };
+      expect(getHistoryPairs(ctx, 2)).toEqual(["u1\na1", "u2\na2"]);
+      expect(getHistoryPairsText(ctx, 2)).toBe("u1\na1\n---\nu2\na2");
     });
   });
 
