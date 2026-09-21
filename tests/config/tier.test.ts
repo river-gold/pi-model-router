@@ -81,7 +81,9 @@ describe("tier를 검증함", () => {
         w,
       );
       expect(r?.models).toEqual(["openai/gpt"]);
-      expect(w[0]).toContain('"@@typesafe/" entries are only supported in "classifierModels"');
+      expect(w[0]).toContain(
+        '"@@" entries (@@typesafe/, @@agy/) are only supported in "classifierModels"',
+      );
     });
     it("object가 아니면 undefined 반환함을 검증함", () => {
       expect(normalizeTierConfig("string", "p", "high", [])).toBeUndefined();

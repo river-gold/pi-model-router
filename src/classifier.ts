@@ -12,7 +12,7 @@ import { mergeDelegatedHeaders } from "./provider/attribution";
 
 export const CLASSIFIER_SYSTEM_PROMPT = buildClassifierSystemPrompt();
 
-const OUTPUT_CONSTRAINT =
+export const OUTPUT_CONSTRAINT =
   "Classify the latest user message. Output ONLY one word: minimal|low|medium|high|xhigh|max. No other text.";
 
 const PARSE_ERROR = "no tier parsed or isRouterTier false";
@@ -150,7 +150,11 @@ const fetchClassifierAuth = async (
   return { apiKey, headers, requestModel };
 };
 
-const buildClassifierPromptBody = (context: Context, historySize: number): string => {
+/**
+ * 분류기 프롬프트 본문(최신 user 메시지 + 히스토리 + 턴 진행 상황).
+ * LLM 체인과 agy 분류기가 공유함.
+ */
+export const buildClassifierPromptBody = (context: Context, historySize: number): string => {
   const promptText = getLastUserText(context);
   // 툴 루프 중 재분류(routeEveryTurn)일 때만 존재: 이번 턴의 최신 assistant/tool 출력.
   const progressBlock = buildTurnProgressBlock(context);

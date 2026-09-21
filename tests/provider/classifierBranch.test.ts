@@ -6,6 +6,7 @@ import { CLASSIFIER_CHAIN_KEY } from "../../src/failureMemory";
 import type * as ConfigModule from "../../src/config";
 import type * as ClassifierModule from "../../src/classifier";
 import type * as TypesafeEntryModule from "../../src/provider/typesafeEntry";
+import type * as AgyEntryModule from "../../src/provider/agyEntry";
 import type { ClassifierConfig, Router, TierGuides } from "../../src/types";
 import { makeFakeRegistry, makeFakeUi, makeFakeExtensionContext, fakeSignal } from "../helpers";
 
@@ -21,11 +22,18 @@ vi.mock("../../src/provider/typesafeEntry", async () => {
   const actual = await vi.importActual<TypesafeEntryModule>("../../src/provider/typesafeEntry");
   return { ...actual, runTypesafeEntry: mockRunTypesafeEntry };
 });
+vi.mock("../../src/provider/agyEntry", async () => {
+  const actual = await vi.importActual<AgyEntryModule>("../../src/provider/agyEntry");
+  return { ...actual, runAgyEntry: mockRunAgyEntry };
+});
 
 import { resolveEffectiveClassifier } from "../../src/config";
 import { runClassifierWithFallbacksDetailed } from "../../src/classifier";
 
-const { mockRunTypesafeEntry } = vi.hoisted(() => ({ mockRunTypesafeEntry: vi.fn() }));
+const { mockRunTypesafeEntry, mockRunAgyEntry } = vi.hoisted(() => ({
+  mockRunTypesafeEntry: vi.fn(),
+  mockRunAgyEntry: vi.fn(),
+}));
 
 const mockRegistry = makeFakeRegistry();
 const baseRouter: Router = { high: { models: ["openai/gpt"] } };
@@ -250,16 +258,7 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
     });
     const guides = { low: "custom low guide" };
     const state = makeState({ currentConfig: { tierGuides: guides } });
-    await runClassifierBranch(
-      mockRegistry,
-      baseRouter,
-      state,
-      ctx,
-      undefined,
-      0,
-      new Set(),
-      "src",
-    );
+    await runClassifierBranch(mockRegistry, baseRouter, state, ctx, undefined, 0, new Set(), "src");
     const call = vi.mocked(runClassifierWithFallbacksDetailed).mock.calls[0];
     expect(call[7]).toBe(guides);
   });
@@ -460,5 +459,60 @@ describe("runClassifierBranch 분류 브랜치 실행", () => {
       state.currentConfig.classifierModels,
       routers,
     );
+  });
+
+  it("agy 항목이 성공하면 LLM 분류기를 건너뜀을 검증함", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [{ agy: true, model: "gemini-3.7-flash", source: "global" }],
+      source: "global",
+    });
+    mockRunAgyEntry.mockResolvedValue({
+      result: { tier: "high", reasoning: "agy reason" },
+    });
+    const res = await runClassifierBranch(
+      mockRegistry,
+      baseRouter,
+      makeState(),
+      ctx,
+      undefined,
+      0,
+      new Set(),
+      "src",
+    );
+    expect(res.result).toEqual({ tier: "high", reasoning: "agy reason" });
+    expect(runClassifierWithFallbacksDetailed).not.toHaveBeenCalled();
+    expect(mockRunAgyEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it("agy 실패 시 다음 LLM 항목으로 폴백함을 검증함", async () => {
+    vi.mocked(resolveEffectiveClassifier).mockReturnValue({
+      classifiers: [
+        { agy: true, model: "gemini-3.7-flash", source: "global" },
+        { model: "openai/gpt", source: "global" },
+      ],
+      source: "global",
+    });
+    mockRunAgyEntry.mockResolvedValue({
+      attempt: { model: "agy/gemini-3.7-flash", error: "agy classifier failed: timed out" },
+    });
+    vi.mocked(runClassifierWithFallbacksDetailed).mockResolvedValue({
+      result: { tier: "low", reasoning: "llm reason" },
+      attempts: [{ model: "openai/gpt" }],
+    });
+    const res = await runClassifierBranch(
+      mockRegistry,
+      baseRouter,
+      makeState(),
+      ctx,
+      undefined,
+      0,
+      new Set(),
+      "src",
+    );
+    expect(res.result).toEqual({ tier: "low", reasoning: "llm reason" });
+    expect(res.attempts).toEqual([
+      { model: "agy/gemini-3.7-flash", error: "agy classifier failed: timed out" },
+      { model: "openai/gpt" },
+    ]);
   });
 });

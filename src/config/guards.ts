@@ -1,4 +1,4 @@
-import type { RouterTier, TypesafeClassifierConfig } from "../types";
+import type { RouterTier, TypesafeClassifierConfig, AgyClassifierConfig } from "../types";
 import { ROUTER_TIERS } from "./constants";
 
 export const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
@@ -9,3 +9,6 @@ export const isRouterTier = (value: unknown): value is RouterTier =>
 
 export const isTypesafeClassifierConfig = (value: unknown): value is TypesafeClassifierConfig =>
   isObjectRecord(value) && value.typesafe === true && typeof value.model === "string";
+
+export const isAgyClassifierConfig = (value: unknown): value is AgyClassifierConfig =>
+  isObjectRecord(value) && value.agy === true && typeof value.model === "string";

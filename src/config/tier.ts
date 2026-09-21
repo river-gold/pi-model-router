@@ -78,7 +78,7 @@ export const normalizeModelList = (
     }
     if (m.trim().startsWith("@@")) {
       warnings.push(
-        `Invalid model "${m}" in router "${routerName}" ${label}: "@@typesafe/" entries are only supported in "classifierModels", not in tier/router "models".`,
+        `Invalid model "${m}" in router "${routerName}" ${label}: "@@" entries (@@typesafe/, @@agy/) are only supported in "classifierModels", not in tier/router "models".`,
       );
       continue;
     }

@@ -5,8 +5,15 @@ export {
   MAX_HISTORY_SIZE,
   CLASSIFIER_REF_PREFIX,
   TYPESAFE_ENTRY_PREFIX,
+  AGY_ENTRY_PREFIX,
+  AGY_EFFORT_SEPARATOR,
 } from "./constants";
-export { isObjectRecord, isRouterTier, isTypesafeClassifierConfig } from "./guards";
+export {
+  isObjectRecord,
+  isRouterTier,
+  isTypesafeClassifierConfig,
+  isAgyClassifierConfig,
+} from "./guards";
 export { parseJsonc } from "./parse-jsonc";
 export { parseCanonicalModelRef, formatModelRef, parseDelegatedRef } from "./modelRef";
 export type { ParsedDelegatedRef } from "./modelRef";

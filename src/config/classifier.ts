@@ -1,4 +1,6 @@
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type {
+  AgyClassifierConfig,
   ClassifierConfig,
   ClassifierModelsSetting,
   ClassifierRefConfig,
@@ -6,10 +8,16 @@ import type {
   Router,
   TypesafeClassifierConfig,
 } from "../types";
-import { CLASSIFIER_REF_PREFIX, TYPESAFE_ENTRY_PREFIX } from "./constants";
+import {
+  AGY_EFFORT_SEPARATOR,
+  AGY_ENTRY_PREFIX,
+  ALLOWED_THINKING,
+  CLASSIFIER_REF_PREFIX,
+  TYPESAFE_ENTRY_PREFIX,
+} from "./constants";
 import { formatModelRef, parseCanonicalModelRef, parseDelegatedRef } from "./modelRef";
 import { dereferenceTier, applyEffortOverride } from "./ref";
-import { isTypesafeClassifierConfig } from "./guards";
+import { isAgyClassifierConfig, isTypesafeClassifierConfig } from "./guards";
 
 export const normalizeClassifierConfig = (
   raw: unknown,
@@ -29,7 +37,7 @@ export const normalizeClassifierConfig = (
   }
 };
 
-const ENTRY_HINT = `expected "provider/model#effort", "@router", "@router#tier", "@router#tier#effort", or "@@typesafe/<model>"`;
+const ENTRY_HINT = `expected "provider/model#effort", "@router", "@router#tier", "@router#tier#effort", "@@typesafe/<model>", or "@@agy/<model>[:<effort>]"`;
 
 const normalizeClassifierRef = (
   raw: string,
@@ -60,6 +68,32 @@ const normalizeTypesafeEntry = (
   return { typesafe: true, model };
 };
 
+/** `@@agy/<model>[:<effort>]` — effort는 agy 모델 variant(high/medium/low)로 매핑됨. */
+const normalizeAgyEntry = (
+  raw: string,
+  warnings: string[],
+  contextLabel: string,
+): AgyClassifierConfig | undefined => {
+  const rest = raw.slice(AGY_ENTRY_PREFIX.length).trim();
+  const sepIndex = rest.indexOf(AGY_EFFORT_SEPARATOR);
+  const model = (sepIndex === -1 ? rest : rest.slice(0, sepIndex)).trim();
+  const effortRaw = sepIndex === -1 ? undefined : rest.slice(sepIndex + 1).trim();
+  if (!model) {
+    warnings.push(`Invalid ${contextLabel} "${raw}": expected "@@agy/<model>[:<effort>]".`);
+    return undefined;
+  }
+  if (
+    effortRaw !== undefined &&
+    !((ALLOWED_THINKING as readonly string[]).includes(effortRaw) && effortRaw !== "off")
+  ) {
+    warnings.push(
+      `Invalid ${contextLabel} "${raw}": effort must be one of low, medium, high (got "${effortRaw}").`,
+    );
+    return undefined;
+  }
+  return { agy: true, model, ...(effortRaw ? { effort: effortRaw as ThinkingLevel } : {}) };
+};
+
 const normalizeClassifierEntry = (
   raw: unknown,
   warnings: string[],
@@ -72,6 +106,9 @@ const normalizeClassifierEntry = (
   const trimmed = raw.trim();
   if (trimmed.startsWith(TYPESAFE_ENTRY_PREFIX)) {
     return normalizeTypesafeEntry(trimmed, warnings, contextLabel);
+  }
+  if (trimmed.startsWith(AGY_ENTRY_PREFIX)) {
+    return normalizeAgyEntry(trimmed, warnings, contextLabel);
   }
   if (trimmed.startsWith(CLASSIFIER_REF_PREFIX)) {
     return normalizeClassifierRef(trimmed, warnings, contextLabel);
@@ -105,7 +142,8 @@ export type ClassifierSource = "router" | "global" | "low tier";
 
 export type ClassifierEntry =
   | (ClassifierConfig & { source: ClassifierSource })
-  | (TypesafeClassifierConfig & { source: ClassifierSource });
+  | (TypesafeClassifierConfig & { source: ClassifierSource })
+  | (AgyClassifierConfig & { source: ClassifierSource });
 
 /**
  * classifierModels ref를 실시간 추적해서 분류기 후보 목록으로 펼침.
@@ -132,7 +170,7 @@ export const resolveClassifierRefModels = (
 };
 
 /** ref가 모두 펼쳐진 뒤 체인에 들어가는 항목. */
-type ExpandedClassifierEntry = ClassifierConfig | TypesafeClassifierConfig;
+type ExpandedClassifierEntry = ClassifierConfig | TypesafeClassifierConfig | AgyClassifierConfig;
 
 /** ref 항목을 실시간 추적해서 순서를 유지한 채 실제 후보로 펼침. */
 const expandClassifierModels = (
@@ -142,7 +180,7 @@ const expandClassifierModels = (
   if (!value) return [];
   const out: ExpandedClassifierEntry[] = [];
   for (const entry of value) {
-    if (isTypesafeClassifierConfig(entry)) {
+    if (isTypesafeClassifierConfig(entry) || isAgyClassifierConfig(entry)) {
       out.push(entry);
       continue;
     }
@@ -184,7 +222,8 @@ export const resolveEffectiveClassifier = (
       const trimmed = m.trim();
       // low tier의 `@` 위임 항목은 라우팅 시점에 실시간으로 펼침.
       if (trimmed.startsWith("@")) {
-        if (routers) lowEntries.push(...(resolveClassifierRefModels(trimmed.slice(1), routers) ?? []));
+        if (routers)
+          lowEntries.push(...(resolveClassifierRefModels(trimmed.slice(1), routers) ?? []));
         continue;
       }
       const { provider, modelId, effort } = parseCanonicalModelRef(trimmed);

@@ -4,7 +4,16 @@
   // true면 툴 루프의 매 LLM 호출마다 분류기를 다시 실행해 tier를 재결정함.
   // 분류기 입력에 이번 턴의 최신 assistant/tool 진행상황이 포함됨 (thinking != off, 단일 tier 라우터에서는 무시).
   "routeEveryTurn": false,
-  "classifierModels": ["@@typesafe/jev-latest", "google/gemini-flash-latest#high", "google/gemini-flash-lite-latest#low"],
+  "classifierModels": [
+    "@@typesafe/jev-latest",
+    // @@agy/<model>[:<effort>] 항목은 agy(Google Antigravity CLI)로 분류함.
+    // effort는 agy variant(high/medium/low)로 매핑됨 (생략 시 모델 기본 variant).
+    // 모델 카탈로그는 ~/.cache/pi-agent-bridge/models.json 캐시를 참고함.
+    // (model, effort)별 프로세스를 풀링하며 AGY_CLASSIFIER_IDLE_MS(기본 30분) idle 후 폐기.
+    "@@agy/gemini-3.7-flash:high",
+    "google/gemini-flash-latest#high",
+    "google/gemini-flash-lite-latest#low",
+  ],
   // @@typesafe/<model> 항목은 TypeSafe System One 분류기를 씀 (TYPESAFE_API_KEY 필요).
   // <model>은 API model 필드로 그대로 전달됨 (jev-latest, jev-1.13.0 등. `jev`는 400).
   // 체인 순서대로 시도하고 실패하면 다음 항목으로 폴백하므로 뒤에 LLM 모델/low tier를 두면 됨.
@@ -82,8 +91,13 @@
     // 위임 대상에서는 분류기를 다시 실행하지 않음.
     "refMixed": {
       "models": ["@grok", "@deepseek-flash#low", "openai/gpt-5.4-nano#low"],
-      "high": { "models": ["@deepseek-flash#medium", "@grok", "openai/gpt-5.4-nano", "xai/grok-4.6#low"], "effort": "high" },
-      "low": { "models": ["@deepseek-flash#low", "@grok", "openai/gpt-5.4-nano", "xai/grok-4.6#medium"] },
+      "high": {
+        "models": ["@deepseek-flash#medium", "@grok", "openai/gpt-5.4-nano", "xai/grok-4.6#low"],
+        "effort": "high",
+      },
+      "low": {
+        "models": ["@deepseek-flash#low", "@grok", "openai/gpt-5.4-nano", "xai/grok-4.6#medium"],
+      },
     },
     // 케이스 4: classifierModels ref — 분류기 후보 모델을 다른 라우터에서 가져옴.
     // 배열 항목 앞에 `@`를 붙임. 지정 tier 모델이 분류에 쓰임 (tier 생략 시 medium).

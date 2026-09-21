@@ -17,6 +17,16 @@ export interface TypesafeClassifierConfig {
 }
 
 /**
+ * `"@@agy/<model>[:<effort>]"` 항목을 정규화한 형태.
+ * agy(Google Antigravity CLI)로 tier를 분류함. effort는 agy 모델 variant(high/medium/low)로 매핑됨.
+ */
+export interface AgyClassifierConfig {
+  agy: true;
+  model: string;
+  effort?: ThinkingLevel;
+}
+
+/**
  * `"@router"` / `"@router#tier"` / `"@router#tier#effort"` 항목을 정규화한 형태.
  * 라우팅 시점에 해당 router/tier 모델로 실시간 확장됨. tier 생략 시 기본 티어(medium).
  */
@@ -28,7 +38,8 @@ export interface ClassifierRefConfig {
 export type ClassifierSettingEntry =
   | ClassifierConfig
   | ClassifierRefConfig
-  | TypesafeClassifierConfig;
+  | TypesafeClassifierConfig
+  | AgyClassifierConfig;
 
 /** classifierModels에 허용되는 설정 전체 (정규화 후에는 항상 배열). */
 export type ClassifierModelsSetting = ClassifierSettingEntry[];
@@ -65,6 +76,7 @@ export interface RouterConfig {
    * - `"provider/model#effort"`: 로컬 LLM 분류기
    * - `"@router"` / `"@router#tier"`: 다른 router/tier 모델을 라우팅 시점에 실시간 참조 (tier 생략 시 medium)
    * - `"@@typesafe/<model>"`: TypeSafe System One API
+   * - `"@@agy/<model>[:<effort>]"`: agy(Google Antigravity CLI)로 분류
    */
   classifierModels?: ClassifierModelsSetting;
   /** TypeSafe Choice confidence 임계값 (0~1). 이 값보다 낮으면 한 단계 위 tier로 승격함. 기본 0.5. */

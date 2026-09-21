@@ -19,3 +19,9 @@ export const CLASSIFIER_REF_PREFIX = "@";
 
 /** classifierModels 항목의 TypeSafe System One 접두사 (`"@@typesafe/<model>"`). */
 export const TYPESAFE_ENTRY_PREFIX = "@@typesafe/";
+
+/** classifierModels 항목의 agy(Google Antigravity CLI) 접두사 (`"@@agy/<model>[:<effort>]"`). */
+export const AGY_ENTRY_PREFIX = "@@agy/";
+
+/** agy 항목의 model:effort 구분자 (`"@@agy/gemini-3.7-flash:high"`). */
+export const AGY_EFFORT_SEPARATOR = ":";

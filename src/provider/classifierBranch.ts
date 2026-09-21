@@ -2,9 +2,14 @@ import type { Context } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Router, ClassifierModelsSetting, RouterTier, TierGuides } from "../types";
-import { resolveEffectiveClassifier, isTypesafeClassifierConfig } from "../config";
+import {
+  resolveEffectiveClassifier,
+  isTypesafeClassifierConfig,
+  isAgyClassifierConfig,
+} from "../config";
 import { runClassifierWithFallbacksDetailed, type ClassifierAttempt } from "../classifier";
 import { runTypesafeEntry } from "./typesafeEntry";
+import { runAgyEntry } from "./agyEntry";
 import { CLASSIFIER_CHAIN_KEY } from "../failureMemory";
 
 // runClassifierBranch matches task signature: (registry, router, state, context, signal, effectiveHistorySize, failedSet, classifierSource) -> {result, attempts}
@@ -59,6 +64,15 @@ export const runClassifierBranch = async (
     if (signal?.aborted) throw new Error("aborted");
     if (isTypesafeClassifierConfig(entry)) {
       const outcome = await runTypesafeEntry(entry, state, context, effectiveHistorySize, signal);
+      if ("result" in outcome) {
+        result = outcome.result;
+        break;
+      }
+      attempts.push(outcome.attempt);
+      continue;
+    }
+    if (isAgyClassifierConfig(entry)) {
+      const outcome = await runAgyEntry(entry, state, context, effectiveHistorySize, signal);
       if ("result" in outcome) {
         result = outcome.result;
         break;

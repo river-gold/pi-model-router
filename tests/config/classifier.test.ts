@@ -114,6 +114,30 @@ describe("classifier를 검증함", () => {
       ]);
       expect(w).toEqual([]);
     });
+    it("@@agy/<model> 항목을 정규화함을 검증함", () => {
+      const w: string[] = [];
+      expect(normalizeClassifierModels(["@@agy/gemini-3.7-flash"], w, "ctx")).toEqual([
+        { agy: true, model: "gemini-3.7-flash" },
+      ]);
+      expect(normalizeClassifierModels(["  @@agy/gemini-3.7-flash:high  "], w, "ctx")).toEqual([
+        { agy: true, model: "gemini-3.7-flash", effort: "high" },
+      ]);
+      expect(w).toEqual([]);
+    });
+    it("model이 없는 @@agy 항목은 warning 남기고 건너뛀을 검증함", () => {
+      const w: string[] = [];
+      expect(normalizeClassifierModels(["@@agy/", "@@agy/:high"], w, "ctx")).toBeUndefined();
+      expect(w.length).toBe(2);
+      expect(w[0]).toMatch(/expected "@@agy\/<model>\[:<effort>\]"/);
+    });
+    it("@@agy 항목의 잘못된 effort는 warning 남기고 건너뛀을 검증함", () => {
+      const w: string[] = [];
+      expect(
+        normalizeClassifierModels(["@@agy/m:banana", "@@agy/m:off"], w, "ctx"),
+      ).toBeUndefined();
+      expect(w.length).toBe(2);
+      expect(w[0]).toMatch(/effort must be one of low, medium, high/);
+    });
     it("model이 없는 @@typesafe 항목은 warning 남기고 건너뜀을 검증함", () => {
       const w: string[] = [];
       expect(normalizeClassifierModels(["@@typesafe/", "@@typesafe/  "], w, "ctx")).toBeUndefined();
@@ -136,7 +160,9 @@ describe("classifier를 검증함", () => {
     });
     it("잘못된 @ 참조는 warning 남기고 건너뜀을 검증함", () => {
       const w: string[] = [];
-      expect(normalizeClassifierModels(["@p#bad", "@#high", "@p#h#bogus"], w, "ctx")).toBeUndefined();
+      expect(
+        normalizeClassifierModels(["@p#bad", "@#high", "@p#h#bogus"], w, "ctx"),
+      ).toBeUndefined();
       expect(w[0]).toMatch(/Invalid ctx\[0\] "@p#bad"/);
     });
     it("배열 안의 @ 참조와 일반 모델을 함께 처리함을 검증함", () => {
@@ -172,9 +198,7 @@ describe("classifier를 검증함", () => {
     it("router만 있는 경우를 처리함을 검증함", () => {
       const router = { classifierModels: [{ model: "openai/gpt-4o", effort: "low" as const }] };
       const r = resolveEffectiveClassifier(router, undefined);
-      expect(r.classifiers).toEqual([
-        { model: "openai/gpt-4o", effort: "low", source: "router" },
-      ]);
+      expect(r.classifiers).toEqual([{ model: "openai/gpt-4o", effort: "low", source: "router" }]);
       expect(r.source).toBe("router");
     });
     it("global만 있는 경우를 처리함을 검증함", () => {
@@ -182,9 +206,7 @@ describe("classifier를 검증함", () => {
       const r = resolveEffectiveClassifier(router, [
         { model: "openai/gpt-4o", effort: "high" as const },
       ]);
-      expect(r.classifiers).toEqual([
-        { model: "openai/gpt-4o", effort: "high", source: "global" },
-      ]);
+      expect(r.classifiers).toEqual([{ model: "openai/gpt-4o", effort: "high", source: "global" }]);
       expect(r.source).toBe("global");
     });
     it("low만 있는 경우를 처리함을 검증함", () => {
@@ -249,7 +271,9 @@ describe("classifier를 검증함", () => {
     it("low tier 위임 중 해석 불가 항목은 건너뜀을 검증함", () => {
       const router: Router = { low: { models: ["@ghost#low", "openai/gpt"] } };
       const r = resolveEffectiveClassifier(router, undefined, {});
-      expect(r.classifiers).toEqual([{ model: "openai/gpt", effort: undefined, source: "low tier" }]);
+      expect(r.classifiers).toEqual([
+        { model: "openai/gpt", effort: undefined, source: "low tier" },
+      ]);
     });
     it("low tier의 강제 effort가 위임으로 펼친 후보에도 우선함을 검증함", () => {
       const router: Router = { low: { models: ["@cheap#low"], effort: "off" } };
@@ -453,6 +477,22 @@ describe("classifier를 검증함", () => {
       const r = resolveEffectiveClassifier(config.routers.auto!, config.classifierModels);
       expect(r.classifiers).toEqual([
         { typesafe: true, model: "jev", source: "global" },
+        { model: "openai/a", effort: "low", source: "global" },
+      ]);
+    });
+    it("@@agy 항목이 체인에 유지됨을 검증함", () => {
+      const { config, warnings } = normalizeConfig({
+        classifierModels: ["@@agy/gemini-3.7-flash:high", "openai/a#low"],
+        routers: { auto: { medium: { models: ["openai/m"] } } },
+      });
+      expect(warnings).toEqual([]);
+      expect(config.classifierModels).toEqual([
+        { agy: true, model: "gemini-3.7-flash", effort: "high" },
+        { model: "openai/a", effort: "low" },
+      ]);
+      const r = resolveEffectiveClassifier(config.routers.auto!, config.classifierModels);
+      expect(r.classifiers).toEqual([
+        { agy: true, model: "gemini-3.7-flash", effort: "high", source: "global" },
         { model: "openai/a", effort: "low", source: "global" },
       ]);
     });
