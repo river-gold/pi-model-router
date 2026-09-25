@@ -315,7 +315,10 @@ export const attemptSingleModel = async (
       await withCommitMutex(async () => {
         state.accumulatedCost += collected.pendingCostDelta;
       });
-    if (index > 0) {
+    // 실패 기억으로 앞 후보가 빠지면 필터 후 index 0이어도 초기 decision과 다른 실제 폴백이다.
+    const differsFromInitialDecision =
+      provider !== decision.targetProvider || modelId !== decision.targetModelId;
+    if (index > 0 || differsFromInitialDecision) {
       buildFallbackDecision(decision, modelRef);
       await withCommitMutex(async () => {
         if (state.lastDecision === decision || state.lastDecision?.router === decision.router)

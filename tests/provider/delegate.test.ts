@@ -653,6 +653,131 @@ describe("delegateToTierModels tier 모델 위임", () => {
     const res = await delegateToTierModels(base({ state }));
     expect(res.success).toBe(true);
   });
+  it("첫 선택 성공은 target과 isFallback을 바꾸지 않는다", async () => {
+    mockStreamDelegated.mockImplementation(() =>
+      (async function* () {
+        yield { type: "done", message: { usage: { cost: { total: 0 } } } };
+      })(),
+    );
+    const dec = decision({
+      tier: "high",
+      targetProvider: "openai",
+      targetModelId: "gpt-high",
+      targetLabel: "openai/gpt-high",
+    });
+    const before = { ...dec };
+    const find = vi.fn((provider: string, id: string) =>
+      makeFakeModel({ provider, id, reasoning: false }),
+    );
+    const state: any = {
+      failedByChain: new Map(),
+      lastDecision: dec,
+      accumulatedCost: 0,
+    };
+    const res = await delegateToTierModels(
+      base({
+        state,
+        decision: dec,
+        router: router({ high: { models: ["openai/gpt-high", "openai/gpt-fallback"] } }),
+        registry: makeFakeRegistry({
+          find,
+          getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "k", headers: {} }),
+        }),
+      }),
+    );
+    expect(res.success).toBe(true);
+    expect(mockStreamDelegated).toHaveBeenCalledTimes(1);
+    expect(mockStreamDelegated.mock.calls[0][1].provider).toBe("openai");
+    expect(mockStreamDelegated.mock.calls[0][1].id).toBe("gpt-high");
+    expect(dec).toEqual(before);
+    expect(dec.isFallback).toBeUndefined();
+    expect(state.lastDecision).toBe(dec);
+    expect(state.lastDecision.targetProvider).toBe("openai");
+    expect(state.lastDecision.targetModelId).toBe("gpt-high");
+    expect(state.lastDecision.isFallback).toBeUndefined();
+    expect(state.failedByChain.size).toBe(0);
+  });
+  it("missing/failed로 기억된 첫 모델의 다음 호출은 filtered index 0에서도 실제 모델 fallback이다", async () => {
+    const models = ["openai/gpt-primary", "openai/gpt-fallback"];
+    for (const mode of ["missing", "auth"] as const) {
+      vi.clearAllMocks();
+      mockStreamDelegated.mockImplementation(() =>
+        (async function* () {
+          yield { type: "done", message: { usage: { cost: { total: 0 } } } };
+        })(),
+      );
+      let authCalls = 0;
+      const find = vi.fn((provider: string, id: string) =>
+        mode === "missing" && id === "gpt-primary"
+          ? undefined
+          : makeFakeModel({ provider, id, reasoning: false }),
+      );
+      const registry = makeFakeRegistry({
+        find,
+        getApiKeyAndHeaders: async () => {
+          authCalls += 1;
+          if (mode === "auth" && authCalls === 1) return { ok: false, error: "bad" };
+          return { ok: true, apiKey: "k", headers: {} };
+        },
+      });
+      const state: any = {
+        failedByChain: new Map(),
+        lastDecision: undefined,
+        accumulatedCost: 0,
+      };
+      const firstDecision = decision({
+        tier: "high",
+        targetProvider: "openai",
+        targetModelId: "gpt-primary",
+        targetLabel: "openai/gpt-primary",
+      });
+      state.lastDecision = firstDecision;
+      const first = await delegateToTierModels(
+        base({
+          state,
+          decision: firstDecision,
+          router: router({ high: { models } }),
+          registry,
+        }),
+      );
+      expect(first.success).toBe(true);
+      expect(state.failedByChain.get("route:balanced:high")?.has("openai/gpt-primary")).toBe(
+        true,
+      );
+
+      const nextDecision = decision({
+        tier: "high",
+        targetProvider: "openai",
+        targetModelId: "gpt-primary",
+        targetLabel: "openai/gpt-primary",
+      });
+      state.lastDecision = nextDecision;
+      find.mockClear();
+      mockStreamDelegated.mockClear();
+      const next = await delegateToTierModels(
+        base({
+          state,
+          decision: nextDecision,
+          router: router({ high: { models } }),
+          registry,
+        }),
+      );
+      expect(next.success).toBe(true);
+      expect(mockStreamDelegated).toHaveBeenCalledTimes(1);
+      expect(mockStreamDelegated.mock.calls[0][1].provider).toBe("openai");
+      expect(mockStreamDelegated.mock.calls[0][1].id).toBe("gpt-fallback");
+      expect(nextDecision.isFallback).toBe(true);
+      expect(nextDecision.targetProvider).toBe("openai");
+      expect(nextDecision.targetModelId).toBe("gpt-fallback");
+      expect(state.lastDecision).not.toBe(nextDecision);
+      expect(state.lastDecision.targetProvider).toBe("openai");
+      expect(state.lastDecision.targetModelId).toBe("gpt-fallback");
+      expect(state.lastDecision.isFallback).toBe(true);
+      expect(state.failedByChain.get("route:balanced:high")?.has("openai/gpt-fallback")).toBe(
+        false,
+      );
+    }
+  });
   it("두 번째 모델로 fallback", async () => {
     let authCall = 0;
     mockStreamDelegated.mockImplementation(() =>
