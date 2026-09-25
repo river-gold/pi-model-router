@@ -21,6 +21,7 @@
     "url": "git+https://github.com/river-gold/pi-model-router.git"
   },
   "files": [
+    "package.json",
     "index.ts",
     "src",
     "!src/*.test.ts",
