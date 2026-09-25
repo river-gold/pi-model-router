@@ -347,22 +347,63 @@ export const attemptSingleModel = async (
   return { status: "retry", error: err };
 };
 
+/** delegate가 시도 전에 적용하는 실패 기억 필터와 같은 후보 선택. */
+export const candidatesKeptByFailureMemory = (
+  router: Router,
+  decision: RoutingDecision,
+  routers: Record<string, Router> | undefined,
+  failedByChain: Map<string, Set<string>>,
+): {
+  routeChainKey: string;
+  filtered: string[];
+  skipped: string[];
+  allFiltered: boolean;
+} => {
+  const initialModels = getInitialModelsToTry(router, decision, routers);
+  const routeChainKey = chainKeyForRoute(decision.router, decision.tier);
+  const memory = filterByFailureMemory(
+    initialModels,
+    failedRefsForChain(failedByChain.get(routeChainKey), routeChainKey),
+  );
+  return { routeChainKey, ...memory };
+};
+
+/**
+ * status 커밋 전에 decision을 실패 기억 필터 후 첫 후보로 맞춘다.
+ * 전부 걸러지면 바꾸지 않는다. 이후 성공 폴백 재기록은 attemptSingleModel이 그대로 한다.
+ */
+export const projectDecisionOntoFirstKeptCandidate = (
+  decision: RoutingDecision,
+  router: Router,
+  routers: Record<string, Router> | undefined,
+  failedByChain: Map<string, Set<string>>,
+): RoutingDecision => {
+  const { filtered, allFiltered } = candidatesKeptByFailureMemory(
+    router,
+    decision,
+    routers,
+    failedByChain,
+  );
+  const first = filtered[0];
+  if (allFiltered || !first) return decision;
+  const { provider, modelId } = parseCanonicalModelRef(first);
+  if (provider === decision.targetProvider && modelId === decision.targetModelId) return decision;
+  buildFallbackDecision(decision, first);
+  return decision;
+};
+
 export const runDelegateAttempt = async (
   params: DelegateParams,
   curDecision: RoutingDecision,
 ): Promise<{ success: boolean; costDelta: number; lastError?: unknown }> => {
   const { router, state } = params;
-  const initialModels = getInitialModelsToTry(router, curDecision, params.routers);
-  const routeChainKey = chainKeyForRoute(curDecision.router, curDecision.tier);
-  const recordRouteFailure = createRecordFailure(state, routeChainKey);
   const {
+    routeChainKey,
     filtered: modelsToTry,
     allFiltered,
     skipped: skippedDueToMemory,
-  } = filterByFailureMemory(
-    initialModels,
-    failedRefsForChain(state.failedByChain.get(routeChainKey), routeChainKey),
-  );
+  } = candidatesKeptByFailureMemory(router, curDecision, params.routers, state.failedByChain);
+  const recordRouteFailure = createRecordFailure(state, routeChainKey);
   if (allFiltered) {
     throw new Error(
       `All models in ${curDecision.tier} tier are marked failed this session (skipped: ${skippedDueToMemory.join(", ")}). Run /router reset-failures to retry.`,

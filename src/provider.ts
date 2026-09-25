@@ -10,7 +10,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { Router, RoutingDecision, RouterTier } from "./types";
 import { resolveEffectiveClassifier, resolvableTiers } from "./config";
 import { decideInitialDecision } from "./provider/routing";
-import { delegateToTierModels } from "./provider/delegate";
+import { delegateToTierModels, projectDecisionOntoFirstKeptCandidate } from "./provider/delegate";
 import { validateProviderState } from "./provider/validation";
 import { createCommitMutex, type RouterProviderState } from "./provider/state";
 import { normalizeDelegateError, pushStreamError } from "./provider/error";
@@ -110,6 +110,12 @@ export const registerRouterProvider = (
             source,
             options?.sessionId,
             routers,
+          );
+          decision = projectDecisionOntoFirstKeptCandidate(
+            decision,
+            router as Router,
+            routers,
+            state.failedByChain,
           );
           await withCommitMutex(async () => {
             state.lastDecision = decision;

@@ -486,4 +486,40 @@ describe("provider 통합 동작은", () => {
     await wait();
     expect(s.events.some((e) => e.type === "done" || e.type === "text_delta")).toBe(true);
   });
+  it("실패 기억으로 빼진 첫 후보는 status 갱신 시점에 fallback decision으로 커밋되고 gemini만 위임된다", async () => {
+    state.currentConfig = {
+      routers: {
+        balanced: {
+          medium: { models: ["openai/gpt-4o-mini", "google/gemini-1.5-flash"] },
+        },
+      },
+    };
+    state.lastRegisteredModels = "";
+    state.failedByChain.set("route:balanced:medium", new Set(["openai/gpt-4o-mini"]));
+    thinkingLevelMock.mockReturnValue("medium");
+    let decisionAtStatus: RoutingDecision | undefined;
+    acts.updateStatus = vi.fn(() => {
+      decisionAtStatus = state.lastDecision ? { ...state.lastDecision } : undefined;
+    });
+    registerRouterProvider(pi, state, acts);
+    const s = new FakeStream();
+    mockCreateStream.mockReturnValue(s);
+    streamSimpleMock.mockImplementation(
+      () =>
+        (async function* () {
+          yield { type: "done", message: { usage: { cost: { total: 0 } } } };
+        })(),
+    );
+    getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
+    await wait();
+    expect(decisionAtStatus?.targetProvider).toBe("google");
+    expect(decisionAtStatus?.targetModelId).toBe("gemini-1.5-flash");
+    expect(decisionAtStatus?.targetLabel).toBe("google/gemini-1.5-flash");
+    expect(decisionAtStatus?.isFallback).toBe(true);
+    const delegatedIds = streamSimpleMock.mock.calls.map((call) => {
+      const model = call[0] as Model<Api>;
+      return model.id;
+    });
+    expect(delegatedIds).toEqual(["gemini-1.5-flash"]);
+  });
 });
