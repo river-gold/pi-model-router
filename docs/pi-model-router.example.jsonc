@@ -78,9 +78,9 @@
       // → xai/grok-4.6 (effort low)
       "low": { "models": ["@grok#low"] },
     },
-    // 케이스 2: tier effort는 강제값 — 위임으로 펼친 모델과 모델별 `#effort`까지 덮어씀.
+    // 케이스 2: 위임 참조의 `#effort`는 펼친 모델에 직접 강제함. tier의 `effort`는 직접 모델에만 적용되고 위임으로는 전달되지 않음.
     "refEffort": {
-      // → xai/grok-4.6#high (grok high tier 모델에 high 강제 지정)
+      // → xai/grok-4.6#high (위임 대상 grok high tier의 effort 사용; 바깥 effort는 전달되지 않음)
       "high": { "models": ["@grok#high"], "effort": "high" },
       // → xai/grok-4.6#medium (grok medium tier 모델에 medium 강제 지정)
       "medium": { "models": ["@grok#medium#medium"] },

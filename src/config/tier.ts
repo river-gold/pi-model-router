@@ -147,7 +147,7 @@ export const normalizeTierConfig = (
     return v;
   };
   // 제거된 thinking 키는 알 수 없는 프로퍼티로 조용히 무시함 (effort만 유효).
-  // 티어 강제 effort. 모델별 `#`와 위임 결과보다 우선함 (라우팅/확장에서 강제 적용).
+  // 티어 강제 effort. 직접 모델의 `#`보다 우선하며 위임 결과에는 전달되지 않음.
   const effort = parseTierDefault(record.effort, "effort");
 
   let tierContextWindow: number | undefined;

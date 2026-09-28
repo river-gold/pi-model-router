@@ -46,7 +46,7 @@ export type ClassifierModelsSetting = ClassifierSettingEntry[];
 
 export interface RoutedTierConfig {
   models?: string[];
-  /** tier 강제 effort: 이 tier로 선택되면 모델별 `#`와 위임 결과보다 우선 적용됨. */
+  /** tier 강제 effort: 이 tier의 직접 모델에만 적용하며 모델별 `#`보다 우선함. 위임 결과에는 전달되지 않음. */
   effort?: ThinkingLevel;
   contextWindow?: number;
   maxTokens?: number;

@@ -6,12 +6,12 @@ import { formatModelRef, parseCanonicalModelRef, parseDelegatedRef } from "./mod
 import { nearbyTierOrder, resolveAvailableTier } from "./tier";
 
 /** tier의 강제 effort. */
-export const tierForcing = (config: RoutedTierConfig): ThinkingLevel | undefined =>
-  config.effort;
+export const tierForcing = (config: RoutedTierConfig): ThinkingLevel | undefined => config.effort;
 
 /**
  * 강제 effort를 최종 모델 목록에 적용함.
  * 모델별 `#`와 위임 대상 tier의 강제값보다 우선해서 `provider/model#effort`로 다시 씀.
+ * (classifierModels ref의 명시적 `#effort` 오버라이드에만 사용됨.)
  */
 export const applyEffortOverride = (
   config: RoutedTierConfig,
@@ -65,10 +65,13 @@ const tierEntryOf = (
   return pickedEntry ? { entry: pickedEntry, tier: picked } : undefined;
 };
 
-/** 펼침 대기 중인 모델 항목. override는 바깥에서 누적된 강제 effort (first-wins). */
+/** 펼침 대기 중인 모델 항목.
+ * pin은 위임 참조에 명시적으로 지정된 `#effort`의 누적 (first-wins).
+ * tierEffort는 이 항목이 직접 속한 tier의 강제 effort (직접 모델에만 적용, 위임으로는 전달되지 않음). */
 interface ModelNode {
   raw: string;
-  override: ThinkingLevel | undefined;
+  pin: ThinkingLevel | undefined;
+  tierEffort: ThinkingLevel | undefined;
   visited: ReadonlySet<string>;
 }
 
@@ -86,8 +89,9 @@ const pushChain = (ctx: ExpansionContext, key: string): void => {
 
 /**
  * 큐의 맨 앞 모델을 처리하고 나머지로 꼬리 재귀함.
- * - 일반 모델: 강제 effort가 있으면 덮어써서 출력함.
+ * - 일반 모델: 명시적 pin > 이 항목이 속한 tier의 강제 effort > 모델별 `#` 순서로 effort를 정해 출력함.
  * - `@` 위임: 대상 tier 설정을 찾아(없으면 가까운 tier) 자식 모델 노드를 큐 맨 앞에 넣어 확장함.
+ *   명시적 `#effort`만 자식으로 누적 전달하고, tier 강제 effort는 대상 tier의 직접 모델에만 적용함.
  *   순환하거나 해석 불가인 위임 항목은 건너뜀.
  */
 const expandQueue = (ctx: ExpansionContext, queue: ModelNode[]): void => {
@@ -104,18 +108,23 @@ const expandQueue = (ctx: ExpansionContext, queue: ModelNode[]): void => {
       return;
     }
     pushChain(ctx, `${parsed.router}#${found.tier}`);
-    const override = head.override ?? parsed.effort ?? tierForcing(found.entry);
+    const pin = head.pin ?? parsed.effort;
     const nextVisited = new Set(head.visited);
     nextVisited.add(`${parsed.router}#${found.tier}`);
     expandQueue(ctx, [
-      ...found.entry.models!.map((raw) => ({ raw, override, visited: nextVisited })),
+      ...found.entry.models!.map((raw) => ({
+        raw,
+        pin,
+        tierEffort: tierForcing(found.entry),
+        visited: nextVisited,
+      })),
       ...rest,
     ]);
     return;
   }
   try {
     const { provider, modelId, effort } = parseCanonicalModelRef(trimmed);
-    ctx.out.push(formatModelRef(provider, modelId, head.override ?? effort));
+    ctx.out.push(formatModelRef(provider, modelId, head.pin ?? head.tierEffort ?? effort));
   } catch {
     // 정규화에서 걸러지므로 발생하지 않음. 방어적으로 건너뜀.
   }
@@ -127,10 +136,11 @@ const MAX_EXPANSION_HOPS = 256;
 
 /**
  * `routers[routerName][tier]`의 models를 실시간으로 펼침.
- * models의 `@router` / `@router#tier` / `#router#tier#effort` 항목을
- * 대상 router/tier의 모델로 확장하고, tier의 강제 effort를
- * 모델별 `#`와 위임 결과보다 우선 적용함. 대상 tier가 없으면 가까운 tier로 폴백함.
- * 펼친 모델이 하나도 없으면 undefined.
+ * models의 `@router` / `@router#tier` / `@router#tier#effort` 항목을
+ * 대상 router/tier의 모델로 확장함. tier의 강제 effort는 그 tier의 직접 모델과
+ * 모델별 `#`에만 적용되고 위임으로는 전달되지 않으며, 위임 결과의 effort는
+ * 명시적 `#effort` 지정이나 대상 tier의 강제값이 결정함.
+ * 대상 tier가 없으면 가까운 tier로 폴백함. 펼친 모델이 하나도 없으면 undefined.
  */
 export const dereferenceTier = (
   routers: Record<string, Router>,
@@ -143,10 +153,15 @@ export const dereferenceTier = (
   const ctx: ExpansionContext = { routers, hopsLeft: MAX_EXPANSION_HOPS, chain: [], out: [] };
   pushChain(ctx, topKey);
   const topVisited: ReadonlySet<string> = new Set([topKey]);
-  const topOverride = tierForcing(located.entry);
+  const topTierEffort = tierForcing(located.entry);
   expandQueue(
     ctx,
-    located.entry.models!.map((raw) => ({ raw, override: topOverride, visited: topVisited })),
+    located.entry.models!.map((raw) => ({
+      raw,
+      pin: undefined,
+      tierEffort: topTierEffort,
+      visited: topVisited,
+    })),
   );
   if (ctx.out.length === 0) return undefined;
   return {

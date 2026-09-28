@@ -394,6 +394,19 @@ describe("classifier를 검증함", () => {
         medium: { models: ["c/m3"] },
       },
     });
+    it("위임으로 펼친 분류기 모델은 바깥 tier effort를 상속하지 않음을 검증함", () => {
+      const { config } = normalizeConfig({
+        classifierModels: ["@expensive#medium"],
+        routers: {
+          expensive: { medium: { models: ["@glm"], effort: "medium" } },
+          glm: { medium: { models: ["ollama-cloud/glm-5.3"] } },
+        },
+      });
+      const resolved = resolveEffectiveClassifier({}, config.classifierModels, config.routers);
+      expect(resolved.classifiers).toEqual([
+        { model: "ollama-cloud/glm-5.3", effort: undefined, source: "global" },
+      ]);
+    });
     it("router ref를 펼쳐 source router로 묶음을 검증함", () => {
       const routers = refRouters();
       const r = resolveEffectiveClassifier(routers.auto!, undefined, routers);

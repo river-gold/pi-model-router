@@ -148,7 +148,8 @@ export type ClassifierEntry =
 /**
  * classifierModels ref를 실시간 추적해서 분류기 후보 목록으로 펼침.
  * tier 생략 시 대상 router의 기본 티어(medium)를 따라감.
- * `#effort` 직접 지정은 최종 모델에 그대로 반영됨 (dereferenceTier가 강제 effort를 적용함).
+ * ref 자리에 직접 지정한 `#effort`는 펼친 전체 모델에 적용됨. 그 외에는
+ * 대상 tier의 강제값/모델별 `#`가 이미 모델에 반영된 결과를 그대로 사용함.
  */
 export const resolveClassifierRefModels = (
   ref: string,
@@ -158,14 +159,13 @@ export const resolveClassifierRefModels = (
   if (!parsed) return undefined;
   const resolved = dereferenceTier(routers, parsed.router, parsed.tier);
   if (!resolved) return undefined;
-  // ref 자리에 직접 적힌 #effort가 위임 경로의 강제값보다 우선함 (first-wins).
+  // ref 자리에 직접 적힌 #effort가 위임 경로의 해석 결과보다 우선함.
   const config = parsed.effort
     ? applyEffortOverride(resolved.config, parsed.effort)
     : resolved.config;
-  const fallbackEffort = config.effort;
   return config.models!.map((m) => {
     const { provider, modelId, effort } = parseCanonicalModelRef(m);
-    return { model: formatModelRef(provider, modelId), effort: effort ?? fallbackEffort };
+    return { model: formatModelRef(provider, modelId), effort };
   });
 };
 

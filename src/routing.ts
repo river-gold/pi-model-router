@@ -65,8 +65,9 @@ export const buildRoutingDecisionLive = (
     throw new Error(`Router "${routerName}" has no resolvable configuration for ${tier} tier.`);
   }
   const { provider, modelId, effort } = parseCanonicalModelRef(found.resolved.config.models![0]!);
-  // tier 강제 effort가 모델별 `#`보다 우선함.
-  const effectiveEffort = found.resolved.config.effort ?? effort;
+  // 펼친 모델에는 직접 tier의 강제값 또는 위임 참조의 명시적 effort가 이미 반영됨.
+  // 바깥 tier의 강제값을 폴백으로 사용하면 위임 대상에 다시 전파되므로 사용하지 않음.
+  const effectiveEffort = effort;
   let finalReasoning = reasoning;
   if (found.tier !== tier) {
     finalReasoning = `Resolved from ${tier} to ${found.tier} tier (${tier} tier is not configured). Original: ${reasoning}`;
