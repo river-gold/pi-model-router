@@ -1,6 +1,6 @@
 {
   "name": "@river-gold/pi-model-router",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Smart per-turn model router for Pi that optimizes your AI usage by dynamically switching LLM tiers based on task complexity and phase awareness.",
   "keywords": [
     "coding-agent",
@@ -46,10 +46,10 @@
     "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
-    "@earendil-works/pi-agent-core": "^0.87.1",
-    "@earendil-works/pi-ai": "^0.87.1",
-    "@earendil-works/pi-coding-agent": "^0.87.1",
-    "@earendil-works/pi-tui": "^0.87.1",
+    "@earendil-works/pi-agent-core": "^1.2.0",
+    "@earendil-works/pi-ai": "^1.2.0",
+    "@earendil-works/pi-coding-agent": "^1.2.0",
+    "@earendil-works/pi-tui": "^1.2.0",
     "@vitest/coverage-v8": "^4.1.11",
     "oxlint": "^1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
@@ -58,10 +58,10 @@
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
-    "@earendil-works/pi-agent-core": ">=0.84.4",
-    "@earendil-works/pi-ai": ">=0.84.4",
-    "@earendil-works/pi-coding-agent": ">=0.84.4",
-    "@earendil-works/pi-tui": ">=0.84.4"
+    "@earendil-works/pi-agent-core": ">=1.2.0",
+    "@earendil-works/pi-ai": ">=1.2.0",
+    "@earendil-works/pi-coding-agent": ">=1.2.0",
+    "@earendil-works/pi-tui": ">=1.2.0"
   },
   "allowScripts": {
     "@google/genai@1.52.0": true,

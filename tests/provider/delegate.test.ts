@@ -452,7 +452,7 @@ describe("attemptSingleModel 단일 모델 시도", () => {
     mockStreamDelegated.mockImplementation(() =>
       (async function* () {
         yield { type: "text_delta" };
-        yield { type: "error" };
+        yield { type: "error", reason: "error", error: { role: "assistant", stopReason: "error" } };
       })(),
     );
     const r = await attemptSingleModel("openai/gpt-high", 0, base(), vi.fn());
@@ -480,7 +480,7 @@ describe("attemptSingleModel 단일 모델 시도", () => {
   it("message 없이 content 없는 gotError는 기록 안 함", async () => {
     mockStreamDelegated.mockImplementation(() =>
       (async function* () {
-        yield { type: "error" };
+        yield { type: "error", reason: "error", error: { role: "assistant", stopReason: "error" } };
       })(),
     );
     const rec = vi.fn();
@@ -741,9 +741,7 @@ describe("delegateToTierModels tier 모델 위임", () => {
         }),
       );
       expect(first.success).toBe(true);
-      expect(state.failedByChain.get("route:balanced:high")?.has("openai/gpt-primary")).toBe(
-        true,
-      );
+      expect(state.failedByChain.get("route:balanced:high")?.has("openai/gpt-primary")).toBe(true);
 
       const nextDecision = decision({
         tier: "high",

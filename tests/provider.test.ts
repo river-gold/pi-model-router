@@ -158,9 +158,7 @@ describe("provider 순수 헬퍼는", () => {
     const reg = makeReg((_provider, id) =>
       id === "fallback" ? makeFakeModel({ contextWindow: 12345 }) : undefined,
     );
-    expect(resolveTargetLimit(router, decision, "openai/a", reg, "openai", "a")).toBeGreaterThan(
-      0,
-    );
+    expect(resolveTargetLimit(router, decision, "openai/a", reg, "openai", "a")).toBeGreaterThan(0);
     const emptyRouter: Router = {};
     expect(
       resolveTargetLimit(emptyRouter, decision, "openai/fallback", reg, "openai", "fallback"),
@@ -504,11 +502,10 @@ describe("provider 통합 동작은", () => {
     registerRouterProvider(pi, state, acts);
     const s = new FakeStream();
     mockCreateStream.mockReturnValue(s);
-    streamSimpleMock.mockImplementation(
-      () =>
-        (async function* () {
-          yield { type: "done", message: { usage: { cost: { total: 0 } } } };
-        })(),
+    streamSimpleMock.mockImplementation(() =>
+      (async function* () {
+        yield { type: "done", message: { usage: { cost: { total: 0 } } } };
+      })(),
     );
     getStreamSimple()(routerModel("balanced"), ctxOf([userMsg("hi")]));
     await wait();
