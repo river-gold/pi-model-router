@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseClassifierOutput, runClassifierWithFallbacksDetailed } from "../src/classifier";
-import type { Context } from "@earendil-works/pi-ai";
+import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { makeFakeRegistry, makeFakeModel, makeFakeProvider, fakeMessage } from "./helpers";
 const streamSimple = vi.fn();
@@ -24,6 +24,14 @@ const makeRegistry = (
     getProvider: () => makeFakeProvider({ streamSimple }),
   });
 const baseCtx: Context = { messages: [{ role: "user", content: "hello", timestamp: 1 }] };
+const systemTextOf = (context: Context): string => {
+  const system = context.messages.find((message) => message.role === "system");
+  return typeof system?.content === "string" ? system.content : "";
+};
+const userTextOf = (context: Context): string => {
+  const user = context.messages.find((message) => message.role === "user");
+  return typeof user?.content === "string" ? user.content : "";
+};
 describe("parseClassifierOutput 함수는", () => {
   it("유효한 tier가 주어지면 tier를 반환한다", () => {
     expect(parseClassifierOutput("low")?.tier).toBe("low");
@@ -45,6 +53,26 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     streamSimple.mockReturnValue(
       (async function* () {
         yield { type: "text_delta", delta: "high" };
+      })(),
+    );
+    expect(
+      (await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0)).result
+        ?.tier,
+    ).toBe("high");
+  });
+  it("분류기 system prompt를 위임 요청에 포함한다", async () => {
+    const reg = makeRegistry();
+    streamSimple.mockImplementation((_model: Model<Api>, context: Context) =>
+      (async function* () {
+        // 실제 pi provider처럼 context.messages만 읽어 tier를 결정한다.
+        const systemText = context.messages
+          .filter((message) => message.role === "system")
+          .map((message) => JSON.stringify(message.content))
+          .join("\n");
+        yield {
+          type: "text_delta",
+          delta: systemText.includes("You are a model router classifier") ? "high" : "invalid",
+        };
       })(),
     );
     expect(
@@ -287,7 +315,7 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     };
     await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, loopCtx, 0);
     const sentContext: Context = streamSimple.mock.calls[0]![1];
-    const userContent = sentContext.messages[0]!.content as string;
+    const userContent = userTextOf(sentContext);
     expect(userContent).toContain(
       "Current turn progress (latest assistant/tool output):\ntool out",
     );
@@ -302,11 +330,11 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     );
     await runClassifierWithFallbacksDetailed([{ model: "openai/gpt" }], reg, baseCtx, 0);
     const sentContext: Context = streamSimple.mock.calls[0]![1];
-    const userContent = sentContext.messages[0]!.content as string;
+    const userContent = userTextOf(sentContext);
     expect(userContent).not.toContain("Current turn progress");
   });
 
-  it("custom tierGuides가 주어지면 systemPrompt에 override가 반영된다", async () => {
+  it("custom tierGuides가 주어지면 system 메시지에 override가 반영된다", async () => {
     const reg = makeRegistry();
     streamSimple.mockReturnValue(
       (async function* () {
@@ -325,8 +353,8 @@ describe("runClassifierWithFallbacksDetailed 함수는", () => {
     );
     expect(res.result?.tier).toBe("low");
     const sentContext: Context = streamSimple.mock.calls[0][1];
-    expect(sentContext.systemPrompt).toContain("- low: custom low guide");
-    expect(sentContext.systemPrompt).toContain("- high: Local design under uncertainty");
+    expect(systemTextOf(sentContext)).toContain("- low: custom low guide");
+    expect(systemTextOf(sentContext)).toContain("- high: Local design under uncertainty");
   });
   it("opencode-go classifier에 sessionId가 있으면 세션 헤더를 주입한다", async () => {
     const reg = makeRegistry();

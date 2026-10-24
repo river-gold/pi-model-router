@@ -44,6 +44,18 @@ export const countLeadingOrphanToolResults = (messages: Context["messages"]): nu
   return count;
 };
 
+/** transcript의 선두 system 메시지(들)를 잘라내기 대상에서 제외한다. */
+const splitLeadingSystemMessages = (
+  messages: Context["messages"],
+): { pinned: Context["messages"]; rest: Context["messages"] } => {
+  let pinnedCount = 0;
+  for (let index = 0; index < messages.length; index++) {
+    if (messages[index]!.role !== "system") break;
+    pinnedCount++;
+  }
+  return { pinned: messages.slice(0, pinnedCount), rest: messages.slice(pinnedCount) };
+};
+
 export const truncateContext = (context: Context, limit: number): Context => {
   const messages = [...context.messages];
   if (messages.length <= 1) return context;
@@ -53,14 +65,26 @@ export const truncateContext = (context: Context, limit: number): Context => {
   const totalTokens = systemTokens + messageTokens.reduce((sum, t) => sum + t, 0);
   if (totalTokens <= limit) return context;
 
-  const latestMessage = messages.pop()!;
-  const latestTokens = messageTokens.pop()!;
-  const startIndexRaw = findStartIndex(messages, messageTokens, systemTokens, latestTokens, limit);
-  const startIndex = alignToUserBoundary(messages, startIndexRaw);
-  let finalMessages = [...messages.slice(startIndex), latestMessage];
+  const { pinned, rest } = splitLeadingSystemMessages(messages);
+  if (rest.length === 0) return context;
+  const pinnedTokens = messageTokens
+    .slice(0, pinned.length)
+    .reduce((sum, t) => sum + t, 0);
+  const restTokens = messageTokens.slice(pinned.length);
+  const latestMessage = rest.pop()!;
+  const latestTokens = restTokens.pop()!;
+  const startIndexRaw = findStartIndex(
+    rest,
+    restTokens,
+    systemTokens + pinnedTokens,
+    latestTokens,
+    limit,
+  );
+  const startIndex = alignToUserBoundary(rest, startIndexRaw);
+  let finalMessages = [...rest.slice(startIndex), latestMessage];
   const orphanCount = countLeadingOrphanToolResults(finalMessages);
   if (orphanCount > 0) {
     finalMessages = finalMessages.slice(orphanCount);
   }
-  return { ...context, messages: finalMessages };
+  return { ...context, messages: [...pinned, ...finalMessages] };
 };

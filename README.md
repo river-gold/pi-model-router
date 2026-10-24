@@ -18,6 +18,8 @@ Smart per-turn model router extension for the [pi-coding-agent](https://github.c
 
 ## Installation
 
+Requires pi-coding-agent `>= 1.4.0`.
+
 ### As a user
 
 Install from npm:

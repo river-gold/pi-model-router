@@ -10,7 +10,8 @@ import {
 import type { Context, Message } from "@earendil-works/pi-ai";
 import { fakeMessage } from "../helpers";
 
-const m = (role: "user" | "assistant" | "toolResult", content: string): Message => {
+const m = (role: "system" | "user" | "assistant" | "toolResult", content: string): Message => {
+  if (role === "system") return { role, content, timestamp: 0 };
   if (role === "user") return { role, content, timestamp: 0 };
   if (role === "assistant") return fakeMessage({ content: [{ type: "text", text: content }] });
   return {
@@ -181,6 +182,26 @@ describe("truncate 헬퍼 함수들", () => {
       // system 100 tokens + messages ~ 34+2, limit 10 should truncate
       const truncated = truncateContext(ctx, 10);
       expect(truncated.messages.length).toBeLessThan(ctx.messages.length);
+    });
+    it("transcript의 선두 system 메시지는 잘라내지 않는다", () => {
+      const ctx: Context = {
+        messages: [
+          m("system", "sys"),
+          m("user", "a".repeat(3000)),
+          m("user", "b".repeat(3000)),
+          m("user", "c"),
+        ],
+      };
+      const truncated = truncateContext(ctx, 10);
+      expect(truncated.messages.length).toBeLessThan(ctx.messages.length);
+      expect(truncated.messages[0]).toEqual(ctx.messages[0]);
+      expect(truncated.messages[truncated.messages.length - 1]!.content).toBe("c");
+    });
+    it("system 메시지만 있으면 원본을 유지한다", () => {
+      const ctx: Context = {
+        messages: [m("system", "a".repeat(3000)), m("system", "b".repeat(3000))],
+      };
+      expect(truncateContext(ctx, 1)).toBe(ctx);
     });
   });
 });

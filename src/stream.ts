@@ -5,6 +5,7 @@ import type {
   Model,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type StreamProvider = {
@@ -39,5 +40,7 @@ export const streamDelegated = (
   if (!provider?.streamSimple) {
     throw new Error(`No delegated stream provider registered for ${model.provider}`);
   }
-  return provider.streamSimple(model, context, options);
+  // pi의 provider는 정규화된 transcript(context.messages)만 읽는다. 레거시 Context의
+  // systemPrompt/tools를 system 메시지로 접어 넘기지 않으면 위임 요청에서 조용히 사라진다.
+  return provider.streamSimple(model, normalizeContext(context), options);
 };
