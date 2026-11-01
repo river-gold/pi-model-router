@@ -1,4 +1,5 @@
 {
   "defaultProvider": "router",
-  "defaultModel": "muse-spark"
+  "defaultModel": "all",
+  "defaultThinkingLevel": "medium"
 }
