@@ -4,6 +4,8 @@
   // off → minimal → low → medium → high → xhigh → max
   "routers": {
     "balanced": {
+      // true면 세션과 티어마다 모델을 무작위로 선택해 유지합니다.
+      "random": true,
       "off": { "models": ["openai/example-small#off"] },
       "minimal": { "models": ["openai/example-small#minimal"] },
       "low": { "models": ["openai/example-small#low"] },

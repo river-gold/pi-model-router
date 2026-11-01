@@ -16,15 +16,16 @@ export const createPersistState = (pi: ExtensionAPI, state: RouterState) => {
         state.lastNonRouterModel,
         state.accumulatedCost,
       ),
+      randomSessionId: state.lastExtensionContext?.sessionManager.getSessionId(),
+      randomSelections: state.randomSelections,
       timestamp: 0,
       lastDecision: state.lastDecision ? { ...state.lastDecision, timestamp: 0 } : undefined,
       debugHistory: state.debugHistory?.map((d) => ({ ...d, timestamp: 0 })),
     });
     if (isEqualPersistedState(state.lastPersistedSnapshot, snapshot)) return;
     try {
-      pi.appendEntry(
-        "router-state",
-        buildPersistedState(
+      pi.appendEntry("router-state", {
+        ...buildPersistedState(
           state.routerEnabled,
           state.selectedRouter,
           state.debugEnabled,
@@ -33,7 +34,9 @@ export const createPersistState = (pi: ExtensionAPI, state: RouterState) => {
           state.lastNonRouterModel,
           state.accumulatedCost,
         ),
-      );
+        randomSessionId: state.lastExtensionContext?.sessionManager.getSessionId(),
+        randomSelections: { ...state.randomSelections },
+      });
     } catch {
       return;
     }

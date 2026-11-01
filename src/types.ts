@@ -14,6 +14,7 @@ export interface RoutedTierConfig {
 }
 
 export interface Router {
+  random?: boolean;
   /** 라우터 기본 모델. 티어에 `models`가 없으면 상속됨 (명시된 티어 키에 한함). */
   models?: string[];
   max?: RoutedTierConfig;
@@ -44,6 +45,8 @@ export interface RoutingDecision {
 }
 
 export interface RouterPersistedState {
+  randomSessionId?: string;
+  randomSelections?: Record<string, string>;
   enabled: boolean;
   selectedRouter: string;
   debugEnabled?: boolean;

@@ -11,6 +11,7 @@ export type RouterProviderState = {
   lastDecision: RoutingDecision | undefined;
   accumulatedCost: number;
   readonly failedByChain: Map<string, Set<string>>;
+  randomSelections?: Record<string, string>;
 };
 
 export const createCommitMutex = () => {

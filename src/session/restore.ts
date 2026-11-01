@@ -57,10 +57,27 @@ export const restoreStateFromSession = async (
       ? `${ctx.model.provider}/${ctx.model.id}`
       : state.lastNonRouterModel;
   state.lastDecision = undefined;
+  for (const key of Object.keys(state.randomSelections)) delete state.randomSelections[key];
   const entries = ctx.sessionManager.getBranch() as CustomSessionEntry[];
   const savedState = extractSavedState(entries);
   if (isRouterPersistedState(savedState)) {
     applySavedState(state, savedState);
+    if (
+      typeof savedState.randomSessionId === "string" &&
+      savedState.randomSessionId === ctx.sessionManager.getSessionId() &&
+      savedState.randomSelections &&
+      typeof savedState.randomSelections === "object" &&
+      !Array.isArray(savedState.randomSelections)
+    ) {
+      Object.assign(
+        state.randomSelections,
+        Object.fromEntries(
+          Object.entries(savedState.randomSelections).filter(
+            ([, value]) => typeof value === "string",
+          ),
+        ),
+      );
+    }
   }
   await actions.ensureValidActiveRouter(ctx);
   if (state.routerEnabled && state.selectedRouter) {

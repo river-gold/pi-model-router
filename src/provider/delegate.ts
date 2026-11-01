@@ -45,6 +45,8 @@ export type DelegateParams = {
   withCommitMutex: <T>(fn: () => T | Promise<T>) => Promise<T>;
   stream: ReturnType<typeof createAssistantMessageEventStream>;
   recordDebugDecision: (d: RoutingDecision) => void;
+  randomCandidates?: string[];
+  randomSelections?: Record<string, string>;
 };
 
 export type DelegateResult = {
@@ -227,7 +229,7 @@ export const attemptSingleModel = async (
     recordDebugDecision,
   } = params;
   const { provider, modelId, effort } = parseCanonicalModelRef(modelRef);
-  const tryThinking = effort ?? decision.effort;
+  const tryThinking = params.randomCandidates ? effort : (effort ?? decision.effort);
   const routeChainKey = chainKeyForRoute(decision.router, decision.tier);
   const remember = (err: unknown): void => {
     rememberPreStreamFailure(err, modelRef, recordRouteFailure, routeChainKey);
@@ -310,6 +312,9 @@ export const attemptSingleModel = async (
   const collected = collectBufferedResult(bufferedEvents);
   contentReceivedForTry = collected.contentReceived || contentReceivedForTry;
   if (collected.gotDone) {
+    if (params.randomCandidates && params.randomSelections) {
+      params.randomSelections[JSON.stringify([decision.router, decision.tier])] = modelRef;
+    }
     for (const ev of bufferedEvents) stream.push(ev);
     if (collected.pendingCostDelta)
       await withCommitMutex(async () => {
@@ -320,6 +325,7 @@ export const attemptSingleModel = async (
       provider !== decision.targetProvider || modelId !== decision.targetModelId;
     if (index > 0 || differsFromInitialDecision) {
       buildFallbackDecision(decision, modelRef);
+      if (params.randomCandidates) decision.effort = effort;
       await withCommitMutex(async () => {
         if (state.lastDecision === decision || state.lastDecision?.router === decision.router)
           state.lastDecision = { ...decision };
@@ -399,10 +405,11 @@ export const runDelegateAttempt = async (
   const { router, state } = params;
   const {
     routeChainKey,
-    filtered: modelsToTry,
+    filtered,
     allFiltered,
     skipped: skippedDueToMemory,
   } = candidatesKeptByFailureMemory(router, curDecision, params.routers, state.failedByChain);
+  const modelsToTry = params.randomCandidates ?? filtered;
   const recordRouteFailure = createRecordFailure(state, routeChainKey);
   if (allFiltered) {
     throw new Error(

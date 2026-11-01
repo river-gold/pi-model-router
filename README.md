@@ -34,6 +34,8 @@ Place JSON or JSONC configuration in `~/.pi/agent/pi-model-router.json[c]` or `.
 
 Configure at least one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` per router. The thinking level selects the tier of the same name. If that tier is absent or cannot be resolved, the router searches upward first, then downward in the order `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. For example, `off` falls back to `minimal`, then `low`, and so on. A tool-result loop preserves the tier selected at the start of the turn.
 
+Set `"random": true` on a router to select a model randomly per session and tier. The selected model is reused across requests and restored with the session. If it fails before output, fallback candidates are also chosen randomly; the successful fallback becomes the selected model. A subagent with its own loaded router extension selects independently. A subagent that only inherits its parent's provider is not supported for independent selection. The default is ordered selection.
+
 Each tier accepts a `models` fallback list, optional `effort`, `contextWindow`, `maxTokens`, and `reasoning`. A router-level `models` list is inherited by explicitly configured tiers that omit their own list. Model entries use `provider/model[#effort]` or a live router reference `@router[#tier[#effort]]`. A reference without a tier defaults to `medium`. Tier-level `effort` overrides the effort of direct models but does not propagate through router references; specify the reference's effort explicitly when needed.
 
 Legacy classifier settings (`classifierModels`, `typesafeConfidenceThreshold`, `historySize`, `routeEveryTurn`, and `tierGuides`) are ignored. No classifier, JEV/TypeSafe API, or agy process is invoked.

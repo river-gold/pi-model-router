@@ -9,6 +9,7 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
     }
     const existing = mergedRouters[name];
     mergedRouters[name] = {
+      random: router.random ?? existing?.random,
       models: router.models ?? existing?.models,
       max: mergeTier(existing?.max, router.max),
       xhigh: mergeTier(existing?.xhigh, router.xhigh),

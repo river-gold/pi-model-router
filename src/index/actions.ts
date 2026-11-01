@@ -63,6 +63,7 @@ export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
         set accumulatedCost(v) {
           state.accumulatedCost = v;
         },
+        randomSelections: state.randomSelections,
         get failedByChain() {
           return state.failedByChain;
         },

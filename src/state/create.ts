@@ -19,6 +19,7 @@ export type RouterState = {
   isInitialized: boolean;
   isInternalModelSwitch: number;
   failedByChain: Map<string, Set<string>>;
+  randomSelections: Record<string, string>;
 };
 
 export const createRouterState = (): RouterState => ({
@@ -39,4 +40,5 @@ export const createRouterState = (): RouterState => ({
   isInitialized: false,
   isInternalModelSwitch: 0,
   failedByChain: new Map<string, Set<string>>(),
+  randomSelections: {},
 });

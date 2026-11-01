@@ -58,6 +58,7 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     }
 
     normalizedRouters[name] = {
+      ...(typeof record.random === "boolean" ? { random: record.random } : {}),
       ...(routerModels ? { models: routerModels } : {}),
       ...(max ? { max } : {}),
       ...(xhigh ? { xhigh } : {}),

@@ -8,9 +8,14 @@ import {
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Router, RoutingDecision, RouterTier } from "./types";
-import { resolvableTiers } from "./config";
+import { parseCanonicalModelRef, resolvableTiers } from "./config";
 import { decideInitialDecision } from "./provider/routing";
-import { delegateToTierModels, projectDecisionOntoFirstKeptCandidate } from "./provider/delegate";
+import {
+  candidatesKeptByFailureMemory,
+  delegateToTierModels,
+  projectDecisionOntoFirstKeptCandidate,
+  buildFallbackDecision,
+} from "./provider/delegate";
 import { validateProviderState } from "./provider/validation";
 import { createCommitMutex, type RouterProviderState } from "./provider/state";
 import { normalizeDelegateError, pushStreamError } from "./provider/error";
@@ -40,6 +45,7 @@ export const registerRouterProvider = (
   },
 ) => {
   const { withCommitMutex } = createCommitMutex();
+  state.randomSelections ??= {};
   const modelDefinitions = buildModelDefinitions(state.currentConfig, state.currentModelRegistry);
   const modelsKey = buildModelsKey(modelDefinitions);
   if (state.lastRegisteredModels === modelsKey) return;
@@ -85,12 +91,39 @@ export const registerRouterProvider = (
             validTierCount: liveTiers.length,
             routers,
           });
-          decision = projectDecisionOntoFirstKeptCandidate(
-            decision,
-            router as Router,
-            routers,
-            state.failedByChain,
-          );
+          let randomCandidates: string[] | undefined;
+          if (router?.random) {
+            await withCommitMutex(() => {
+              const available = candidatesKeptByFailureMemory(
+                router,
+                decision,
+                routers,
+                state.failedByChain,
+              ).filtered;
+              const key = JSON.stringify([decision.router, decision.tier]);
+              const saved = state.randomSelections?.[key];
+              const remaining = available.filter((ref) => ref !== saved);
+              randomCandidates = [];
+              if (saved && available.includes(saved)) randomCandidates.push(saved);
+              for (let i = remaining.length; i > 0; i--) {
+                const index = Math.floor(Math.random() * remaining.length);
+                randomCandidates.push(remaining.splice(index, 1)[0]!);
+              }
+              if (randomCandidates[0]) {
+                state.randomSelections![key] = randomCandidates[0];
+                buildFallbackDecision(decision, randomCandidates[0]);
+                decision.effort = parseCanonicalModelRef(randomCandidates[0]).effort;
+                decision.isFallback = false;
+              }
+            });
+          } else {
+            decision = projectDecisionOntoFirstKeptCandidate(
+              decision,
+              router as Router,
+              routers,
+              state.failedByChain,
+            );
+          }
           await withCommitMutex(async () => {
             state.lastDecision = decision;
           });
@@ -108,6 +141,8 @@ export const registerRouterProvider = (
             withCommitMutex,
             stream,
             recordDebugDecision: actions.recordDebugDecision,
+            randomCandidates,
+            randomSelections: state.randomSelections,
           });
           if (!res.success) throw normalizeDelegateError(res.lastError);
           stream.end();
