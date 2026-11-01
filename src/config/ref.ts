@@ -8,26 +8,6 @@ import { nearbyTierOrder, resolveAvailableTier } from "./tier";
 /** tier의 강제 effort. */
 export const tierForcing = (config: RoutedTierConfig): ThinkingLevel | undefined => config.effort;
 
-/**
- * 강제 effort를 최종 모델 목록에 적용함.
- * 모델별 `#`와 위임 대상 tier의 강제값보다 우선해서 `provider/model#effort`로 다시 씀.
- * (classifierModels ref의 명시적 `#effort` 오버라이드에만 사용됨.)
- */
-export const applyEffortOverride = (
-  config: RoutedTierConfig,
-  effort: ThinkingLevel | undefined,
-): RoutedTierConfig => {
-  if (!effort) return config;
-  return {
-    ...config,
-    models: config.models!.map((model) => {
-      const { provider, modelId } = parseCanonicalModelRef(model);
-      return formatModelRef(provider, modelId, effort);
-    }),
-    effort,
-  };
-};
-
 export interface ResolvedTier {
   /** 요청한 원본 router */
   routerName: string;

@@ -67,9 +67,7 @@ export const truncateContext = (context: Context, limit: number): Context => {
 
   const { pinned, rest } = splitLeadingSystemMessages(messages);
   if (rest.length === 0) return context;
-  const pinnedTokens = messageTokens
-    .slice(0, pinned.length)
-    .reduce((sum, t) => sum + t, 0);
+  const pinnedTokens = messageTokens.slice(0, pinned.length).reduce((sum, t) => sum + t, 0);
   const restTokens = messageTokens.slice(pinned.length);
   const latestMessage = rest.pop()!;
   const latestTokens = restTokens.pop()!;

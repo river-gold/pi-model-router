@@ -113,7 +113,6 @@ describe("commands 명령어는", () => {
       lastDecision: undefined,
       routerEnabled: false,
       selectedRouter: undefined,
-      currentConfig: makeCfg({ historySize: 5 }),
     });
     const { actions } = makeActs();
     const { handler } = makePiAndCommand(s, actions);
@@ -122,26 +121,7 @@ describe("commands 명령어는", () => {
     const msg = firstNotifyArg(notify);
     expect(msg).toContain("Router enabled: off");
     expect(msg).toContain("Selected router: none");
-    expect(msg).toContain("History size: 5");
     expect(msg).not.toContain("Last routed tier");
-  });
-  it("status는 historySize가 undefined이면 기본값 0을 표시한다", async () => {
-    const cfg = makeCfg();
-    delete cfg.historySize;
-    const s = makeState({ currentConfig: cfg });
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("History size: 0"), "info");
-  });
-  it("status는 routeEveryTurn이 켜져 있으면 on을 표시한다", async () => {
-    const s = makeState({ currentConfig: makeCfg({ routeEveryTurn: true }) });
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Route every turn: on"), "info");
   });
   it("status는 failures와 warnings를 표시한다", async () => {
     const s = makeState({

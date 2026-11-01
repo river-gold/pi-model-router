@@ -5,7 +5,7 @@ import { ALLOWED_THINKING } from "./constants";
 import { isObjectRecord } from "./guards";
 import { parseCanonicalModelRef, parseDelegatedRef } from "./modelRef";
 
-const NEARBY_TIER_ORDER: RouterTier[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+const NEARBY_TIER_ORDER: RouterTier[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 const isThinkingLevel = (value: string): value is ThinkingLevel =>
   (ALLOWED_THINKING as readonly string[]).includes(value);
@@ -78,7 +78,7 @@ export const normalizeModelList = (
     }
     if (m.trim().startsWith("@@")) {
       warnings.push(
-        `Invalid model "${m}" in router "${routerName}" ${label}: "@@" entries (@@typesafe/, @@agy/) are only supported in "classifierModels", not in tier/router "models".`,
+        `Invalid model "${m}" in router "${routerName}" ${label}: "@@" entries are not supported.`,
       );
       continue;
     }

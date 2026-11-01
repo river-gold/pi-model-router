@@ -8,9 +8,8 @@ import {
   parseCanonicalModelRef,
   parseConfigFile,
   resolveDelegatedReasoning,
-  resolveEffectiveClassifier,
 } from "../src/config";
-import type { RouterConfig, Router } from "../src/types";
+import type { RouterConfig } from "../src/types";
 import { makeFakeModel } from "./helpers";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
@@ -191,11 +190,10 @@ describe("config.ts 설정은", () => {
     it("config를 정규화한다", () => {
       const { config, warnings } = normalizeConfig({
         debug: true,
-        classifierModels: ["openai/gpt-4o#medium"],
         routers: { balanced: { high: { models: ["google/gemini-2.5-pro"] } } },
       });
       expect(warnings).toEqual([]);
-      expect(config.classifierModels?.[0].model).toBe("openai/gpt-4o");
+      expect(config.routers.balanced.high?.models).toEqual(["google/gemini-2.5-pro"]);
     });
     it("라우터 models를 effort만 있는 티어에 상속한다", () => {
       const { config, warnings } = normalizeConfig({
@@ -231,99 +229,6 @@ describe("config.ts 설정은", () => {
       expect(warnings.some((x) => x.includes('router-level "models"'))).toBe(true);
     });
   });
-  describe("historySize 히스토리 크기는", () => {
-    it("historySize를 처리한다", () => {
-      const { config } = normalizeConfig({
-        historySize: 4,
-        routers: {
-          balanced: {
-            high: { models: ["openai/gpt-4o"] },
-          },
-        },
-      });
-      expect(config.historySize).toBe(4);
-    });
-  });
-  describe("routeEveryTurn 매턴 재분류는", () => {
-    it("생략하면 false를 사용한다", () => {
-      const { config, warnings } = normalizeConfig({
-        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
-      });
-      expect(config.routeEveryTurn).toBe(false);
-      expect(warnings).toEqual([]);
-    });
-    it("boolean이면 그 값을 유지한다", () => {
-      const { config } = normalizeConfig({
-        routeEveryTurn: true,
-        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
-      });
-      expect(config.routeEveryTurn).toBe(true);
-    });
-    it("boolean이 아니면 경고 후 false를 사용한다", () => {
-      const { config, warnings } = normalizeConfig({
-        routeEveryTurn: "yes" as unknown as boolean,
-        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
-      });
-      expect(config.routeEveryTurn).toBe(false);
-      expect(warnings).toContainEqual(expect.stringContaining("Invalid routeEveryTurn"));
-    });
-    it("override의 routeEveryTurn을 우선한다", () => {
-      const base: RouterConfig = {
-        routeEveryTurn: true,
-        routers: { balanced: { high: { models: ["openai/gpt-4o"] } } },
-      };
-      expect(mergeConfig(base, { routeEveryTurn: false }).routeEveryTurn).toBe(false);
-      expect(mergeConfig(base, {}).routeEveryTurn).toBe(true);
-      expect(
-        mergeConfig(
-          { routers: { balanced: { high: { models: ["openai/gpt-4o"] } } } },
-          {
-            routeEveryTurn: true,
-          },
-        ).routeEveryTurn,
-      ).toBe(true);
-    });
-  });
-  describe("classifierModels 분류 모델은", () => {
-    it("생략되면 thinking을 undefined로 둔다", () => {
-      const { config } = normalizeConfig({
-        routers: {
-          balanced: {
-            high: { models: ["openai/gpt-4o"] },
-          },
-        },
-        classifierModels: ["openai/gpt-4o"],
-      });
-      expect(config.classifierModels?.[0].effort).toBeUndefined();
-    });
-    it("문자열 배열 형태를 사용한다", () => {
-      const { config } = normalizeConfig({
-        routers: {
-          balanced: {
-            high: { models: ["openai/gpt-4o"] },
-          },
-        },
-        classifierModels: ["openai/gpt-4o#low", "google/gemini-flash#off"],
-      });
-      expect(config.classifierModels?.length).toBe(2);
-      expect(config.classifierModels?.[0].effort).toBe("low");
-    });
-    it("classifierModels fallback 우선순위를 지원한다", () => {
-      const { config } = normalizeConfig({
-        routers: {
-          balanced: {
-            high: { models: ["openai/gpt-4o"] },
-          },
-        },
-        classifierModels: [
-          "google/gemini-flash-latest#high",
-          "google/gemini-flash-lite-latest#low",
-        ],
-      });
-      expect(config.classifierModels).toHaveLength(2);
-      expect(config.classifierModels?.[1].effort).toBe("low");
-    });
-  });
   describe("resolveDelegatedReasoning 위임 추론은", () => {
     it("값을 resolve한다", () => {
       expect(resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "off")).toBeUndefined();
@@ -333,38 +238,6 @@ describe("config.ts 설정은", () => {
       expect(
         resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "turbo"),
       ).toBeUndefined();
-    });
-  });
-  describe("resolveEffectiveClassifier 유효 분류기는", () => {
-    it("router classifier 다음 low tier를 연결한다", () => {
-      const router: Router = {
-        classifierModels: [{ model: "openai/gpt-4o", effort: "low" }],
-        low: { models: ["google/gemini-flash#low"] },
-      };
-      const result = resolveEffectiveClassifier(router, undefined);
-      expect(result.classifiers).toEqual([
-        { model: "openai/gpt-4o", effort: "low", source: "router" },
-        { model: "google/gemini-flash", effort: "low", source: "low tier" },
-      ]);
-      expect(result.source).toBe("router → low tier");
-    });
-    it("low tier 모델로 fallback한다 (low tier thinking을 따른다)", () => {
-      const router: Router = {
-        low: { models: ["google/gemini-flash#high", "openai/gpt-4o-mini#off"] },
-      };
-      const result = resolveEffectiveClassifier(router, undefined);
-      expect(result.classifiers).toEqual([
-        { model: "google/gemini-flash", effort: "high", source: "low tier" },
-        { model: "openai/gpt-4o-mini", effort: "off", source: "low tier" },
-      ]);
-      expect(result.source).toBe("low tier");
-    });
-    it("classifier와 low tier가 없으면 undefined를 반환한다", () => {
-      const router: Router = {
-        high: { models: ["openai/gpt-4o"] },
-      };
-      expect(resolveEffectiveClassifier(router, undefined).classifiers).toBeUndefined();
-      expect(resolveEffectiveClassifier(router, undefined).source).toBe("none");
     });
   });
 });

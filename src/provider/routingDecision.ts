@@ -37,10 +37,10 @@ export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): Ro
     validTierCount,
     routers,
   } = params;
-  const build = (tier: RouterTier, reasoning: string, isClassifier?: boolean): RoutingDecision =>
+  const build = (tier: RouterTier, reasoning: string): RoutingDecision =>
     routers
-      ? buildRoutingDecisionLive(routers, routerName, tier, reasoning, isClassifier)
-      : buildRoutingDecision(routerName, router, tier, reasoning, isClassifier);
+      ? buildRoutingDecisionLive(routers, routerName, tier, reasoning)
+      : buildRoutingDecision(routerName, router, tier, reasoning);
 
   let decision: RoutingDecision = routers
     ? decideRouting(context, routerName, router, snapshotLastDecision, routers)
@@ -50,31 +50,25 @@ export const resolveRoutingDecision = (params: ResolveRoutingDecisionParams): Ro
     decision = build(
       snapshotLastDecision.tier,
       `Preserved ${snapshotLastDecision.tier} tier during toolResult loop`,
-      false,
     );
   }
   if (isSingleTier && !isToolLoop) {
     decision = build(
       singleTier,
-      `Single tier "${singleTier}" defined — skipping classifier/thinking mapping.`,
-      false,
+      `Single tier "${singleTier}" defined — skipping thinking mapping.`,
     );
-  } else if (thinkingLevel !== "off" && !isToolLoop) {
+  } else if (!isToolLoop) {
     const preferred = thinkingToTier(thinkingLevel);
     if (routers) {
       // live 빌드가 가까운 tier 폴백과 ref 경로 표기를 직접 처리함.
-      decision = build(
-        preferred,
-        `Thinking level ${thinkingLevel} mapped to ${preferred} tier.`,
-        false,
-      );
+      decision = build(preferred, `Thinking level ${thinkingLevel} mapped to ${preferred} tier.`);
     } else {
       const tier = resolveAvailableTier(router, preferred);
       let reasoning = `Thinking level ${thinkingLevel} mapped to ${tier} tier.`;
       if (tier !== preferred) {
         reasoning = `Thinking level ${thinkingLevel} mapped to ${preferred} tier, resolved to ${tier} (${preferred} tier is not configured).`;
       }
-      decision = build(tier, reasoning, false);
+      decision = build(tier, reasoning);
     }
   }
   return decision;

@@ -12,6 +12,7 @@ import {
 export { resolveAvailableTier };
 
 export const thinkingToTier = (thinking: ThinkingLevel): RouterTier => {
+  if (thinking === "off") return "off";
   if (thinking === "max") return "max";
   if (thinking === "xhigh") return "xhigh";
   if (thinking === "high") return "high";
@@ -25,7 +26,6 @@ export const buildRoutingDecision = (
   router: Router,
   tier: RouterTier,
   reasoning: string,
-  isClassifier?: boolean,
 ): RoutingDecision => {
   const routed = router[tier];
   if (!routed) {
@@ -45,7 +45,6 @@ export const buildRoutingDecision = (
     reasoning,
     effort: effectiveEffort,
     timestamp: Date.now(),
-    isClassifier,
   };
 };
 
@@ -58,7 +57,6 @@ export const buildRoutingDecisionLive = (
   routerName: string,
   tier: RouterTier,
   reasoning: string,
-  isClassifier?: boolean,
 ): RoutingDecision => {
   const found = resolveAvailableTierLive(routers, routerName, tier);
   if (!found) {
@@ -88,7 +86,6 @@ export const buildRoutingDecisionLive = (
     reasoning: finalReasoning,
     effort: effectiveEffort,
     timestamp: Date.now(),
-    isClassifier,
   };
 };
 
@@ -100,7 +97,7 @@ export const decideRouting = (
   routers?: Record<string, Router>,
 ): RoutingDecision => {
   // Intentionally simplified: _context and _previousDecision are currently unused.
-  // Routing defaults to medium; classifier (if configured) overrides this via provider.ts.
+  // Default to medium before selecting the requested thinking tier.
   // Future heuristics / phase-bias may use these parameters.
   if (routers) {
     return buildRoutingDecisionLive(
@@ -108,7 +105,6 @@ export const decideRouting = (
       routerName,
       "medium",
       "Defaulted to medium tier for general coding work.",
-      false,
     );
   }
   const tier: RouterTier = "medium";
@@ -117,10 +113,10 @@ export const decideRouting = (
   const resolvedTier = resolveAvailableTier(router, tier);
   if (resolvedTier !== tier) {
     reasoning = `Resolved from ${tier} to ${resolvedTier} tier (${tier} tier is not configured). Original: ${reasoning}`;
-    return buildRoutingDecision(routerName, router, resolvedTier, reasoning, false);
+    return buildRoutingDecision(routerName, router, resolvedTier, reasoning);
   }
 
-  const decision = buildRoutingDecision(routerName, router, tier, reasoning, false);
+  const decision = buildRoutingDecision(routerName, router, tier, reasoning);
   return decision;
 };
 

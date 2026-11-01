@@ -1,5 +1,3 @@
-export const CLASSIFIER_CHAIN_KEY = "classifier";
-
 /** Session-permanent skips: broken auth / missing model. Not transient 5xx. */
 export const RECORDABLE_PATTERNS: RegExp[] = [
   /Routed model not found/i,

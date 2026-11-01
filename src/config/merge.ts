@@ -1,6 +1,5 @@
 import type { RouterConfig, Router } from "../types";
 import { mergeTier } from "./tier";
-import { mergeTierGuides } from "./tierGuides";
 
 export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>): RouterConfig => {
   const mergedRouters: Record<string, Router> = { ...base.routers };
@@ -17,24 +16,12 @@ export const mergeConfig = (base: RouterConfig, override: Partial<RouterConfig>)
       medium: mergeTier(existing?.medium, router.medium),
       low: mergeTier(existing?.low, router.low),
       minimal: mergeTier(existing?.minimal, router.minimal),
-      classifierModels: router.classifierModels ?? existing?.classifierModels,
+      off: mergeTier(existing?.off, router.off),
     };
   }
 
   return {
     debug: override.debug ?? base.debug,
-    classifierModels: override.classifierModels ?? base.classifierModels,
-    typesafeConfidenceThreshold:
-      override.typesafeConfidenceThreshold ?? base.typesafeConfidenceThreshold,
-    historySize:
-      typeof override.historySize === "number"
-        ? override.historySize
-        : typeof base.historySize === "number"
-          ? base.historySize
-          : undefined,
-    routeEveryTurn:
-      typeof override.routeEveryTurn === "boolean" ? override.routeEveryTurn : base.routeEveryTurn,
-    tierGuides: mergeTierGuides(base.tierGuides, override.tierGuides),
     routers: mergedRouters,
   };
 };

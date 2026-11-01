@@ -62,11 +62,6 @@ export const formatStatusLines = (state: RouterStateView): string[] => {
       `Reason: ${state.lastDecision.reasoning}`,
     );
   }
-  const historySize = state.currentConfig.historySize ?? 0;
-  lines.push("", `History size: ${historySize} (0=off, 1~20 pairs)`);
-  lines.push(
-    `Route every turn: ${state.currentConfig.routeEveryTurn ? "on" : "off"} (re-classify each tool-loop step)`,
-  );
   if (state.failedByChain.size === 0) {
     lines.push("Session failures: none (in-memory, chain-local)");
   } else {

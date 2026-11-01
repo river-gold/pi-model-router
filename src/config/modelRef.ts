@@ -58,8 +58,5 @@ export const parseCanonicalModelRef = (
   return { provider, modelId, effort: effortRaw };
 };
 
-export const formatModelRef = (
-  provider: string,
-  modelId: string,
-  effort?: ThinkingLevel,
-): string => (effort ? `${provider}/${modelId}#${effort}` : `${provider}/${modelId}`);
+export const formatModelRef = (provider: string, modelId: string, effort?: ThinkingLevel): string =>
+  effort ? `${provider}/${modelId}#${effort}` : `${provider}/${modelId}`;

@@ -17,6 +17,7 @@ describe("tier를 검증함", () => {
         "max",
         "low",
         "minimal",
+        "off",
       ]);
     });
     it("resolveAvailableTier와 같은 결과를 검증함", () => {
@@ -72,7 +73,7 @@ describe("tier를 검증함", () => {
         expect(w.some((x) => x.includes("Invalid model"))).toBe(true);
       }
     });
-    it("@@typesafe 항목은 classifierModels 전용임을 warning으로 알림을 검증함", () => {
+    it("@@ 항목은 지원하지 않음을 warning으로 알림을 검증함", () => {
       const w: string[] = [];
       const r = normalizeTierConfig(
         { models: ["@@typesafe/jev-latest", "openai/gpt"] },
@@ -81,9 +82,7 @@ describe("tier를 검증함", () => {
         w,
       );
       expect(r?.models).toEqual(["openai/gpt"]);
-      expect(w[0]).toContain(
-        '"@@" entries (@@typesafe/, @@agy/) are only supported in "classifierModels"',
-      );
+      expect(w[0]).toContain('"@@" entries are not supported');
     });
     it("object가 아니면 undefined 반환함을 검증함", () => {
       expect(normalizeTierConfig("string", "p", "high", [])).toBeUndefined();

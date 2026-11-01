@@ -5,12 +5,7 @@ import {
   resolveAvailableTier as resolveAvailableTierFromRouting,
 } from "../../src/routing";
 import { normalizeConfig } from "../../src/config/normalize";
-import {
-  applyEffortOverride,
-  dereferenceTier,
-  resolveAvailableTierLive,
-  resolvableTiers,
-} from "../../src/config/ref";
+import { dereferenceTier, resolveAvailableTierLive, resolvableTiers } from "../../src/config/ref";
 import { parseDelegatedRef } from "../../src/config/modelRef";
 import type { Router } from "../../src/types";
 
@@ -88,10 +83,6 @@ describe("위임 models 확장을 검증함", () => {
   });
 
   describe("dereferenceTier 실시간 확장을 검증함", () => {
-    it("effort가 없으면 config를 그대로 반환함을 검증함", () => {
-      const config = { models: ["openai/a"] };
-      expect(applyEffortOverride(config, undefined)).toBe(config);
-    });
     it("잘못된 위임 형식 및 중복 위임 시 체인 중복 방지를 검증함", () => {
       const routers: Record<string, Router> = {
         main: {

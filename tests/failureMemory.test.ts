@@ -3,7 +3,6 @@ import {
   isRecordablePreStreamError,
   normalizeFailedRef,
   chainKeyForRoute,
-  CLASSIFIER_CHAIN_KEY,
 } from "../src/failureMemory";
 
 describe("failureMemory 실패 기억은", () => {
@@ -12,7 +11,6 @@ describe("failureMemory 실패 기억은", () => {
   });
   it("chainKey는 키를 생성한다", () => {
     expect(chainKeyForRoute("balanced", "high")).toBe("route:balanced:high");
-    expect(CLASSIFIER_CHAIN_KEY).toBe("classifier");
   });
   it("auth/notfound 에러만 isRecordable이 true이다", () => {
     expect(isRecordablePreStreamError(new Error("Routed model not found: openai/gpt-4"))).toBe(

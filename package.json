@@ -1,7 +1,7 @@
 {
   "name": "@river-gold/pi-model-router",
   "version": "0.4.5",
-  "description": "Smart per-turn model router for Pi that optimizes your AI usage by dynamically switching LLM tiers based on task complexity and phase awareness.",
+  "description": "Model router for Pi that selects configured LLM tiers by thinking level.",
   "keywords": [
     "coding-agent",
     "extension",
@@ -27,7 +27,7 @@
     "!src/*.test.ts",
     "!index.test.ts",
     "LICENSE",
-    "docs/model-router.example.jsonc",
+    "docs/pi-model-router.example.jsonc",
     "README.md"
   ],
   "type": "module",
@@ -50,12 +50,13 @@
     "@earendil-works/pi-ai": "^1.4.0",
     "@earendil-works/pi-coding-agent": "^1.4.0",
     "@earendil-works/pi-tui": "^1.4.0",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
+    "oxfmt": "^0.75.0",
     "oxlint": "^1.81.0",
     "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.8.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": ">=1.4.0",

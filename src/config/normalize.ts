@@ -1,9 +1,6 @@
 import type { ConfigLoadResult, RouterConfig, Router } from "../types";
-import { DEFAULT_HISTORY_SIZE, MAX_HISTORY_SIZE } from "./constants";
 import { isObjectRecord } from "./guards";
-import { normalizeClassifierModels } from "./classifier";
 import { normalizeModelList, normalizeTierConfig } from "./tier";
-import { normalizeTierGuides } from "./tierGuides";
 
 export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
   const warnings: string[] = [];
@@ -53,18 +50,12 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
     const medium = normalizeTierConfig(record.medium, name, "medium", warnings, routerModels);
     const low = normalizeTierConfig(record.low, name, "low", warnings, routerModels);
     const minimal = normalizeTierConfig(record.minimal, name, "minimal", warnings, routerModels);
+    const off = normalizeTierConfig(record.off, name, "off", warnings, routerModels);
 
-    if (!max && !xhigh && !high && !medium && !low && !minimal) {
+    if (!max && !xhigh && !high && !medium && !low && !minimal && !off) {
       warnings.push(`Router "${name}" has no valid tiers. Skipped.`);
       continue;
     }
-
-    const rawClassifier = record.classifierModels;
-    const classifierModels = normalizeClassifierModels(
-      rawClassifier,
-      warnings,
-      `Router "${name}" classifierModels`,
-    );
 
     normalizedRouters[name] = {
       ...(routerModels ? { models: routerModels } : {}),
@@ -74,69 +65,13 @@ export const normalizeConfig = (raw: RouterConfig): ConfigLoadResult => {
       medium,
       low,
       ...(minimal ? { minimal } : {}),
-      ...(classifierModels ? { classifierModels } : {}),
+      ...(off ? { off } : {}),
     };
-  }
-
-  const rawGlobalClassifier = raw.classifierModels;
-  const classifierModels = normalizeClassifierModels(
-    rawGlobalClassifier as unknown,
-    warnings,
-    "classifierModels",
-  );
-
-  let historySize: number | undefined = undefined;
-  const rawHistorySize = raw.historySize;
-  if (rawHistorySize !== undefined) {
-    if (
-      typeof rawHistorySize === "number" &&
-      Number.isInteger(rawHistorySize) &&
-      rawHistorySize >= 0 &&
-      rawHistorySize <= MAX_HISTORY_SIZE
-    ) {
-      historySize = rawHistorySize;
-    } else {
-      warnings.push(
-        `Invalid historySize "${JSON.stringify(rawHistorySize)}": expected integer between 0 and ${MAX_HISTORY_SIZE}. Using default ${DEFAULT_HISTORY_SIZE}.`,
-      );
-      historySize = DEFAULT_HISTORY_SIZE;
-    }
-  }
-
-  const tierGuides = normalizeTierGuides(raw.tierGuides);
-
-  const routeEveryTurn = typeof raw.routeEveryTurn === "boolean" ? raw.routeEveryTurn : false;
-  if (raw.routeEveryTurn !== undefined && typeof raw.routeEveryTurn !== "boolean") {
-    warnings.push(
-      `Invalid routeEveryTurn "${JSON.stringify(raw.routeEveryTurn)}": expected boolean. Using default false.`,
-    );
-  }
-
-  let typesafeConfidenceThreshold: number | undefined = undefined;
-  const rawTypesafeThreshold: unknown = raw.typesafeConfidenceThreshold;
-  if (rawTypesafeThreshold !== undefined) {
-    if (
-      typeof rawTypesafeThreshold === "number" &&
-      Number.isFinite(rawTypesafeThreshold) &&
-      rawTypesafeThreshold >= 0 &&
-      rawTypesafeThreshold <= 1
-    ) {
-      typesafeConfidenceThreshold = rawTypesafeThreshold;
-    } else {
-      warnings.push(
-        `Invalid typesafeConfidenceThreshold "${JSON.stringify(rawTypesafeThreshold)}": expected number between 0 and 1. Ignored.`,
-      );
-    }
   }
 
   return {
     config: {
       debug: typeof raw.debug === "boolean" ? raw.debug : false,
-      classifierModels,
-      ...(typesafeConfidenceThreshold !== undefined ? { typesafeConfidenceThreshold } : {}),
-      historySize: historySize ?? DEFAULT_HISTORY_SIZE,
-      routeEveryTurn,
-      ...(tierGuides ? { tierGuides } : {}),
       routers: normalizedRouters,
     },
     warnings,

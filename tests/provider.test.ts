@@ -297,53 +297,6 @@ describe("provider 통합 동작은", () => {
     await wait();
     expect(s.events.some((e) => e.type === "error")).toBe(true);
   });
-  it("classifier off는 분기와 잘라내기를 실행한다", async () => {
-    state = {
-      ...state,
-      currentConfig: {
-        routers: {
-          balanced: {
-            high: { models: ["openai/gpt-high"] },
-            medium: { models: ["openai/mini"] },
-          },
-        },
-        classifierModels: [{ model: "openai/gpt" }],
-        historySize: 0,
-      },
-    };
-    thinkingLevelMock.mockReturnValue("off");
-    registerRouterProvider(pi, state, acts);
-    const s = new FakeStream();
-    mockCreateStream.mockReturnValue(s);
-    streamSimpleMock
-      .mockReturnValueOnce(
-        (async function* () {
-          yield { type: "text_delta", delta: "high" };
-        })(),
-      )
-      .mockReturnValueOnce(
-        (async function* () {
-          yield { type: "text_delta", delta: "ans" };
-          yield { type: "done", message: { usage: { cost: { total: 0.001 } } } };
-        })(),
-      );
-    let _passed: Context | null = null;
-    const orig = streamSimpleMock.getMockImplementation();
-    streamSimpleMock.mockImplementation((model: Model<Api>, context: Context) => {
-      if (model.id !== "gpt") _passed = context;
-      return orig?.(model, context);
-    });
-    getStreamSimple()(routerModel("balanced", 10000), {
-      systemPrompt: "sys",
-      messages: [
-        userMsg("a".repeat(8000), 1),
-        userMsg("b".repeat(8000), 2),
-        userMsg("c".repeat(2000), 3),
-      ],
-    });
-    await wait(150);
-    expect(state.lastDecision).toBeDefined();
-  });
   it("fallback은 재시도하고 cost를 기록한다", async () => {
     registerRouterProvider(pi, state, acts);
     const s = new FakeStream();

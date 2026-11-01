@@ -19,7 +19,7 @@ describe("routing.ts 라우팅은", () => {
       expect(thinkingToTier("medium")).toBe("medium");
       expect(thinkingToTier("low")).toBe("low");
       expect(thinkingToTier("minimal")).toBe("minimal");
-      expect(thinkingToTier("off")).toBe("minimal");
+      expect(thinkingToTier("off")).toBe("off");
     });
   });
   describe("resolveAvailableTier 사용 가능 티어는", () => {
