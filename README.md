@@ -4,7 +4,7 @@ A model router extension for [pi-coding-agent](https://github.com/earendil-works
 
 ## Installation
 
-Requires pi-coding-agent 1.4.0 or later.
+Requires pi-coding-agent 1.5.0 or later.
 
 ```bash
 pi install npm:@river-gold/pi-model-router
