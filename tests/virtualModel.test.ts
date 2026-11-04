@@ -15,11 +15,13 @@ const physical = (id: string): Model<Api> => makeFakeModel({ provider: "p", id }
 const makeCtx = (
   models: string[],
   auth: { ok: boolean; apiKey?: string } = { ok: true, apiKey: "k" },
+  configuredAuth: (model: Model<Api>) => boolean = () => true,
 ) => {
   const registry = makeFakeRegistry({
     find: (provider: string, id: string) =>
       provider === "p" && models.includes(id) ? physical(id) : undefined,
     getApiKeyAndHeaders: vi.fn().mockResolvedValue(auth),
+    hasConfiguredAuth: configuredAuth,
   });
   return makeFakeExtensionContext({ modelRegistry: registry });
 };
@@ -154,6 +156,27 @@ describe("가상 모델 route 계약", () => {
     const model = createVirtualModel(routers, "r", undefined, record());
     const result = await model.route(makeRequest(), makeCtx(["a"]));
     expect(result.model.id).toBe("a");
+  });
+
+  it("pi가 인증된 provider로 보지 않는 후보는 건너뛴다", async () => {
+    const routers: Record<string, Router> = { r: { medium: { models: ["p/a", "p/b"] } } };
+    const model = createVirtualModel(routers, "r", undefined, record());
+    const result = await model.route(
+      makeRequest(),
+      makeCtx(["a", "b"], { ok: true, apiKey: "k" }, (candidate) => candidate.id === "b"),
+    );
+    expect(result.model.id).toBe("b");
+  });
+
+  it("인정되지 않는 후보만 있으면 throw한다", async () => {
+    const routers: Record<string, Router> = { r: { medium: { models: ["p/a"] } } };
+    const model = createVirtualModel(routers, "r", undefined, record());
+    await expect(
+      model.route(
+        makeRequest(),
+        makeCtx(["a"], { ok: true, apiKey: "k" }, () => false),
+      ),
+    ).rejects.toThrow("no usable model");
   });
 
   it("자격 증명 없는 후보만 있으면 throw한다", async () => {

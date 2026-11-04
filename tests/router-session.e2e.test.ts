@@ -303,7 +303,7 @@ describe("가상 모델 라우팅", () => {
     }
   });
 
-  it("다른 확장이 오류 뒤에 메시지를 추가하면 오류를 자동 복구하지 않는다", async () => {
+  it("다른 확장이 오류 뒤에 숨은 메시지를 추가해도 복구한다", async () => {
     const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
       pi.on("agent_before_settle", (event) => {
         if (event.outcome !== "error") return;
@@ -324,7 +324,7 @@ describe("가상 모델 라우팅", () => {
     const start = received.length;
     try {
       await session.prompt("오류 뒤 다른 메시지");
-      expect(received.slice(start)).toEqual(["a"]);
+      expect(received.slice(start)).toEqual(["a", "b"]);
     } finally {
       session.dispose();
     }

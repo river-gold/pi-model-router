@@ -21,6 +21,7 @@ import {
 } from "./config";
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS, ROUTER_PROVIDER } from "./constants";
 import { thinkingToTier } from "./routing";
+import { hasUsableAuth } from "./auth";
 
 /** 라우터별로 세션 브랜치에 저장되는 상태. */
 export interface RouterRouteState {
@@ -63,7 +64,7 @@ const resolveTier = (
   return found;
 };
 
-/** 후보 중 물리 모델이 존재하고 자격 증명이 있는 항목만 남긴다. */
+/** 후보 중 물리 모델이 존재하고 pi가 인증된 provider로 인정하는 항목만 남긴다. */
 const usableCandidates = async (
   candidates: readonly string[],
   ctx: ExtensionContext,
@@ -74,8 +75,7 @@ const usableCandidates = async (
     if (provider === ROUTER_PROVIDER) continue;
     const model = ctx.modelRegistry.find(provider, modelId);
     if (!model) continue;
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-    if (!auth.ok || !auth.apiKey) continue;
+    if (!(await hasUsableAuth(ctx, model))) continue;
     usable.push({ ref, model });
   }
   return usable;

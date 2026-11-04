@@ -41,12 +41,26 @@ Set `"random": true` on a router to select a model randomly per session and tier
 ## Routing behavior
 
 - The thinking level selects the tier. The physical model is chosen from the tier's candidates.
-- A candidate without a physical model or without credentials is skipped, so an unavailable first choice does not fail the turn.
+- A candidate is skipped when its model is missing, its provider lacks configured credentials, or its credentials cannot be resolved. This matches the check pi applies to the routed model, so a candidate pi would reject never becomes the route.
 - A failure before any output, including a billing error, falls back to another usable candidate. Each failed candidate is skipped for the rest of that recovery; after the request settles, the next user request starts a fresh selection. Pi's automatic retry policy may run before this recovery.
 - Context compaction and limits are handled by pi against the routed physical model.
 - Assistant messages record the physical model and thinking level that answered.
 
 Legacy classifier settings (`classifierModels`, `typesafeConfidenceThreshold`, `historySize`, `routeEveryTurn`, and `tierGuides`) are ignored. No classifier, JEV/TypeSafe API, or agy process is invoked.
+
+## Subagents
+
+The fallback above runs from a session event handler, so the extension must be loaded in the session that makes the request. A child session that only inherits the parent's providers (for example a foreground subagent, which does not load ambient extensions) has neither the virtual models nor the handler. Load the extension explicitly for those children:
+
+```json
+{
+  "subagents": {
+    "defaultSubagentOnlyExtensions": ["~/.pi/agent/git/github.com/river-gold/pi-model-router"]
+  }
+}
+```
+
+Use the directory pi installed the package into: `~/.pi/agent/git/<host>/<owner>/<repo>` for a git install, or `~/.pi/agent/npm/node_modules/@river-gold/pi-model-router` for an npm install. The same list is available per agent as `extensions`.
 
 ## Commands
 

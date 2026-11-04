@@ -34,7 +34,7 @@ export const makeFakeRegistry = (over: Partial<ModelRegistry> = {}): ModelRegist
       getAvailable: vi.fn(),
       find: vi.fn(),
       findOfType: vi.fn(),
-      hasConfiguredAuth: vi.fn(),
+      hasConfiguredAuth: vi.fn(() => true),
       getApiKeyAndHeaders: vi.fn(),
       getProviderAuthStatus: vi.fn(),
       getProvider: vi.fn(),

@@ -25,3 +25,5 @@ By default models are attempted in configuration order. With a router's `random`
 ## State and reliability
 
 Router state (random selections) is stored on the session branch by pi and restored automatically. Debug history and the last routing decision live in extension memory for the session. Credential and model availability are checked before a candidate is returned, so a broken candidate is skipped without failing the turn. Pi's automatic retries use `settings.retry`; after they finish, pre-output fallback can continue to remaining candidates.
+
+The fallback is a session event handler, so it only exists where the extension is loaded. A child session that inherits the parent's providers without loading the extension has routing but no fallback; load the extension in the child to close that gap.
