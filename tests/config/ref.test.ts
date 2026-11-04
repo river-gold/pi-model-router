@@ -50,8 +50,8 @@ const makeDelegationRouters = (): Record<string, Router> => {
 
 describe("위임 models 확장을 검증함", () => {
   describe("parseDelegatedRef 파싱을 검증함", () => {
-    it("router만 있으면 기본 티어(medium)로 파싱함을 검증함", () => {
-      expect(parseDelegatedRef("copilot")).toEqual({ router: "copilot", tier: "medium" });
+    it("router만 있으면 tier를 생략해 바깥 tier를 상속함을 검증함", () => {
+      expect(parseDelegatedRef("copilot")).toEqual({ router: "copilot" });
     });
     it("router#tier를 파싱함을 검증함", () => {
       expect(parseDelegatedRef("copilot#high")).toEqual({ router: "copilot", tier: "high" });
@@ -109,27 +109,26 @@ describe("위임 models 확장을 검증함", () => {
         "github-copilot/gpt-5.6-luna#high",
       ]);
     });
-    it("tier 없는 위임은 기본 티어(medium)로 펼침을 검증함", () => {
-      const resolved = dereferenceTier(makeRouters(), "auto", "high");
+    it("tier 없는 위임은 바깥 tier를 상속함을 검증함", () => {
       const routers = makeRouters();
       routers.auto!.high = { models: ["@copilot"] };
       const delegated = dereferenceTier(routers, "auto", "high");
       expect(delegated?.config.models).toEqual(
-        dereferenceTier(routers, "copilot", "medium")?.config.models,
+        dereferenceTier(routers, "copilot", "high")?.config.models,
       );
-      expect(resolved).toBeDefined();
+      expect(delegated?.chain).toEqual(["auto#high", "copilot#high"]);
     });
     it("tier effort는 직접 모델에만 강제하고 위임 대상의 effort는 유지함을 검증함", () => {
       const routers = makeDelegationRouters();
       expect(dereferenceTier(routers, "cheap", "max")?.config.models).toEqual([
-        "glm/g1#low",
+        "glm/g1#max",
         "ds/d1#low",
         "openai/luna#max",
         "xai/g#max",
       ]);
       expect(dereferenceTier(routers, "cheap", "high")?.config.models).toEqual([
         "ds/d1#low",
-        "glm/g1#low",
+        "glm/g1#high",
         "openai/luna#high",
         "xai/g#high",
       ]);

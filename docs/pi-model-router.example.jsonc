@@ -13,7 +13,7 @@
       "high": { "models": ["openai/example-large#high", "openai/example-backup#high"] },
     },
     "delegated": {
-      // 대상 tier를 생략하면 medium입니다.
+      // 대상 tier를 생략하면 현재 tier를 따릅니다.
       "medium": { "models": ["@balanced#medium", "openai/example-backup"] },
     },
   },

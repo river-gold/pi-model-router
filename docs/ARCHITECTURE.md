@@ -6,7 +6,7 @@ The `pi-model-router` extension registers each configured router as a pi [virtua
 
 A router has one or more of seven tiers: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. The current pi thinking level selects the corresponding tier. If it is not configured, the router uses the nearest available tier; `off` falls back in order from `minimal` to `max`. A router with only one resolvable tier uses that tier.
 
-Tier model lists support `@router`, `@router#tier`, and `@router#tier#effort` references. References are expanded at request time with cycle detection. A tier's `effort` overrides the model-level `#effort` on its direct models, but is not propagated through delegation; a reference can specify an explicit override.
+Tier model lists support `@router`, `@router#tier`, and `@router#tier#effort` references. References are expanded at request time with cycle detection. A reference without a tier follows the tier being resolved, so `@hyper` in a `high` tier resolves to `hyper`'s `high` tier. A tier's `effort` overrides the model-level `#effort` on its direct models, but is not propagated through delegation; the referenced router's own tier effort applies.
 
 For a continuation request pi passes the physical model that answered the turn; the router returns it unchanged to preserve the tool loop and the prompt cache. On a retry the router excludes the failed model and picks the next candidate. Candidates without a physical model or without credentials are skipped.
 

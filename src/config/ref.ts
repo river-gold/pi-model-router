@@ -52,6 +52,8 @@ interface ModelNode {
   raw: string;
   pin: ThinkingLevel | undefined;
   tierEffort: ThinkingLevel | undefined;
+  /** tier를 생략한 위임 참조가 상속할 바깥 tier. */
+  inheritTier: RouterTier;
   visited: ReadonlySet<string>;
 }
 
@@ -82,7 +84,8 @@ const expandQueue = (ctx: ExpansionContext, queue: ModelNode[]): void => {
   const trimmed = head.raw.trim();
   if (trimmed.startsWith("@")) {
     const parsed = parseDelegatedRef(trimmed.slice(1).trim());
-    const found = parsed ? tierEntryOf(ctx.routers, parsed.router, parsed.tier) : undefined;
+    const targetTier = parsed?.tier ?? head.inheritTier;
+    const found = parsed ? tierEntryOf(ctx.routers, parsed.router, targetTier) : undefined;
     if (!parsed || !found || head.visited.has(`${parsed.router}#${found.tier}`)) {
       expandQueue(ctx, rest);
       return;
@@ -96,6 +99,7 @@ const expandQueue = (ctx: ExpansionContext, queue: ModelNode[]): void => {
         raw,
         pin,
         tierEffort: tierForcing(found.entry),
+        inheritTier: found.tier,
         visited: nextVisited,
       })),
       ...rest,
@@ -140,6 +144,7 @@ export const dereferenceTier = (
       raw,
       pin: undefined,
       tierEffort: topTierEffort,
+      inheritTier: located.tier,
       visited: topVisited,
     })),
   );

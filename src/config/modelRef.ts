@@ -6,25 +6,23 @@ import { isRouterTier } from "./guards";
 const isAllowedThinking = (value: string): value is ThinkingLevel =>
   (ALLOWED_THINKING as readonly string[]).includes(value);
 
-/** tier 없는 위임(`@router`)이 따라가는 기본 tier. */
-export const DELEGATION_DEFAULT_TIER: RouterTier = "medium";
-
 export interface ParsedDelegatedRef {
   router: string;
-  tier: RouterTier;
+  /** 명시된 tier. 생략하면 undefined이며, 호출부가 바깥 tier를 상속한다. */
+  tier?: RouterTier;
   effort?: ThinkingLevel;
 }
 
 /**
  * `@` 뒤의 위임 참조를 파싱함: `router` / `router#tier` / `router#tier#effort`.
- * tier 생략 시 기본 티어(medium)를 따라감.
+ * tier를 생략하면 tier는 undefined가 되고, 호출부가 바깥 tier를 상속한다.
  */
 export const parseDelegatedRef = (raw: string): ParsedDelegatedRef | undefined => {
   const parts = raw.split("#");
   if (parts.length > 3) return undefined;
   const router = parts[0]!.trim();
   if (!router) return undefined;
-  if (parts.length === 1) return { router, tier: DELEGATION_DEFAULT_TIER };
+  if (parts.length === 1) return { router };
   const tier = parts[1]!.trim();
   if (!isRouterTier(tier)) return undefined;
   if (parts.length === 2) return { router, tier };
