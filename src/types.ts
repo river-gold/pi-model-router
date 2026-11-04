@@ -44,19 +44,6 @@ export interface RoutingDecision {
   isFallback?: boolean;
 }
 
-export interface RouterPersistedState {
-  randomSessionId?: string;
-  randomSelections?: Record<string, string>;
-  enabled: boolean;
-  selectedRouter: string;
-  debugEnabled?: boolean;
-  debugHistory?: RoutingDecision[];
-  lastDecision?: RoutingDecision;
-  lastNonRouterModel?: string;
-  accumulatedCost?: number;
-  timestamp: number;
-}
-
 export interface ConfigLoadResult {
   config: RouterConfig;
   warnings: string[];
@@ -65,10 +52,4 @@ export interface ConfigLoadResult {
 export interface ParsedConfigFile {
   config: Partial<RouterConfig>;
   warnings: string[];
-}
-
-export interface CustomSessionEntry {
-  type: string;
-  customType?: string;
-  data?: unknown;
 }

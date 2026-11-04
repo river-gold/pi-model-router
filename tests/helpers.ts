@@ -1,18 +1,10 @@
 import { vi } from "vitest";
-import type {
-  Api,
-  AssistantMessage,
-  AssistantMessageEvent,
-  Model,
-  Provider,
-} from "@earendil-works/pi-ai";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type {
   ExtensionAPI,
   ExtensionContext,
   ModelRegistry,
 } from "@earendil-works/pi-coding-agent";
-import type { RouterProviderState } from "../src/provider/state";
 import type { RoutingDecision } from "../src/types";
 
 /** 부분 재정의와 Object.assign 교차로 완전한 fake를 만든다. 캐스팅 없음. */
@@ -33,19 +25,6 @@ export const makeFakeModel = (over: Partial<Model<Api>> = {}): Model<Api> =>
     over,
   );
 
-export const makeFakeProvider = (over: Partial<Provider> = {}): Provider =>
-  Object.assign(
-    {
-      id: "test-provider",
-      name: "test-provider",
-      auth: {},
-      getModels: (): readonly Model<Api>[] => [],
-      stream: vi.fn(),
-      streamSimple: vi.fn(),
-    },
-    over,
-  );
-
 export const makeFakeRegistry = (over: Partial<ModelRegistry> = {}): ModelRegistry =>
   Object.assign(
     {
@@ -54,20 +33,14 @@ export const makeFakeRegistry = (over: Partial<ModelRegistry> = {}): ModelRegist
       getAll: vi.fn(),
       getAvailable: vi.fn(),
       find: vi.fn(),
+      findOfType: vi.fn(),
       hasConfiguredAuth: vi.fn(),
       getApiKeyAndHeaders: vi.fn(),
       getProviderAuthStatus: vi.fn(),
       getProvider: vi.fn(),
-      complete: vi.fn(),
       getProviderDisplayName: vi.fn(),
       getProviderAuth: vi.fn(),
       getApiKeyForProvider: vi.fn(),
-      isUsingOAuth: vi.fn(),
-      registerProvider: vi.fn(),
-      unregisterProvider: vi.fn(),
-      getRegisteredProviderConfig: vi.fn(),
-      getRegisteredNativeProvider: vi.fn(),
-      getRegisteredProviderIds: vi.fn(),
     },
     over,
   );
@@ -180,6 +153,8 @@ export const makeFakePi = (over: Partial<ExtensionAPI> = {}): ExtensionAPI =>
       setThinkingLevel: vi.fn(),
       registerProvider: vi.fn(),
       unregisterProvider: vi.fn(),
+      registerVirtualModel: vi.fn(),
+      unregisterVirtualModel: vi.fn(),
       events: { emit: vi.fn(), on: vi.fn() },
     },
     over,
@@ -198,95 +173,3 @@ export const makeFakeDecision = (over: Partial<RoutingDecision> = {}): RoutingDe
     },
     over,
   );
-
-export const makeFakeProviderState = (
-  over: Partial<RouterProviderState> = {},
-): RouterProviderState =>
-  Object.assign(
-    {
-      lastRegisteredModels: "",
-      currentConfig: { routers: {} },
-      currentModelRegistry: undefined,
-      lastExtensionContext: undefined,
-      selectedRouter: undefined,
-      routerEnabled: false,
-      lastDecision: undefined,
-      accumulatedCost: 0,
-      failedByChain: new Map(),
-    },
-    over,
-  );
-
-export const fakeMessage = (over: Partial<AssistantMessage> = {}): AssistantMessage =>
-  Object.assign(
-    {
-      role: "assistant",
-      content: [{ type: "text", text: "hi" }],
-      api: "openai-completions",
-      provider: "openai",
-      model: "test-model",
-      usage: {
-        input: 1,
-        output: 1,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 2,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
-      stopReason: "stop",
-      timestamp: 0,
-    },
-    over,
-  );
-
-export const textDeltaEvent = (delta: string): AssistantMessageEvent => ({
-  type: "text_delta",
-  contentIndex: 0,
-  delta,
-  partial: fakeMessage(),
-});
-
-export const doneEventWithCost = (total: number): AssistantMessageEvent => ({
-  type: "done",
-  reason: "stop",
-  message: {
-    ...fakeMessage(),
-    usage: {
-      ...fakeMessage().usage,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total },
-    },
-  },
-});
-
-export const errorEvent = (errorMessage: string): AssistantMessageEvent => ({
-  type: "error",
-  reason: "error",
-  error: { ...fakeMessage(), errorMessage },
-});
-
-/** 실제 EventStream에 이벤트를 미리 적재한다. for-await로 소진된다. */
-export const streamOf = (...events: AssistantMessageEvent[]) => {
-  const stream = createAssistantMessageEventStream();
-  for (const event of events) stream.push(event);
-  stream.end();
-  return stream;
-};
-
-/** 실제 스트림 + push 스파이. 호출자 스트림 fake용. */
-export const makeStreamSpy = () => {
-  const stream = createAssistantMessageEventStream();
-  const push = vi.spyOn(stream, "push");
-  return { stream, push };
-};
-
-export const fakeSignal = (aborted: boolean): AbortSignal => ({
-  aborted,
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  dispatchEvent: vi.fn(() => true),
-  onabort: null,
-  reason: aborted ? new Error("aborted") : undefined,
-  throwIfAborted: (): void => {
-    if (aborted) throw new Error("aborted");
-  },
-});

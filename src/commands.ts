@@ -1,57 +1,58 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import type { RouterConfig, RoutingDecision } from "./types";
-import { routerNames } from "./config";
-import { clearRateLimitCooldowns } from "./failureMemory";
-import { formatModelRef, formatDecision } from "./ui";
+import { routerNames, resolveRouterName } from "./config";
+import { ROUTER_PROVIDER } from "./constants";
+import { formatDecision } from "./ui";
+import type { createRouterActions } from "./index/actions";
 
 export const SUBCOMMAND_DETAILS = [
   { name: "status", desc: "Show current router status" },
   { name: "debug", desc: "Toggle or clear router debug history" },
   { name: "reload", desc: "Reload the model router configuration" },
-  { name: "reset-failures", desc: "Clear session failure memory (chain-local, in-memory)" },
   { name: "help", desc: "Show usage help for subcommands" },
 ] as const;
 
 const USAGE_STATUS = "Usage: /router status (no arguments)";
 const USAGE_DEBUG = "Usage: /router debug <on|off|toggle|show|clear>";
 const USAGE_RELOAD = "Usage: /router reload (no arguments)";
-const USAGE_RESET = "Usage: /router reset-failures (no arguments)";
 const USAGE_HELP = "Usage: /router help (no arguments)";
 
 const HELP_LINES = [
   "Router Subcommands:",
-  "  status                           Show current status, router, cost, and last decision.",
+  "  status                           Show current status, router, and last decision.",
   "  debug <on|off|toggle|show|clear> Control routing debug logging to notifications and history.",
   "  reload                           Hot-reload the configuration JSON from .pi/pi-model-router.json.",
-  "  reset-failures                 Clear session failure memory (in-memory, chain-local).",
   "  help, ?                          Show this help message.",
 ];
 
-type RouterStateView = {
+export type RouterStateView = {
   readonly currentConfig: RouterConfig;
-  routerEnabled: boolean;
-  selectedRouter: string | undefined;
   readonly lastDecision: RoutingDecision | undefined;
-  lastNonRouterModel: string | undefined;
-  readonly accumulatedCost: number;
   debugEnabled: boolean;
   debugHistory: RoutingDecision[];
   readonly lastConfigWarnings: string[];
-  readonly failedByChain: Map<string, Set<string>>;
+};
+
+export type ActiveRouter = { enabled: boolean; router: string | undefined };
+
+export const resolveActiveRouter = (
+  config: RouterConfig,
+  model: { provider: string; id: string } | undefined,
+): ActiveRouter => {
+  if (model?.provider !== ROUTER_PROVIDER) return { enabled: false, router: undefined };
+  return { enabled: true, router: resolveRouterName(config, model.id) };
 };
 
 const formatEffort = (effort: string | undefined): string => effort ?? "auto";
 
-export const formatStatusLines = (state: RouterStateView): string[] => {
+export const formatStatusLines = (state: RouterStateView, active: ActiveRouter): string[] => {
   const names = routerNames(state.currentConfig).join(", ");
   const lines = [
     "Model Router Status:",
-    `Router enabled: ${state.routerEnabled ? "yes" : "off"}`,
-    `Selected router: ${state.selectedRouter ?? "none"}`,
-    `Session cost: $${state.accumulatedCost.toFixed(4)}`,
+    `Router enabled: ${active.enabled ? "yes" : "off"}`,
+    `Selected router: ${active.router ?? "none"}`,
     `Available routers: ${names}`,
-    `Last non-router model: ${formatModelRef(state.lastNonRouterModel)}`,
     `Debug: ${state.debugEnabled ? "on" : "off"}`,
     `Debug history: ${state.debugHistory.length} decisions`,
   ];
@@ -61,15 +62,6 @@ export const formatStatusLines = (state: RouterStateView): string[] => {
       `Last model: ${state.lastDecision.targetProvider}/${state.lastDecision.targetModelId} (${formatEffort(state.lastDecision.effort)})`,
       `Reason: ${state.lastDecision.reasoning}`,
     );
-  }
-  if (state.failedByChain.size === 0) {
-    lines.push("Session failures: none (in-memory, chain-local)");
-  } else {
-    lines.push("Session failures (in-memory, chain-local):");
-    for (const [chain, set] of state.failedByChain.entries()) {
-      if (set.size === 0) continue;
-      lines.push(`  ${chain}: ${[...set].join(", ")}`);
-    }
   }
   if (state.lastConfigWarnings.length > 0) {
     lines.push(
@@ -96,7 +88,7 @@ export const parsePrefix = (
   const hasTrailingSpace = /\s$/.test(prefix);
   if (trimmedLeft.length === 0) return { subcommand: "", subArgs: [], hasTrailingSpace: false };
   const parts = trimmedLeft.split(/\s+/);
-  return { subcommand: parts[0], subArgs: parts.slice(1), hasTrailingSpace };
+  return { subcommand: parts[0]!, subArgs: parts.slice(1), hasTrailingSpace };
 };
 
 export const parseArgs = (
@@ -120,23 +112,18 @@ const getSubcommandCompletions = (prefix: string): AutocompleteItem[] | null => 
 export const registerCommands = (
   pi: ExtensionAPI,
   state: RouterStateView,
-  actions: {
-    persistState: () => void;
-    updateStatus: (ctx: ExtensionContext) => void;
-    reloadConfig: (ctx?: ExtensionContext, options?: { preserveDebug?: boolean }) => void;
-    ensureValidActiveRouter: (ctx: ExtensionContext) => Promise<void>;
-  },
+  actions: ReturnType<typeof createRouterActions>,
 ) => {
-  const handleStatus = async (args: string[], ctx: ExtensionContext) => {
+  const handleStatus = async (args: string[], ctx: ExtensionCommandContext) => {
     if (args.length > 0) {
       ctx.ui.notify(USAGE_STATUS, "error");
       return;
     }
-    ctx.ui.notify(formatStatusLines(state).join("\n"), "info");
-    actions.updateStatus(ctx);
+    const active = resolveActiveRouter(state.currentConfig, ctx.model);
+    ctx.ui.notify(formatStatusLines(state, active).join("\n"), "info");
   };
 
-  const handleDebug = async (args: string[], ctx: ExtensionContext) => {
+  const handleDebug = async (args: string[], ctx: ExtensionCommandContext) => {
     if (args.length > 1) {
       ctx.ui.notify(USAGE_DEBUG, "error");
       return;
@@ -147,7 +134,6 @@ export const registerCommands = (
     else if (cmd === "toggle") state.debugEnabled = !state.debugEnabled;
     else if (cmd === "clear") {
       state.debugHistory = [];
-      actions.persistState();
       ctx.ui.notify("Router debug cleared.", "info");
       return;
     } else if (cmd === "show") {
@@ -159,31 +145,19 @@ export const registerCommands = (
       ctx.ui.notify(USAGE_DEBUG, "error");
       return;
     }
-    actions.persistState();
     ctx.ui.notify(`Router debug ${state.debugEnabled ? "enabled" : "disabled"}.`, "info");
   };
 
-  const handleReload = async (args: string[], ctx: ExtensionContext) => {
+  const handleReload = async (args: string[], ctx: ExtensionCommandContext) => {
     if (args.length > 0) {
       ctx.ui.notify(USAGE_RELOAD, "error");
       return;
     }
     actions.reloadConfig(ctx, { preserveDebug: true });
-    await actions.ensureValidActiveRouter(ctx);
     ctx.ui.notify(
       `Router config reloaded. Routers: ${routerNames(state.currentConfig).join(", ")}`,
       "info",
     );
-  };
-
-  const handleResetFailures = async (args: string[], ctx: ExtensionContext) => {
-    if (args.length > 0) {
-      ctx.ui.notify(USAGE_RESET, "error");
-      return;
-    }
-    state.failedByChain.clear();
-    clearRateLimitCooldowns();
-    ctx.ui.notify("Router session failures cleared (in-memory, chain-local).", "info");
   };
 
   pi.registerCommand("router", {
@@ -213,9 +187,6 @@ export const registerCommands = (
           break;
         case "status":
           await handleStatus(subArgs, ctx);
-          break;
-        case "reset-failures":
-          await handleResetFailures(subArgs, ctx);
           break;
         case "help":
         case "?":

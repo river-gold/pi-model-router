@@ -36,4 +36,3 @@ export {
   resolveContextWindowLive,
   resolveMaxTokensLive,
 } from "./registry";
-export { resolveDelegatedReasoning } from "./reasoning";

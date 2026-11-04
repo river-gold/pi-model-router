@@ -1,44 +1,24 @@
-import type { RouterConfig, RoutingDecision } from "../types";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { RouterConfig, RoutingDecision } from "../types";
 
 export type RouterState = {
   currentConfig: RouterConfig;
-  currentModelRegistry: ExtensionContext["modelRegistry"] | undefined;
   currentCwd: string;
+  currentModelRegistry: ExtensionContext["modelRegistry"] | undefined;
+  lastExtensionContext: ExtensionContext | undefined;
   lastDecision: RoutingDecision | undefined;
   debugEnabled: boolean;
-  routerEnabled: boolean;
-  selectedRouter: string | undefined;
-  lastRegisteredModels: string;
   debugHistory: RoutingDecision[];
-  lastNonRouterModel: string | undefined;
-  accumulatedCost: number;
-  lastExtensionContext: ExtensionContext | undefined;
   lastConfigWarnings: string[];
-  lastPersistedSnapshot: string | undefined;
-  isInitialized: boolean;
-  isInternalModelSwitch: number;
-  failedByChain: Map<string, Set<string>>;
-  randomSelections: Record<string, string>;
 };
 
 export const createRouterState = (): RouterState => ({
   currentConfig: { routers: {} },
-  currentModelRegistry: undefined,
   currentCwd: process.cwd(),
+  currentModelRegistry: undefined,
+  lastExtensionContext: undefined,
   lastDecision: undefined,
   debugEnabled: false,
-  routerEnabled: false,
-  selectedRouter: undefined,
-  lastRegisteredModels: "",
   debugHistory: [],
-  lastNonRouterModel: undefined,
-  accumulatedCost: 0,
-  lastExtensionContext: undefined,
   lastConfigWarnings: [],
-  lastPersistedSnapshot: undefined,
-  isInitialized: false,
-  isInternalModelSwitch: 0,
-  failedByChain: new Map<string, Set<string>>(),
-  randomSelections: {},
 });

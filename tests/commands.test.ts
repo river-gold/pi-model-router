@@ -1,277 +1,172 @@
-import { describe, it, expect, vi } from "vitest";
-import { registerCommands } from "../src/commands";
+import { describe, expect, it, vi } from "vitest";
+import type { RegisteredCommand } from "@earendil-works/pi-coding-agent";
+import {
+  buildDebugShowMessage,
+  formatStatusLines,
+  parseArgs,
+  parsePrefix,
+  registerCommands,
+  resolveActiveRouter,
+} from "../src/commands";
+import type { RouterStateView } from "../src/commands";
 import type { RouterConfig } from "../src/types";
-import type { RoutingDecision } from "../src/types";
-import { makeFakeDecision, makeFakeExtensionContext, makeFakePi, makeFakeUi } from "./helpers";
+import { makeFakeDecision, makeFakeExtensionContext, makeFakePi } from "./helpers";
 
-const makePiAndCommand = (
-  s: Parameters<typeof registerCommands>[1],
-  a: Parameters<typeof registerCommands>[2],
-) => {
-  const commands = new Map<string, unknown>();
-  const registerCommand = vi.fn((name: string, cmd: unknown) => {
-    commands.set(name, cmd);
-  });
-  const pi = makeFakePi({ registerCommand });
-  registerCommands(pi, s, a);
-  const cmd = commands.get("router");
-  if (typeof cmd !== "object" || cmd === null) expect.unreachable();
-  if (!("handler" in cmd) || typeof cmd.handler !== "function") expect.unreachable();
-  const handler = cmd.handler;
-  const getCompletions =
-    "getArgumentCompletions" in cmd && typeof cmd.getArgumentCompletions === "function"
-      ? cmd.getArgumentCompletions
-      : undefined;
-  if (getCompletions === undefined) expect.unreachable();
-  return { pi, handler, getCompletions };
-};
-const makeCtx = () => {
-  const notify = vi.fn();
-  const setStatus = vi.fn();
-  const ctx = makeFakeExtensionContext({ ui: makeFakeUi({ notify, setStatus }) });
-  return { ctx, notify, setStatus };
-};
-const makeActs = () => {
-  const persistState = vi.fn();
-  const updateStatus = vi.fn();
-  const reloadConfig = vi.fn();
-  const ensureValidActiveRouter = vi.fn().mockResolvedValue(undefined);
-  const actions = { persistState, updateStatus, reloadConfig, ensureValidActiveRouter };
-  return { actions, persistState, updateStatus, reloadConfig, ensureValidActiveRouter };
-};
-const makeCfg = (over: Partial<RouterConfig> = {}): RouterConfig => ({
-  routers: {
-    balanced: { high: { models: ["openai/gpt"] } },
-    cheap: { low: { models: ["openai/gpt-mini"] } },
-  },
+const config: RouterConfig = { routers: { balanced: { medium: { models: ["p/a"] } } } };
+
+const makeState = (over: Partial<RouterStateView> = {}): RouterStateView => ({
+  currentConfig: config,
+  lastDecision: undefined,
+  debugEnabled: false,
+  debugHistory: [],
+  lastConfigWarnings: [],
   ...over,
 });
-const makeDecis = (over: Partial<RoutingDecision> = {}): RoutingDecision =>
-  makeFakeDecision({
-    router: "balanced",
-    tier: "high",
-    targetProvider: "openai",
-    targetModelId: "gpt",
-    targetLabel: "openai/gpt",
-    reasoning: "r",
-    effort: "high",
-    ...over,
-  });
-const makeState = (over: Partial<Parameters<typeof registerCommands>[1]> = {}) =>
-  Object.assign(
-    {
-      currentConfig: makeCfg(),
-      routerEnabled: true,
-      selectedRouter: "balanced" as string | undefined,
-      lastDecision: makeDecis() as RoutingDecision | undefined,
-      lastNonRouterModel: "openai/gpt" as string | undefined,
-      accumulatedCost: 0.01,
-      debugEnabled: false,
-      debugHistory: [makeDecis()],
-      lastConfigWarnings: [] as string[],
-      failedByChain: new Map<string, Set<string>>(),
-    },
-    over,
-  );
 
-const firstNotifyArg = (notify: ReturnType<typeof vi.fn>): string => {
-  const first = notify.mock.calls[0];
-  if (first === undefined) expect.unreachable();
-  const msg = first[0];
-  if (typeof msg !== "string") expect.unreachable();
-  return msg;
+const setup = (state: RouterStateView = makeState()) => {
+  const pi = makeFakePi();
+  const actions = { reloadConfig: vi.fn() };
+  registerCommands(pi, state, actions);
+  const command = (pi.registerCommand as ReturnType<typeof vi.fn>).mock
+    .calls[0]![1] as RegisteredCommand;
+  const ctx = makeFakeExtensionContext();
+  return { pi, actions, command, ctx, state };
 };
 
-describe("commands 명령어는", () => {
-  it("status는 인자 없이 상태를 표시한다", async () => {
-    const s = makeState({ debugEnabled: true });
-    const { actions, updateStatus } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Model Router Status:"), "info");
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Debug: on"), "info");
-    expect(updateStatus).toHaveBeenCalled();
+const notifyText = (ctx: ReturnType<typeof makeFakeExtensionContext>, index = 0): string =>
+  (ctx.ui.notify as ReturnType<typeof vi.fn>).mock.calls[index]![0] as string;
+
+describe("/router 명령", () => {
+  it("status는 현재 라우터 상태를 알린다", async () => {
+    const { command, ctx } = setup();
+    await command.handler("status", ctx);
+    expect(notifyText(ctx)).toContain("Model Router Status:");
   });
-  it("status는 인자가 있으면 에러를 표시한다", async () => {
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(makeState(), actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status extra", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Usage: /router status"), "error");
+
+  it("status는 인자가 있으면 사용법을 알린다", async () => {
+    const { command, ctx } = setup();
+    await command.handler("status extra", ctx);
+    expect(notifyText(ctx)).toContain("Usage: /router status");
   });
-  it("status는 lastDecision과 auto thinking을 표시한다", async () => {
-    const s = makeState({ lastDecision: makeDecis({ effort: undefined }) });
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("(auto)"), "info");
+
+  it("인자 없는 호출은 status로 처리한다", async () => {
+    const { command, ctx } = setup();
+    await command.handler("", ctx);
+    expect(notifyText(ctx)).toContain("Model Router Status:");
   });
-  it("status는 lastDecision이 없고 router가 비활성화된 경우를 표시한다", async () => {
-    const s = makeState({
-      lastDecision: undefined,
-      routerEnabled: false,
-      selectedRouter: undefined,
+
+  it("debug on/off/toggle/clear/show를 처리한다", async () => {
+    const { command, ctx, state } = setup();
+    await command.handler("debug on", ctx);
+    expect(state.debugEnabled).toBe(true);
+    await command.handler("debug off", ctx);
+    expect(state.debugEnabled).toBe(false);
+    await command.handler("debug", ctx);
+    expect(state.debugEnabled).toBe(true);
+    await command.handler("debug toggle", ctx);
+    expect(state.debugEnabled).toBe(false);
+    state.debugHistory = [makeFakeDecision()];
+    await command.handler("debug show", ctx);
+    expect(notifyText(ctx, 4)).toContain("Recent Routing Decisions:");
+    await command.handler("debug clear", ctx);
+    expect(state.debugHistory).toEqual([]);
+  });
+
+  it("debug 인자가 너무 많거나 잘못되면 사용법을 알린다", async () => {
+    const { command, ctx } = setup();
+    await command.handler("debug on extra", ctx);
+    expect(notifyText(ctx)).toContain("Usage: /router debug");
+    await command.handler("debug bogus", ctx);
+    expect(notifyText(ctx, 1)).toContain("Usage: /router debug");
+  });
+
+  it("reload는 설정을 다시 읽는다", async () => {
+    const { command, ctx, actions } = setup();
+    await command.handler("reload", ctx);
+    expect(actions.reloadConfig).toHaveBeenCalled();
+    expect(notifyText(ctx)).toContain("Router config reloaded");
+  });
+
+  it("reload 인자가 있으면 사용법을 알린다", async () => {
+    const { command, ctx } = setup();
+    await command.handler("reload now", ctx);
+    expect(notifyText(ctx)).toContain("Usage: /router reload");
+  });
+
+  it("help를 알린다", async () => {
+    const { command, ctx } = setup();
+    await command.handler("help", ctx);
+    expect(notifyText(ctx)).toContain("Router Subcommands:");
+    await command.handler("help extra", ctx);
+    expect(notifyText(ctx, 1)).toContain("Usage: /router help");
+  });
+
+  it("알 수 없는 하위 명령을 알린다", async () => {
+    const { command, ctx } = setup();
+    await command.handler("bogus", ctx);
+    expect(notifyText(ctx)).toContain("Unknown router subcommand");
+  });
+
+  it("인자 완성을 제공한다", () => {
+    const { command } = setup();
+    expect(command.getArgumentCompletions?.("st")).toEqual([
+      { value: "status", label: "status", description: expect.any(String) },
+    ]);
+    expect(command.getArgumentCompletions?.("debug ")).toEqual(
+      expect.arrayContaining([{ value: "debug on", label: "on", description: expect.any(String) }]),
+    );
+    expect(command.getArgumentCompletions?.("bogus ")).toBeNull();
+    expect(command.getArgumentCompletions?.("zzz")).toBeNull();
+    expect(command.getArgumentCompletions?.("status x")).toBeNull();
+    expect(command.getArgumentCompletions?.("debug z")).toBeNull();
+    expect(command.getArgumentCompletions?.("")).toHaveLength(4);
+    expect(command.getArgumentCompletions?.("debug")).toHaveLength(5);
+  });
+});
+
+describe("status 포맷", () => {
+  it("마지막 결정과 경고를 포함한다", () => {
+    const state = makeState({
+      lastDecision: makeFakeDecision({ effort: "high" }),
+      lastConfigWarnings: ["warn"],
+      debugEnabled: true,
     });
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status", ctx);
-    const msg = firstNotifyArg(notify);
-    expect(msg).toContain("Router enabled: off");
-    expect(msg).toContain("Selected router: none");
-    expect(msg).not.toContain("Last routed tier");
+    const lines = formatStatusLines(state, { enabled: true, router: "balanced" });
+    expect(lines.join("\n")).toContain("Last model: openai/gpt (high)");
+    expect(lines.join("\n")).toContain("⚠️ Configuration Warnings:");
   });
-  it("status는 failures와 warnings를 표시한다", async () => {
-    const s = makeState({
-      failedByChain: new Map([
-        ["chain:a", new Set(["openai/gpt"])],
-        ["empty", new Set()],
-      ]),
-      lastConfigWarnings: ["w1"],
+
+  it("활성 라우터를 모델에서 판별한다", () => {
+    expect(resolveActiveRouter(config, { provider: "router", id: "balanced" })).toEqual({
+      enabled: true,
+      router: "balanced",
     });
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status", ctx);
-    const msg = firstNotifyArg(notify);
-    expect(msg).toContain("Session failures");
-    expect(msg).toContain("chain:a");
-    expect(msg).toContain("w1");
+    expect(resolveActiveRouter(config, { provider: "openai", id: "gpt" })).toEqual({
+      enabled: false,
+      router: undefined,
+    });
+    expect(resolveActiveRouter(config, undefined)).toEqual({ enabled: false, router: undefined });
   });
-  it("status는 failures가 비어 있으면 none을 표시한다", async () => {
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(makeState({ failedByChain: new Map() }), actions);
-    const { ctx, notify } = makeCtx();
-    await handler("status", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Session failures: none"), "info");
+
+  it("debug show는 빈 기록을 처리한다", () => {
+    expect(buildDebugShowMessage([])).toBe("No recent routing decisions.");
   });
-  it("debug는 on/off/toggle/clear/show/empty/invalid 동작을 처리한다", async () => {
-    const s = makeState({ debugEnabled: false, debugHistory: [makeDecis()] });
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx, notify } = makeCtx();
-    await handler("debug on", ctx);
-    expect(s.debugEnabled).toBe(true);
-    await handler("debug off", ctx);
-    expect(s.debugEnabled).toBe(false);
-    await handler("debug toggle", ctx);
-    expect(s.debugEnabled).toBe(true);
-    await handler("debug", ctx);
-    expect(s.debugEnabled).toBe(false);
-    await handler("debug show", ctx);
-    expect(notify).toHaveBeenCalledWith(
-      expect.stringContaining("Recent Routing Decisions"),
-      "info",
-    );
-    s.debugHistory = [];
-    await handler("debug show", ctx);
-    expect(notify).toHaveBeenCalledWith("No recent routing decisions.", "info");
-    await handler("debug clear", ctx);
-    expect(s.debugHistory.length).toBe(0);
-    const second = makeCtx();
-    await handler("debug invalid", second.ctx);
-    expect(second.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
-    const third = makeCtx();
-    await handler("debug on extra", third.ctx);
-    expect(third.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
+
+  it("비활성 상태와 effort 없음도 표시한다", () => {
+    const state = makeState({ lastDecision: makeFakeDecision({ effort: undefined }) });
+    const text = formatStatusLines(state, { enabled: false, router: undefined }).join("\n");
+    expect(text).toContain("Router enabled: off");
+    expect(text).toContain("(auto)");
   });
-  it("reload는 성공과 인자 오류를 처리한다", async () => {
-    const s = makeState();
-    const { actions, reloadConfig, ensureValidActiveRouter } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx } = makeCtx();
-    await handler("reload", ctx);
-    expect(reloadConfig).toHaveBeenCalledWith(ctx, { preserveDebug: true });
-    expect(ensureValidActiveRouter).toHaveBeenCalled();
-    const second = makeCtx();
-    await handler("reload extra", second.ctx);
-    expect(second.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
-  });
-  it("reset-failures는 초기화와 오류를 처리한다", async () => {
-    const s = makeState({ failedByChain: new Map([["a", new Set(["x"])]]) });
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(s, actions);
-    const { ctx } = makeCtx();
-    await handler("reset-failures", ctx);
-    expect(s.failedByChain.size).toBe(0);
-    const second = makeCtx();
-    await handler("reset-failures extra", second.ctx);
-    expect(second.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
-  });
-  it("help와 ?는 도움말과 인자 오류를 처리한다", async () => {
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(makeState(), actions);
-    const { ctx, notify } = makeCtx();
-    await handler("help", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Router Subcommands"), "info");
-    const second = makeCtx();
-    await handler("?", second.ctx);
-    expect(second.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Router Subcommands"),
-      "info",
-    );
-    const third = makeCtx();
-    await handler("help extra", third.ctx);
-    expect(third.notify).toHaveBeenCalledWith(expect.stringContaining("Usage"), "error");
-  });
-  it("unknown 명령어와 빈 입력은 fallback으로 처리한다", async () => {
-    const { actions } = makeActs();
-    const { handler } = makePiAndCommand(makeState(), actions);
-    const { ctx, notify } = makeCtx();
-    await handler("unknowncmd", ctx);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Unknown"), "error");
-    const second = makeCtx();
-    await handler("", second.ctx);
-    expect(second.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Model Router Status"),
-      "info",
-    );
-    const third = makeCtx();
-    await handler(undefined, third.ctx);
-    expect(third.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Model Router Status"),
-      "info",
-    );
-    const fourth = makeCtx();
-    await handler("   ", fourth.ctx);
-    expect(fourth.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Model Router Status"),
-      "info",
-    );
-  });
-  it("getArgumentCompletions는 empty/partial/debug/unknown 입력을 처리한다", () => {
-    const { actions } = makeActs();
-    const { getCompletions: g } = makePiAndCommand(makeState(), actions);
-    const empty = g("");
-    if (empty === null) expect.unreachable();
-    expect(empty).not.toBeNull();
-    expect(empty.map((x) => x.value)).toContain("status");
-    const st = g("st");
-    if (st === null) expect.unreachable();
-    expect(st.map((x) => x.value)).toContain("status");
-    expect(g("zzz")).toBeNull();
-    const padded = g("  st");
-    if (padded === null) expect.unreachable();
-    expect(padded.map((x) => x.value)).toContain("status");
-    const debug = g("debug");
-    if (debug === null) expect.unreachable();
-    expect(debug).not.toBeNull();
-    const debugItems = g("debug");
-    if (debugItems === null) expect.unreachable();
-    expect(debugItems.map((x) => x.value)).toContain("debug on");
-    const debugSpace = g("debug ");
-    if (debugSpace === null) expect.unreachable();
-    expect(debugSpace.map((x) => x.value)).toContain("debug on");
-    const debugO = g("debug o");
-    if (debugO === null) expect.unreachable();
-    expect(debugO.map((x) => x.value)).toContain("debug on");
-    expect(g("debug zzz")).toBeNull();
-    expect(g("status ")).toBeNull();
-    expect(g("unknown ")).toBeNull();
-    const spaces = g("   ");
-    if (spaces === null) expect.unreachable();
-    expect(spaces).not.toBeNull();
+
+  it("parseArgs와 parsePrefix를 처리한다", () => {
+    expect(parseArgs(undefined)).toEqual({ subcommand: undefined, subArgs: [] });
+    expect(parseArgs("a b")).toEqual({ subcommand: "a", subArgs: ["b"] });
+    expect(parsePrefix("")).toEqual({ subcommand: "", subArgs: [], hasTrailingSpace: false });
+    expect(parsePrefix("debug ")).toEqual({
+      subcommand: "debug",
+      subArgs: [""],
+      hasTrailingSpace: true,
+    });
   });
 });

@@ -16,7 +16,6 @@ let server: Server;
 let root: string;
 let endpoint: string;
 const received: string[] = [];
-const efforts: (string | undefined)[] = [];
 const failedModels = new Set<string>();
 afterEach(() => {
   vi.restoreAllMocks();
@@ -24,17 +23,25 @@ afterEach(() => {
 });
 
 beforeAll(async () => {
-  root = mkdtempSync(join(tmpdir(), "router-session-e2e-"));
+  root = mkdtempSync(join(tmpdir(), "router-virtual-e2e-"));
   mkdirSync(join(root, ".pi"));
   writeFileSync(
     join(root, ".pi", "pi-model-router.json"),
     JSON.stringify({
       routers: {
-        test: {
-          random: true,
-          medium: { models: ["fixture/a#high", "fixture/b", "fixture/c"] },
-          high: { models: ["fixture/a", "fixture/b", "fixture/c"] },
+        ordered: {
+          low: { models: ["fixture/c"] },
+          medium: { models: ["fixture/b#high"] },
+          high: { models: ["fixture/a"] },
         },
+        random: {
+          random: true,
+          medium: { models: ["fixture/a", "fixture/b", "fixture/c"] },
+        },
+        single: { high: { models: ["fixture/a"] } },
+        delegated: { medium: { models: ["@ordered#high"] } },
+        nokey: { medium: { models: ["nokey/x", "fixture/c"] } },
+        fallback: { medium: { models: ["fixture/a", "fixture/b"] } },
       },
     }),
   );
@@ -42,17 +49,11 @@ beforeAll(async () => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
-      const { model, reasoning_effort } = JSON.parse(Buffer.concat(chunks).toString()) as {
-        model: string;
-        reasoning_effort?: string;
-      };
+      const { model } = JSON.parse(Buffer.concat(chunks).toString()) as { model: string };
       received.push(model);
-      efforts.push(reasoning_effort);
       if (failedModels.has(model)) {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify({ error: { message: "Auth failed", type: "invalid_request_error" } }),
-        );
+        res.writeHead(429, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "rate limit exceeded" } }));
         return;
       }
       res.writeHead(200, { "content-type": "text/event-stream" });
@@ -77,7 +78,7 @@ afterAll(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-const startSession = async (manager: SessionManager) => {
+const startSession = async (manager: SessionManager, routerName = "ordered", retry = false) => {
   const agentDir = join(root, "agent");
   mkdirSync(agentDir, { recursive: true });
   const modelRuntime = await ModelRuntime.create({
@@ -98,9 +99,24 @@ const startSession = async (manager: SessionManager) => {
       maxTokens: 1024,
     })),
   });
+  modelRuntime.registerProvider("nokey", {
+    api: "openai-completions",
+    baseUrl: endpoint,
+    models: [
+      {
+        id: "x",
+        name: "x",
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 100000,
+        maxTokens: 1024,
+      },
+    ],
+  });
   const settingsManager = SettingsManager.inMemory({
     compaction: { enabled: false },
-    retry: { enabled: false },
+    retry: retry ? { enabled: true, maxRetries: 2, baseDelayMs: 1 } : { enabled: false },
   });
   const loader = new DefaultResourceLoader({
     cwd: root,
@@ -129,123 +145,104 @@ const startSession = async (manager: SessionManager) => {
       throw error.error;
     },
   });
-  const model = modelRuntime.getModel("router", "test");
-  if (!model) throw new Error("router model missing");
+  const model = modelRuntime.getModel("router", routerName);
+  if (!model) throw new Error(`router model ${routerName} missing`);
   await session.setModel(model);
   session.setThinkingLevel("medium");
   return session;
 };
 
-describe("Pi 세션의 무작위 라우팅", () => {
-  it("각 티어의 선택을 독립적으로 유지한다", async () => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+describe("가상 모델 라우팅", () => {
+  it("thinking level을 tier로 매핑해 물리 모델을 고른다", async () => {
     const session = await startSession(SessionManager.inMemory(root));
-    await session.prompt("중간 티어");
-    expect(received.at(-1)).toBe("a");
-    random.mockReturnValue(0.99);
+    await session.prompt("medium");
+    expect(received.at(-1)).toBe("b");
     session.setThinkingLevel("high");
-    await session.prompt("높은 티어");
-    expect(received.at(-1)).toBe("c");
-    session.setThinkingLevel("medium");
-    await session.prompt("중간 티어 재사용");
+    await session.prompt("high");
     expect(received.at(-1)).toBe("a");
-    session.setThinkingLevel("high");
-    await session.prompt("높은 티어 재사용");
+    session.setThinkingLevel("low");
+    await session.prompt("low");
     expect(received.at(-1)).toBe("c");
     session.dispose();
   });
 
-  it("무작위 폴백은 이전 모델의 effort를 물려받지 않는다", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
+  it("설정되지 않은 tier는 가까운 tier로 폴백한다", async () => {
     const session = await startSession(SessionManager.inMemory(root));
+    session.setThinkingLevel("off");
+    await session.prompt("off");
+    expect(received.at(-1)).toBe("c");
+    session.dispose();
+  });
+
+  it("단일 tier 라우터는 thinking level과 무관하게 그 tier를 쓴다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "single");
+    session.setThinkingLevel("off");
+    await session.prompt("single");
+    expect(received.at(-1)).toBe("a");
+    session.dispose();
+  });
+
+  it("@router 위임을 실시간으로 해석한다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "delegated");
+    await session.prompt("delegated");
+    expect(received.at(-1)).toBe("a");
+    session.dispose();
+  });
+
+  it("자격 증명 없는 후보는 건너뛴다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "nokey");
+    await session.prompt("nokey");
+    expect(received.at(-1)).toBe("c");
+    session.dispose();
+  });
+
+  it("retryable 실패 시 다음 후보로 폴백한다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback", true);
     failedModels.add("a");
-    await session.prompt("폴백 요청");
-    expect(received.slice(-2)).toEqual(["a", "b"]);
-    expect(efforts.slice(-2)).toEqual(["high", undefined]);
-    session.dispose();
-  });
-
-  it("모델 실패 시 다른 모델을 무작위로 선택하고 이후 유지한다", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.99);
-    const session = await startSession(SessionManager.inMemory(root));
-    failedModels.add("c");
-    await session.prompt("첫 요청");
-    expect(received.slice(-2)).toEqual(["c", "b"]);
-    await session.prompt("다음 요청");
+    await session.prompt("fallback");
+    expect(received).toContain("a");
     expect(received.at(-1)).toBe("b");
     session.dispose();
   });
+});
 
-  it("모든 후보가 인증 실패한 뒤에는 다시 호출하지 않는다", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.99);
-    const session = await startSession(SessionManager.inMemory(root));
-    ["a", "b", "c"].forEach((model) => failedModels.add(model));
-    await session.prompt("실패 요청");
-    expect(received.slice(-3)).toEqual(["c", "b", "a"]);
-    const count = received.length;
-    await session.prompt("재시도 요청");
-    expect(received).toHaveLength(count);
-    session.dispose();
-  });
-
-  it("저장된 선택이 잘못된 타입이면 무시하고 다시 선택한다", async () => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
-    const manager = SessionManager.create(root, join(root, "invalid-sessions"));
-    const first = await startSession(manager);
+describe("가상 모델의 무작위 선택", () => {
+  it("세션 내에서 선택을 유지하고 세션 재개 후에도 복원한다", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const manager = SessionManager.create(root, join(root, "random-sessions"));
+    const first = await startSession(manager, "random");
     await first.prompt("첫 요청");
-    const entry = manager
-      .getBranch()
-      .findLast((e) => e.type === "custom" && e.customType === "router-state");
-    if (!entry || entry.type !== "custom") throw new Error("router state missing");
-    manager.appendCustomEntry("router-state", {
-      ...entry.data,
-      randomSelections: { '["test","medium"]': 12 },
-    });
+    expect(received.at(-1)).toBe("a");
+    await first.prompt("두 번째 요청");
+    expect(received.at(-1)).toBe("a");
     const path = first.sessionFile;
     first.dispose();
     if (!path) throw new Error("session file missing");
-    random.mockReturnValue(0.99);
-    const resumed = await startSession(SessionManager.open(path));
-    await resumed.prompt("재개 요청");
-    expect(received.at(-1)).toBe("c");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const resumed = await startSession(SessionManager.open(path), "random");
+    await resumed.prompt("재개 후 요청");
+    expect(received.at(-1)).toBe("a");
     resumed.dispose();
   });
 
-  it("부모 세션의 기록을 복사한 자식은 다른 모델을 선택한다", async () => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
-    const parent = await startSession(SessionManager.create(root, join(root, "parent-sessions")));
+  it("세션 포크 시 부모의 선택을 상속한다", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const parent = await startSession(
+      SessionManager.create(root, join(root, "fork-parent")),
+      "random",
+    );
     await parent.prompt("부모 요청");
     expect(received.at(-1)).toBe("a");
     const path = parent.sessionFile;
     parent.dispose();
     if (!path) throw new Error("session file missing");
-    random.mockReturnValue(0.99);
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
     const child = await startSession(
-      SessionManager.forkFrom(path, root, join(root, "child-sessions")),
+      SessionManager.forkFrom(path, root, join(root, "fork-child")),
+      "random",
     );
     await child.prompt("자식 요청");
-    expect(received.at(-1)).toBe("c");
-    await child.prompt("자식 후속 요청");
-    expect(received.at(-1)).toBe("c");
+    expect(received.at(-1)).toBe("a");
     child.dispose();
-  });
-  it("세션 재개 후 같은 모델을 유지한다", async () => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
-    const manager = SessionManager.create(root, join(root, "sessions"));
-    const first = await startSession(manager);
-    await first.prompt("첫 요청");
-    await first.prompt("두 번째 요청");
-    random.mockReturnValue(0.99);
-    await first.bindExtensions({ mode: "print" });
-    await first.prompt("다시 바인딩 후 요청");
-    const selected = received.at(-1);
-    expect(received.at(-2)).toBe(selected);
-    const path = first.sessionFile;
-    first.dispose();
-    if (!path) throw new Error("session file missing");
-    const resumed = await startSession(SessionManager.open(path));
-    await resumed.prompt("재개 후 요청");
-    expect(received.at(-1)).toBe(selected);
-    resumed.dispose();
   });
 });
