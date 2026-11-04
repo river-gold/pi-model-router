@@ -8,6 +8,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { ResolvedTier } from "./config";
 import type { Router, RouterConfig, RouterTier, RoutingDecision } from "./types";
+import type { RouterState } from "./state";
 import {
   ALLOWED_THINKING,
   ROUTER_TIERS,
@@ -102,12 +103,15 @@ const routeRequest = async (
   routerName: string,
   routers: Record<string, Router>,
   record: DecisionRecorder,
+  extensionState?: RouterState,
 ): Promise<ModelRoute<RouterRouteState>> => {
   const router = routers[routerName];
   if (!router) throw new Error(`Router "${routerName}" is no longer configured.`);
 
   // 툴 루프/재시도 캐시 유지: 직전에 응답한 물리 모델을 그대로 사용한다.
-  if (request.reason === "continuation" && request.previous) {
+  const recovering = extensionState?.fallbackPending === true;
+  if (extensionState) extensionState.fallbackPending = false;
+  if (request.reason === "continuation" && request.previous && !recovering) {
     return {
       model: request.previous.model,
       thinkingLevel: request.previous.thinkingLevel ?? request.thinkingLevel,
@@ -116,7 +120,11 @@ const routeRequest = async (
   }
 
   const { tier, resolved } = resolveTier(routers, routerName, request.thinkingLevel);
-  const usable = await usableCandidates(resolved.config.models, ctx);
+  if (extensionState) extensionState.fallbackCandidates = resolved.config.models;
+  const usable = (await usableCandidates(resolved.config.models, ctx)).filter(
+    (candidate) =>
+      !extensionState?.fallbackFailures.has(`${candidate.model.provider}/${candidate.model.id}`),
+  );
   if (usable.length === 0) {
     throw new Error(`Router "${routerName}" ${tier} tier has no usable model.`);
   }
@@ -152,6 +160,7 @@ export const createVirtualModel = (
   routerName: string,
   registry: ExtensionContext["modelRegistry"] | undefined,
   record: DecisionRecorder,
+  extensionState?: RouterState,
 ): ExtensionVirtualModel<RouterRouteState> => {
   const { contextWindow, maxTokens } = routerLimits(routers, routerName, registry);
   return {
@@ -162,7 +171,8 @@ export const createVirtualModel = (
     contextWindow,
     maxTokens,
     input: ["text", "image"],
-    route: (request, ctx) => routeRequest(request, ctx, routerName, routers, record),
+    route: (request, ctx) =>
+      routeRequest(request, ctx, routerName, routers, record, extensionState),
   };
 };
 
@@ -170,7 +180,7 @@ export const createVirtualModel = (
  * 설정에 있는 라우터를 가상 모델로 등록하고, 사라진 라우터는 해제한다.
  * 같은 provider/id 재등록은 교체이므로 reload 시 그대로 호출하면 된다.
  */
-export const createVirtualModelRegistrar = (pi: ExtensionAPI) => {
+export const createVirtualModelRegistrar = (pi: ExtensionAPI, extensionState?: RouterState) => {
   let registered: string[] = [];
   return (
     config: RouterConfig,
@@ -179,7 +189,9 @@ export const createVirtualModelRegistrar = (pi: ExtensionAPI) => {
   ): void => {
     const names = Object.keys(config.routers);
     for (const name of names) {
-      pi.registerVirtualModel(createVirtualModel(config.routers, name, registry, record));
+      pi.registerVirtualModel(
+        createVirtualModel(config.routers, name, registry, record, extensionState),
+      );
     }
     for (const removed of registered) {
       if (!names.includes(removed)) pi.unregisterVirtualModel(ROUTER_PROVIDER, removed);

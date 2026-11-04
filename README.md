@@ -42,7 +42,7 @@ Set `"random": true` on a router to select a model randomly per session and tier
 
 - The thinking level selects the tier. The physical model is chosen from the tier's candidates.
 - A candidate without a physical model or without credentials is skipped, so an unavailable first choice does not fail the turn.
-- A retry after a transient failure excludes the failed model and picks the next candidate; pi's automatic retry policy (`settings.retry`) controls how many attempts are made.
+- A failure before any output, including a billing error, falls back to another usable candidate. Each failed candidate is skipped for the rest of that recovery; after the request settles, the next user request starts a fresh selection. Pi's automatic retry policy may run before this recovery.
 - Context compaction and limits are handled by pi against the routed physical model.
 - Assistant messages record the physical model and thinking level that answered.
 

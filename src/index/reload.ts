@@ -6,7 +6,7 @@ import { createVirtualModelRegistrar } from "../virtualModel";
 import { MAX_DEBUG_HISTORY } from "../constants";
 
 export const createReloadConfig = (pi: ExtensionAPI, state: RouterState) => {
-  const register = createVirtualModelRegistrar(pi);
+  const register = createVirtualModelRegistrar(pi, state);
   const record = (decision: RoutingDecision): void => {
     state.lastDecision = decision;
     if (state.debugEnabled) {

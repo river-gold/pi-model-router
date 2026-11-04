@@ -8,7 +8,7 @@ A router has one or more of seven tiers: `off`, `minimal`, `low`, `medium`, `hig
 
 Tier model lists support `@router`, `@router#tier`, and `@router#tier#effort` references. References are expanded at request time with cycle detection. A reference without a tier follows the tier being resolved, so `@hyper` in a `high` tier resolves to `hyper`'s `high` tier. A tier's `effort` overrides the model-level `#effort` on its direct models, but is not propagated through delegation; the referenced router's own tier effort applies.
 
-For a continuation request pi passes the physical model that answered the turn; the router returns it unchanged to preserve the tool loop and the prompt cache. On a retry the router excludes the failed model and picks the next candidate. Candidates without a physical model or without credentials are skipped.
+For a continuation request pi passes the physical model that answered the turn; the router returns it unchanged to preserve the tool loop and the prompt cache. On a retry the router excludes the failed model and picks the next candidate. After an error with no output, the settlement handler omits the failed message from model context and requests a continuation on another candidate. It bounds recovery by the candidates already tried. Candidates without a physical model or without credentials are skipped.
 
 By default models are attempted in configuration order. With a router's `random` option enabled, an eligible model is chosen randomly for each session and resolved tier, stored as router state, and reused across requests. Router state follows the session branch, so a resumed session restores the selection and a fork inherits it.
 
@@ -24,4 +24,4 @@ By default models are attempted in configuration order. With a router's `random`
 
 ## State and reliability
 
-Router state (random selections) is stored on the session branch by pi and restored automatically. Debug history and the last routing decision live in extension memory for the session. Credential and model availability are checked before a candidate is returned, so a broken candidate is skipped without failing the turn. Automatic retries use pi's `settings.retry` policy.
+Router state (random selections) is stored on the session branch by pi and restored automatically. Debug history and the last routing decision live in extension memory for the session. Credential and model availability are checked before a candidate is returned, so a broken candidate is skipped without failing the turn. Pi's automatic retries use `settings.retry`; after they finish, pre-output fallback can continue to remaining candidates.

@@ -9,6 +9,7 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
+  type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import routerExtension from "../src/index";
 
@@ -17,9 +18,13 @@ let root: string;
 let endpoint: string;
 const received: string[] = [];
 const failedModels = new Set<string>();
+const billingFailedModels = new Set<string>();
+const partialFailedModels = new Set<string>();
 afterEach(() => {
   vi.restoreAllMocks();
   failedModels.clear();
+  billingFailedModels.clear();
+  partialFailedModels.clear();
 });
 
 beforeAll(async () => {
@@ -42,6 +47,7 @@ beforeAll(async () => {
         delegated: { medium: { models: ["@ordered#high"] } },
         nokey: { medium: { models: ["nokey/x", "fixture/c"] } },
         fallback: { medium: { models: ["fixture/a", "fixture/b"] } },
+        mixed: { medium: { models: ["fixture/a", "fixture/missing", "nokey/x", "fixture/b"] } },
       },
     }),
   );
@@ -51,6 +57,13 @@ beforeAll(async () => {
     req.on("end", () => {
       const { model } = JSON.parse(Buffer.concat(chunks).toString()) as { model: string };
       received.push(model);
+      if (billingFailedModels.has(model)) {
+        res.writeHead(402, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({ error: { message: "You're out of credits", type: "billing_error" } }),
+        );
+        return;
+      }
       if (failedModels.has(model)) {
         res.writeHead(429, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: { message: "rate limit exceeded" } }));
@@ -60,6 +73,10 @@ beforeAll(async () => {
       res.write(
         `data: ${JSON.stringify({ id: "completion", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta: { content: "ok" }, finish_reason: null }] })}\n\n`,
       );
+      if (partialFailedModels.has(model)) {
+        res.end("data: [DONE]\n\n");
+        return;
+      }
       res.write(
         `data: ${JSON.stringify({ id: "completion", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`,
       );
@@ -78,7 +95,12 @@ afterAll(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-const startSession = async (manager: SessionManager, routerName = "ordered", retry = false) => {
+const startSession = async (
+  manager: SessionManager,
+  routerName = "ordered",
+  retry = false,
+  beforeRouter?: (pi: ExtensionAPI) => void,
+) => {
   const agentDir = join(root, "agent");
   mkdirSync(agentDir, { recursive: true });
   const modelRuntime = await ModelRuntime.create({
@@ -127,7 +149,7 @@ const startSession = async (manager: SessionManager, routerName = "ordered", ret
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
-    extensionFactories: [routerExtension],
+    extensionFactories: beforeRouter ? [beforeRouter, routerExtension] : [routerExtension],
   });
   await loader.reload();
   const { session } = await createAgentSession({
@@ -194,6 +216,164 @@ describe("가상 모델 라우팅", () => {
     await session.prompt("nokey");
     expect(received.at(-1)).toBe("c");
     session.dispose();
+  });
+
+  it("크레딧 부족 시 자동 재시도가 꺼져 있어도 다음 후보로 폴백한다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback");
+    billingFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("크레딧 부족 폴백");
+      expect(received.slice(start)).toEqual(["a", "b"]);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("폴백 시 없는 모델과 인증되지 않은 후보를 건너뛴다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "mixed");
+    billingFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("폴백 후보 검사");
+      expect(received.slice(start)).toEqual(["a", "b"]);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("실제 스트림이 부분 출력 후 실패하면 다른 모델로 반복하지 않는다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback");
+    partialFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("스트림 중단");
+      expect(received.slice(start)).toEqual(["a"]);
+      expect(session.messages.at(-1)).toMatchObject({
+        role: "assistant",
+        stopReason: "error",
+        content: [{ type: "text", text: "ok" }],
+      });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("부분 출력이 있는 실패 응답은 다른 모델로 반복하지 않는다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
+      pi.on("message_end", (event) => {
+        if (event.message.role === "assistant" && event.message.stopReason === "error") {
+          return { message: { ...event.message, content: [{ type: "text", text: "부분 출력" }] } };
+        }
+      });
+    });
+    billingFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("부분 출력 후 오류");
+      expect(received.slice(start)).toEqual(["a"]);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("다른 확장이 실패 메시지를 생략하면 복구하지 않는다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
+      pi.on("agent_before_settle", (event) => {
+        if (event.outcome !== "error") return;
+        const last = event.context.contextEntries.findLast(
+          (entry) => entry.sourceEntry.type === "message",
+        );
+        if (!last) return;
+        return {
+          entries: [
+            ...event.entries,
+            { type: "context_edit", targetId: last.sourceEntry.id, replacement: null },
+          ],
+        };
+      });
+    });
+    billingFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("오류 메시지 생략");
+      expect(received.slice(start)).toEqual(["a"]);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("다른 확장이 오류 뒤에 메시지를 추가하면 오류를 자동 복구하지 않는다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
+      pi.on("agent_before_settle", (event) => {
+        if (event.outcome !== "error") return;
+        return {
+          entries: [
+            ...event.entries,
+            {
+              type: "custom_message",
+              customType: "notice",
+              content: "다른 메시지",
+              display: false,
+            },
+          ],
+        };
+      });
+    });
+    billingFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("오류 뒤 다른 메시지");
+      expect(received.slice(start)).toEqual(["a"]);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("다른 모델의 오류로 변경된 응답을 라우터 실패로 취급하지 않는다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
+      pi.on("message_end", (event) => {
+        if (event.message.role === "assistant" && event.message.stopReason === "error") {
+          return { message: { ...event.message, model: "other" } };
+        }
+      });
+    });
+    billingFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("다른 모델의 오류");
+      expect(received.slice(start)).toEqual(["a"]);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("모든 후보가 실패하면 무한 재시도하지 않고 마지막 오류를 남긴다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback");
+    billingFailedModels.add("a");
+    billingFailedModels.add("b");
+    const start = received.length;
+    try {
+      await session.prompt("모든 후보 실패");
+      expect(received.slice(start)).toEqual(["a", "b"]);
+      expect(session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "error" });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("폴백 후 다음 사용자 요청에서는 첫 후보를 다시 시도한다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "fallback");
+    billingFailedModels.add("a");
+    const start = received.length;
+    try {
+      await session.prompt("첫 요청");
+      billingFailedModels.clear();
+      await session.prompt("다음 요청");
+      expect(received.slice(start)).toEqual(["a", "b", "a"]);
+    } finally {
+      session.dispose();
+    }
   });
 
   it("retryable 실패 시 다음 후보로 폴백한다", async () => {

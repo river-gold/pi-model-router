@@ -10,6 +10,9 @@ export type RouterState = {
   debugEnabled: boolean;
   debugHistory: RoutingDecision[];
   lastConfigWarnings: string[];
+  fallbackCandidates: string[];
+  fallbackFailures: Set<string>;
+  fallbackPending: boolean;
 };
 
 export const createRouterState = (): RouterState => ({
@@ -21,4 +24,7 @@ export const createRouterState = (): RouterState => ({
   debugEnabled: false,
   debugHistory: [],
   lastConfigWarnings: [],
+  fallbackCandidates: [],
+  fallbackFailures: new Set(),
+  fallbackPending: false,
 });
