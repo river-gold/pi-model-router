@@ -1,6 +1,6 @@
 # pi-model-router
 
-A model router extension for [pi-coding-agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent). Each router is registered as a `router/<name>` [virtual model](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/virtual-models.md) and routes every request to a physical model of the tier selected by the current thinking level.
+A model router extension for [pi-coding-agent](https://github.com/earendil-works/pi/tree/main/packages/coding-agent). A router is exposed as a `router/<name>` model and selects a configured tier from the current thinking level.
 
 ## Installation
 
@@ -32,39 +32,20 @@ Place JSON or JSONC configuration in `~/.pi/agent/pi-model-router.json[c]` or `.
 }
 ```
 
-Configure at least one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` per router. The thinking level selects the tier of the same name. If that tier is absent or cannot be resolved, the router searches upward first, then downward in the order `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. For example, `off` falls back to `minimal`, then `low`, and so on. During a tool loop the model that handled the turn is reused.
+The router exposes the smallest known context window across its configured tiers and candidates so Pi can compact conservatively. Missing or inaccurate provider metadata may still cause context overflow; the router does not silently truncate the conversation.
 
-Each tier accepts a `models` fallback list, optional `effort`, `contextWindow`, `maxTokens`, and `reasoning`. A router-level `models` list is inherited by explicitly configured tiers that omit their own list. Model entries use `provider/model[#effort]` or a live router reference `@router[#tier[#effort]]`. A reference without a tier follows the tier being resolved, so `@hyper` in the `high` tier uses `hyper`'s `high` tier. Tier-level `effort` overrides the effort of direct models but does not propagate through router references; the referenced router's own tier effort applies.
+Configure at least one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` per router. The thinking level selects the tier of the same name. If that tier is absent or cannot be resolved, the router searches upward first, then downward in the order `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. For example, `off` falls back to `minimal`, then `low`, and so on. A tool-result loop preserves the tier selected at the start of the turn.
 
-Set `"random": true` on a router to select a model randomly per session and tier. The selected model is reused across requests and restored with the session; a session fork inherits the parent's selection.
+Set `"random": true` on a router to select a model randomly per session and tier. The selected model is reused across requests and restored with the session. If it fails before output, fallback candidates are also chosen randomly; the successful fallback becomes the selected model. A subagent with its own loaded router extension selects independently. A subagent that only inherits its parent's provider is not supported for independent selection. The default is ordered selection.
 
-## Routing behavior
-
-- The thinking level selects the tier. The physical model is chosen from the tier's candidates.
-- A candidate is skipped when its model is missing, its provider lacks configured credentials, or its credentials cannot be resolved. This matches the check pi applies to the routed model, so a candidate pi would reject never becomes the route.
-- A failure before any output, including a billing error, falls back to another usable candidate. Each failed candidate is skipped for the rest of that recovery; after the request settles, the next user request starts a fresh selection. Pi's automatic retry policy may run before this recovery.
-- Context compaction and limits are handled by pi against the routed physical model.
-- Assistant messages record the physical model and thinking level that answered.
+Each tier accepts a `models` fallback list, optional `effort`, `contextWindow`, `maxTokens`, and `reasoning`. A router-level `models` list is inherited by explicitly configured tiers that omit their own list. Model entries use `provider/model[#effort]` or a live router reference `@router[#tier[#effort]]`. A reference without a tier follows the tier being resolved. Tier-level `effort` overrides the effort of direct models but does not propagate through router references; specify the reference's effort explicitly when needed.
 
 Legacy classifier settings (`classifierModels`, `typesafeConfidenceThreshold`, `historySize`, `routeEveryTurn`, and `tierGuides`) are ignored. No classifier, JEV/TypeSafe API, or agy process is invoked.
-
-## Subagents
-
-The fallback above runs from a session event handler, so the extension must be loaded in the session that makes the request. A child session that only inherits the parent's providers (for example a foreground subagent, which does not load ambient extensions) has neither the virtual models nor the handler. Load the extension explicitly for those children:
-
-```json
-{
-  "subagents": {
-    "defaultSubagentOnlyExtensions": ["~/.pi/agent/git/github.com/river-gold/pi-model-router"]
-  }
-}
-```
-
-Use the directory pi installed the package into: `~/.pi/agent/git/<host>/<owner>/<repo>` for a git install, or `~/.pi/agent/npm/node_modules/@river-gold/pi-model-router` for an npm install. The same list is available per agent as `extensions`.
 
 ## Commands
 
 - `/router status`: show the current router and last decision.
 - `/router debug <on|off|toggle|show|clear>`: control debug history.
 - `/router reload`: reload configuration.
+- `/router reset-failures`: clear session failure memory.
 - `/router help`: show help.

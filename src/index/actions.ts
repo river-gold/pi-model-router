@@ -1,7 +1,90 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { RouterState } from "../state";
+import { createPersistState, createRecordDebugDecision } from "./persist";
 import { createReloadConfig } from "./reload";
+import {
+  createEnsureValidActiveRouter,
+  createSetModelInternally,
+  createTryFallbackByRef,
+  createTryRestoreFallback,
+} from "./fallback";
+import { registerRouterProvider } from "../provider";
+import { updateStatus } from "../ui";
 
-export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => ({
-  reloadConfig: createReloadConfig(pi, state),
-});
+export const createRouterActions = (pi: ExtensionAPI, state: RouterState) => {
+  const recordDebugDecision = createRecordDebugDecision(state);
+  const persistState = createPersistState(pi, state);
+  const setModelInternally = createSetModelInternally(pi, state);
+  const tryFallbackByRef = createTryFallbackByRef(pi, state, setModelInternally);
+  const tryRestoreFallback = createTryRestoreFallback(state, tryFallbackByRef);
+  const ensureValidActiveRouter = createEnsureValidActiveRouter(state, tryRestoreFallback);
+  const reloadConfig = createReloadConfig(pi, state, persistState, recordDebugDecision);
+
+  const registerRouterProviderAction = (): void => {
+    registerRouterProvider(
+      pi,
+      {
+        get lastRegisteredModels() {
+          return state.lastRegisteredModels;
+        },
+        set lastRegisteredModels(v) {
+          state.lastRegisteredModels = v;
+        },
+        get currentConfig() {
+          return state.currentConfig;
+        },
+        get currentModelRegistry() {
+          return state.currentModelRegistry;
+        },
+        get lastExtensionContext() {
+          return state.lastExtensionContext;
+        },
+        get selectedRouter() {
+          return state.selectedRouter;
+        },
+        set selectedRouter(v) {
+          state.selectedRouter = v;
+        },
+        get routerEnabled() {
+          return state.routerEnabled;
+        },
+        set routerEnabled(v) {
+          state.routerEnabled = v;
+        },
+        get lastDecision() {
+          return state.lastDecision;
+        },
+        set lastDecision(v) {
+          state.lastDecision = v;
+        },
+        get accumulatedCost() {
+          return state.accumulatedCost;
+        },
+        set accumulatedCost(v) {
+          state.accumulatedCost = v;
+        },
+        randomSelections: state.randomSelections,
+        get failedByChain() {
+          return state.failedByChain;
+        },
+      },
+      {
+        persistState,
+        recordDebugDecision,
+        updateStatus: (c) =>
+          updateStatus(c, state.routerEnabled, state.selectedRouter, state.lastDecision),
+      },
+    );
+  };
+
+  return {
+    persistState,
+    recordDebugDecision,
+    reloadConfig,
+    ensureValidActiveRouter,
+    registerRouterProvider: registerRouterProviderAction,
+    setModelInternally,
+    tryFallbackByRef,
+    tryRestoreFallback,
+  };
+};

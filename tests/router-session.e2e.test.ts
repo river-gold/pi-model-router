@@ -9,7 +9,6 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
-  type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import routerExtension from "../src/index";
 
@@ -17,37 +16,35 @@ let server: Server;
 let root: string;
 let endpoint: string;
 const received: string[] = [];
+const receivedBodies: { model: string; messages: unknown[] }[] = [];
+const efforts: (string | undefined)[] = [];
 const failedModels = new Set<string>();
 const billingFailedModels = new Set<string>();
-const partialFailedModels = new Set<string>();
 afterEach(() => {
   vi.restoreAllMocks();
   failedModels.clear();
   billingFailedModels.clear();
-  partialFailedModels.clear();
 });
 
 beforeAll(async () => {
-  root = mkdtempSync(join(tmpdir(), "router-virtual-e2e-"));
+  root = mkdtempSync(join(tmpdir(), "router-session-e2e-"));
   mkdirSync(join(root, ".pi"));
   writeFileSync(
     join(root, ".pi", "pi-model-router.json"),
     JSON.stringify({
       routers: {
-        ordered: {
-          low: { models: ["fixture/c"] },
-          medium: { models: ["fixture/b#high"] },
-          high: { models: ["fixture/a"] },
-        },
-        random: {
+        test: {
           random: true,
-          medium: { models: ["fixture/a", "fixture/b", "fixture/c"] },
+          medium: { models: ["fixture/a#high", "fixture/b", "fixture/c"] },
+          high: { models: ["fixture/a", "fixture/b", "fixture/c"] },
         },
-        single: { high: { models: ["fixture/a"] } },
-        delegated: { medium: { models: ["@ordered#high"] } },
-        nokey: { medium: { models: ["nokey/x", "fixture/c"] } },
-        fallback: { medium: { models: ["fixture/a", "fixture/b"] } },
-        mixed: { medium: { models: ["fixture/a", "fixture/missing", "nokey/x", "fixture/b"] } },
+        delegated: { models: ["@target"], medium: {}, high: {} },
+        target: {
+          medium: { models: ["fixture/b#low"] },
+          high: { models: ["fixture/a#high"] },
+        },
+        conservative: { medium: { models: ["fixture/a", "fixture/c"] } },
+        cycle: { medium: { models: ["@cycle"] } },
       },
     }),
   );
@@ -55,8 +52,16 @@ beforeAll(async () => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
-      const { model } = JSON.parse(Buffer.concat(chunks).toString()) as { model: string };
+      const { model, reasoning_effort, messages } = JSON.parse(
+        Buffer.concat(chunks).toString(),
+      ) as {
+        model: string;
+        reasoning_effort?: string;
+        messages: unknown[];
+      };
       received.push(model);
+      receivedBodies.push({ model, messages });
+      efforts.push(reasoning_effort);
       if (billingFailedModels.has(model)) {
         res.writeHead(402, { "content-type": "application/json" });
         res.end(
@@ -65,18 +70,16 @@ beforeAll(async () => {
         return;
       }
       if (failedModels.has(model)) {
-        res.writeHead(429, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: { message: "rate limit exceeded" } }));
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({ error: { message: "Auth failed", type: "invalid_request_error" } }),
+        );
         return;
       }
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write(
         `data: ${JSON.stringify({ id: "completion", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta: { content: "ok" }, finish_reason: null }] })}\n\n`,
       );
-      if (partialFailedModels.has(model)) {
-        res.end("data: [DONE]\n\n");
-        return;
-      }
       res.write(
         `data: ${JSON.stringify({ id: "completion", object: "chat.completion.chunk", created: 1, model, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`,
       );
@@ -95,12 +98,7 @@ afterAll(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-const startSession = async (
-  manager: SessionManager,
-  routerName = "ordered",
-  retry = false,
-  beforeRouter?: (pi: ExtensionAPI) => void,
-) => {
+const startSession = async (manager: SessionManager, routerName = "test", autoCompact = false) => {
   const agentDir = join(root, "agent");
   mkdirSync(agentDir, { recursive: true });
   const modelRuntime = await ModelRuntime.create({
@@ -117,28 +115,17 @@ const startSession = async (
       reasoning: true,
       input: ["text"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 100000,
+      contextWindow: id === "c" ? 40000 : 100000,
       maxTokens: 1024,
     })),
   });
-  modelRuntime.registerProvider("nokey", {
-    api: "openai-completions",
-    baseUrl: endpoint,
-    models: [
-      {
-        id: "x",
-        name: "x",
-        reasoning: true,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 100000,
-        maxTokens: 1024,
-      },
-    ],
-  });
   const settingsManager = SettingsManager.inMemory({
-    compaction: { enabled: false },
-    retry: retry ? { enabled: true, maxRetries: 2, baseDelayMs: 1 } : { enabled: false },
+    compaction: {
+      enabled: autoCompact,
+      keepRecentTokens: 1,
+      ...(autoCompact ? { reserveTokens: 39999 } : {}),
+    },
+    retry: { enabled: false },
   });
   const loader = new DefaultResourceLoader({
     cwd: root,
@@ -149,7 +136,7 @@ const startSession = async (
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
-    extensionFactories: beforeRouter ? [beforeRouter, routerExtension] : [routerExtension],
+    extensionFactories: [routerExtension],
   });
   await loader.reload();
   const { session } = await createAgentSession({
@@ -168,261 +155,232 @@ const startSession = async (
     },
   });
   const model = modelRuntime.getModel("router", routerName);
-  if (!model) throw new Error(`router model ${routerName} missing`);
+  if (!model) throw new Error("router model missing");
   await session.setModel(model);
   session.setThinkingLevel("medium");
   return session;
 };
 
-describe("가상 모델 라우팅", () => {
-  it("thinking level을 tier로 매핑해 물리 모델을 고른다", async () => {
-    const session = await startSession(SessionManager.inMemory(root));
-    await session.prompt("medium");
-    expect(received.at(-1)).toBe("b");
-    session.setThinkingLevel("high");
-    await session.prompt("high");
-    expect(received.at(-1)).toBe("a");
-    session.setThinkingLevel("low");
-    await session.prompt("low");
-    expect(received.at(-1)).toBe("c");
-    session.dispose();
-  });
-
-  it("설정되지 않은 tier는 가까운 tier로 폴백한다", async () => {
-    const session = await startSession(SessionManager.inMemory(root));
-    session.setThinkingLevel("off");
-    await session.prompt("off");
-    expect(received.at(-1)).toBe("c");
-    session.dispose();
-  });
-
-  it("단일 tier 라우터는 thinking level과 무관하게 그 tier를 쓴다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "single");
-    session.setThinkingLevel("off");
-    await session.prompt("single");
-    expect(received.at(-1)).toBe("a");
-    session.dispose();
-  });
-
-  it("@router 위임을 실시간으로 해석한다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "delegated");
-    await session.prompt("delegated");
-    expect(received.at(-1)).toBe("a");
-    session.dispose();
-  });
-
-  it("자격 증명 없는 후보는 건너뛴다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "nokey");
-    await session.prompt("nokey");
-    expect(received.at(-1)).toBe("c");
-    session.dispose();
-  });
-
-  it("크레딧 부족 시 자동 재시도가 꺼져 있어도 다음 후보로 폴백한다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback");
-    billingFailedModels.add("a");
-    const start = received.length;
+describe("라우터 컨텍스트 한도", () => {
+  it("순환 위임으로 해석 가능한 후보가 없으면 오류를 반환한다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "cycle");
     try {
-      await session.prompt("크레딧 부족 폴백");
-      expect(received.slice(start)).toEqual(["a", "b"]);
-    } finally {
-      session.dispose();
-    }
-  });
-
-  it("폴백 시 없는 모델과 인증되지 않은 후보를 건너뛴다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "mixed");
-    billingFailedModels.add("a");
-    const start = received.length;
-    try {
-      await session.prompt("폴백 후보 검사");
-      expect(received.slice(start)).toEqual(["a", "b"]);
-    } finally {
-      session.dispose();
-    }
-  });
-
-  it("실제 스트림이 부분 출력 후 실패하면 다른 모델로 반복하지 않는다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback");
-    partialFailedModels.add("a");
-    const start = received.length;
-    try {
-      await session.prompt("스트림 중단");
-      expect(received.slice(start)).toEqual(["a"]);
-      expect(session.messages.at(-1)).toMatchObject({
-        role: "assistant",
-        stopReason: "error",
-        content: [{ type: "text", text: "ok" }],
-      });
-    } finally {
-      session.dispose();
-    }
-  });
-
-  it("부분 출력이 있는 실패 응답은 다른 모델로 반복하지 않는다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
-      pi.on("message_end", (event) => {
-        if (event.message.role === "assistant" && event.message.stopReason === "error") {
-          return { message: { ...event.message, content: [{ type: "text", text: "부분 출력" }] } };
-        }
-      });
-    });
-    billingFailedModels.add("a");
-    const start = received.length;
-    try {
-      await session.prompt("부분 출력 후 오류");
-      expect(received.slice(start)).toEqual(["a"]);
-    } finally {
-      session.dispose();
-    }
-  });
-
-  it("다른 확장이 실패 메시지를 생략하면 복구하지 않는다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
-      pi.on("agent_before_settle", (event) => {
-        if (event.outcome !== "error") return;
-        const last = event.context.contextEntries.findLast(
-          (entry) => entry.sourceEntry.type === "message",
-        );
-        if (!last) return;
-        return {
-          entries: [
-            ...event.entries,
-            { type: "context_edit", targetId: last.sourceEntry.id, replacement: null },
-          ],
-        };
-      });
-    });
-    billingFailedModels.add("a");
-    const start = received.length;
-    try {
-      await session.prompt("오류 메시지 생략");
-      expect(received.slice(start)).toEqual(["a"]);
-    } finally {
-      session.dispose();
-    }
-  });
-
-  it("다른 확장이 오류 뒤에 숨은 메시지를 추가해도 복구한다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
-      pi.on("agent_before_settle", (event) => {
-        if (event.outcome !== "error") return;
-        return {
-          entries: [
-            ...event.entries,
-            {
-              type: "custom_message",
-              customType: "notice",
-              content: "다른 메시지",
-              display: false,
-            },
-          ],
-        };
-      });
-    });
-    billingFailedModels.add("a");
-    const start = received.length;
-    try {
-      await session.prompt("오류 뒤 다른 메시지");
-      expect(received.slice(start)).toEqual(["a", "b"]);
-    } finally {
-      session.dispose();
-    }
-  });
-
-  it("다른 모델의 오류로 변경된 응답을 라우터 실패로 취급하지 않는다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback", false, (pi) => {
-      pi.on("message_end", (event) => {
-        if (event.message.role === "assistant" && event.message.stopReason === "error") {
-          return { message: { ...event.message, model: "other" } };
-        }
-      });
-    });
-    billingFailedModels.add("a");
-    const start = received.length;
-    try {
-      await session.prompt("다른 모델의 오류");
-      expect(received.slice(start)).toEqual(["a"]);
-    } finally {
-      session.dispose();
-    }
-  });
-
-  it("모든 후보가 실패하면 무한 재시도하지 않고 마지막 오류를 남긴다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback");
-    billingFailedModels.add("a");
-    billingFailedModels.add("b");
-    const start = received.length;
-    try {
-      await session.prompt("모든 후보 실패");
-      expect(received.slice(start)).toEqual(["a", "b"]);
+      await session.prompt("순환 참조");
       expect(session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "error" });
     } finally {
       session.dispose();
     }
   });
 
-  it("폴백 후 다음 사용자 요청에서는 첫 후보를 다시 시도한다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback");
-    billingFailedModels.add("a");
-    const start = received.length;
+  it("폴백 모델에 전달할 때 대화 내역을 조용히 삭제하지 않는다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "conservative");
+    const text = `보존할 원문:${"x".repeat(180000)}`;
     try {
-      await session.prompt("첫 요청");
-      billingFailedModels.clear();
-      await session.prompt("다음 요청");
-      expect(received.slice(start)).toEqual(["a", "b", "a"]);
+      await session.prompt(text);
+      billingFailedModels.add("a");
+      const start = receivedBodies.length;
+      await session.prompt("후속 질문");
+      const fallback = receivedBodies.slice(start).find((body) => body.model === "c");
+      expect(fallback).toBeDefined();
+      expect(JSON.stringify(fallback?.messages)).toContain(text);
     } finally {
       session.dispose();
     }
   });
 
-  it("retryable 실패 시 다음 후보로 폴백한다", async () => {
-    const session = await startSession(SessionManager.inMemory(root), "fallback", true);
-    failedModels.add("a");
-    await session.prompt("fallback");
-    expect(received).toContain("a");
-    expect(received.at(-1)).toBe("b");
-    session.dispose();
+  it("Pi에 폴백 후보까지 포함한 최소 컨텍스트 한도를 제공한다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "conservative");
+    try {
+      expect(session.model?.contextWindow).toBe(40000);
+    } finally {
+      session.dispose();
+    }
   });
 });
 
-describe("가상 모델의 무작위 선택", () => {
-  it("세션 내에서 선택을 유지하고 세션 재개 후에도 복원한다", async () => {
+describe("위임 라우팅", () => {
+  it("tier 없는 위임은 선택된 바깥 tier를 따라간다", async () => {
+    const session = await startSession(SessionManager.inMemory(root), "delegated");
+    try {
+      session.setThinkingLevel("max");
+      await session.prompt("높은 티어");
+      expect(received.at(-1)).toBe("a");
+      expect(efforts.at(-1)).toBe("high");
+      session.setThinkingLevel("medium");
+      await session.prompt("중간 티어");
+      expect(received.at(-1)).toBe("b");
+      expect(efforts.at(-1)).toBe("low");
+    } finally {
+      session.dispose();
+    }
+  });
+});
+
+describe("컴팩션과 자식 세션의 라우팅", () => {
+  it("자동 컴팩션 중 첫 모델이 402를 반환하면 폴백하고 요청을 이어간다", async () => {
+    const manager = SessionManager.inMemory(root);
+    const session = await startSession(manager, "conservative", true);
+    try {
+      await session.prompt("이전 대화 ".repeat(10000));
+      billingFailedModels.add("a");
+      const start = received.length;
+      await session.prompt("자동 컴팩션 후 요청");
+      expect(received.slice(start)).toContain("a");
+      expect(received.slice(start)).toContain("c");
+      expect(manager.getBranch().some((entry) => entry.type === "compaction")).toBe(true);
+      expect(session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("컴팩션 요약 중 402가 발생하면 다른 모델로 요약하고 대화를 이어간다", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
-    const manager = SessionManager.create(root, join(root, "random-sessions"));
-    const first = await startSession(manager, "random");
+    const manager = SessionManager.inMemory(root);
+    const session = await startSession(manager);
+    try {
+      await session.prompt("이전 대화 ".repeat(10000));
+      await session.prompt("후속 대화");
+      billingFailedModels.add("a");
+      const start = received.length;
+      await session.compact();
+      expect(received.slice(start)).toEqual(["a", "b", "b"]);
+      expect(manager.getBranch().some((entry) => entry.type === "compaction")).toBe(true);
+      await session.prompt("컴팩션 후 요청");
+      expect(session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it("라우터를 독립 로드한 자식 세션은 402 발생 시 다른 모델을 사용한다", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const parent = await startSession(SessionManager.inMemory(root));
+    const child = await startSession(SessionManager.inMemory(root));
+    try {
+      await parent.prompt("부모 요청");
+      billingFailedModels.add("a");
+      const start = received.length;
+      await child.prompt("자식 요청");
+      expect(received.slice(start)).toEqual(["a", "b"]);
+      expect(child.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
+    } finally {
+      parent.dispose();
+      child.dispose();
+    }
+  });
+});
+
+describe("Pi 세션의 무작위 라우팅", () => {
+  it("각 티어의 선택을 독립적으로 유지한다", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const session = await startSession(SessionManager.inMemory(root));
+    await session.prompt("중간 티어");
+    expect(received.at(-1)).toBe("a");
+    random.mockReturnValue(0.99);
+    session.setThinkingLevel("high");
+    await session.prompt("높은 티어");
+    expect(received.at(-1)).toBe("c");
+    session.setThinkingLevel("medium");
+    await session.prompt("중간 티어 재사용");
+    expect(received.at(-1)).toBe("a");
+    session.setThinkingLevel("high");
+    await session.prompt("높은 티어 재사용");
+    expect(received.at(-1)).toBe("c");
+    session.dispose();
+  });
+
+  it("무작위 폴백은 이전 모델의 effort를 물려받지 않는다", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const session = await startSession(SessionManager.inMemory(root));
+    failedModels.add("a");
+    await session.prompt("폴백 요청");
+    expect(received.slice(-2)).toEqual(["a", "b"]);
+    expect(efforts.slice(-2)).toEqual(["high", undefined]);
+    session.dispose();
+  });
+
+  it("모델 실패 시 다른 모델을 무작위로 선택하고 이후 유지한다", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const session = await startSession(SessionManager.inMemory(root));
+    failedModels.add("c");
+    await session.prompt("첫 요청");
+    expect(received.slice(-2)).toEqual(["c", "b"]);
+    await session.prompt("다음 요청");
+    expect(received.at(-1)).toBe("b");
+    session.dispose();
+  });
+
+  it("모든 후보가 인증 실패한 뒤에는 다시 호출하지 않는다", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const session = await startSession(SessionManager.inMemory(root));
+    ["a", "b", "c"].forEach((model) => failedModels.add(model));
+    await session.prompt("실패 요청");
+    expect(received.slice(-3)).toEqual(["c", "b", "a"]);
+    const count = received.length;
+    await session.prompt("재시도 요청");
+    expect(received).toHaveLength(count);
+    session.dispose();
+  });
+
+  it("저장된 선택이 잘못된 타입이면 무시하고 다시 선택한다", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const manager = SessionManager.create(root, join(root, "invalid-sessions"));
+    const first = await startSession(manager);
     await first.prompt("첫 요청");
-    expect(received.at(-1)).toBe("a");
-    await first.prompt("두 번째 요청");
-    expect(received.at(-1)).toBe("a");
+    const entry = manager
+      .getBranch()
+      .findLast((e) => e.type === "custom" && e.customType === "router-state");
+    if (!entry || entry.type !== "custom") throw new Error("router state missing");
+    manager.appendCustomEntry("router-state", {
+      ...entry.data,
+      randomSelections: { '["test","medium"]': 12 },
+    });
     const path = first.sessionFile;
     first.dispose();
     if (!path) throw new Error("session file missing");
-    vi.spyOn(Math, "random").mockReturnValue(0.99);
-    const resumed = await startSession(SessionManager.open(path), "random");
-    await resumed.prompt("재개 후 요청");
-    expect(received.at(-1)).toBe("a");
+    random.mockReturnValue(0.99);
+    const resumed = await startSession(SessionManager.open(path));
+    await resumed.prompt("재개 요청");
+    expect(received.at(-1)).toBe("c");
     resumed.dispose();
   });
 
-  it("세션 포크 시 부모의 선택을 상속한다", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    const parent = await startSession(
-      SessionManager.create(root, join(root, "fork-parent")),
-      "random",
-    );
+  it("부모 세션의 기록을 복사한 자식은 다른 모델을 선택한다", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const parent = await startSession(SessionManager.create(root, join(root, "parent-sessions")));
     await parent.prompt("부모 요청");
     expect(received.at(-1)).toBe("a");
     const path = parent.sessionFile;
     parent.dispose();
     if (!path) throw new Error("session file missing");
-    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    random.mockReturnValue(0.99);
     const child = await startSession(
-      SessionManager.forkFrom(path, root, join(root, "fork-child")),
-      "random",
+      SessionManager.forkFrom(path, root, join(root, "child-sessions")),
     );
     await child.prompt("자식 요청");
-    expect(received.at(-1)).toBe("a");
+    expect(received.at(-1)).toBe("c");
+    await child.prompt("자식 후속 요청");
+    expect(received.at(-1)).toBe("c");
     child.dispose();
+  });
+  it("세션 재개 후 같은 모델을 유지한다", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const manager = SessionManager.create(root, join(root, "sessions"));
+    const first = await startSession(manager);
+    await first.prompt("첫 요청");
+    await first.prompt("두 번째 요청");
+    random.mockReturnValue(0.99);
+    await first.bindExtensions({ mode: "print" });
+    await first.prompt("다시 바인딩 후 요청");
+    const selected = received.at(-1);
+    expect(received.at(-2)).toBe(selected);
+    const path = first.sessionFile;
+    first.dispose();
+    if (!path) throw new Error("session file missing");
+    const resumed = await startSession(SessionManager.open(path));
+    await resumed.prompt("재개 후 요청");
+    expect(received.at(-1)).toBe(selected);
+    resumed.dispose();
   });
 });

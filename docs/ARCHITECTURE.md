@@ -1,29 +1,31 @@
 # Architecture: Pi Model Router Extension
 
-The `pi-model-router` extension registers each configured router as a pi [virtual model](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/virtual-models.md) named `router/<name>` via `pi.registerVirtualModel`. Pi selects the virtual model; the router's `route()` picks the physical model and thinking level for each request, and pi performs the dispatch, records the physical model, restores the selection with the session, and compacts against the routed model.
+The `pi-model-router` extension registers a logical `router` provider with `pi.registerProvider`. Each configured router appears as a model such as `router/balanced`; its `streamSimple` implementation delegates requests to concrete provider models.
 
 ## Routing
 
-A router has one or more of seven tiers: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. The current pi thinking level selects the corresponding tier. If it is not configured, the router uses the nearest available tier; `off` falls back in order from `minimal` to `max`. A router with only one resolvable tier uses that tier.
+A router has one or more of seven tiers: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. The current Pi thinking level selects the corresponding tier. If it is not configured, the router uses the nearest available tier; `off` falls back in order from `minimal` to `max`. A router with only one resolvable tier uses that tier. During a tool loop the initial tier is retained.
 
-Tier model lists support `@router`, `@router#tier`, and `@router#tier#effort` references. References are expanded at request time with cycle detection. A reference without a tier follows the tier being resolved, so `@hyper` in a `high` tier resolves to `hyper`'s `high` tier. A tier's `effort` overrides the model-level `#effort` on its direct models, but is not propagated through delegation; the referenced router's own tier effort applies.
+Tier model lists support `@router`, `@router#tier`, and `@router#tier#effort` references. References are expanded at request time with cycle detection. References without a tier follow the tier being resolved. A tier's `effort` overrides the model-level `#effort` on its direct models, but is not propagated through delegation; a reference can specify an explicit override.
 
-For a continuation request pi passes the physical model that answered the turn; the router returns it unchanged to preserve the tool loop and the prompt cache. On a retry the router excludes the failed model and picks the next candidate. After an error with no output, the settlement handler omits the failed message from model context and requests a continuation on another candidate. It bounds recovery by the candidates already tried. Candidates without a physical model or without credentials are skipped.
-
-By default models are attempted in configuration order. With a router's `random` option enabled, an eligible model is chosen randomly for each session and resolved tier, stored as router state, and reused across requests. Router state follows the session branch, so a resumed session restores the selection and a fork inherits it.
+By default models are attempted in configuration order. With a router's `random` option enabled, an eligible model is chosen randomly for each session, router, and resolved tier. Subsequent requests reuse that choice. If it fails before streaming, other candidates are tried in random order and a successful fallback becomes the new choice. The chosen model reference includes its effort. Independently loaded extensions in child sessions select separately, even when their session history includes the parent's state.
 
 ## Modules
 
-- `src/index.ts` and `src/index/`: extension setup, session handling, commands, and configuration reload.
-- `src/virtualModel.ts`: virtual model definitions, `route()`, tier/limit resolution, and registration.
-- `src/routing.ts`: thinking level to tier mapping.
+- `src/index.ts` and `src/index/`: extension setup, lifecycle handlers, commands, and persistence wiring.
+- `src/provider.ts` and `src/provider/`: provider registration, model selection, delegation, and fallback.
+- `src/routing.ts`: tier selection and routing decisions.
 - `src/config/`: configuration loading, normalization, merging, references, and tier resolution.
-- `src/commands.ts` and `src/ui.ts`: commands and status formatting.
-- `src/state/`: extension state.
+- `src/commands.ts` and `src/ui.ts`: commands and status display.
+- `src/session/` and `src/state/`: session state, restoration, and snapshots.
+- `src/failureMemory/`: chain-local failure memory and rate-limit cooldowns.
+- `src/logger/`, `src/context/`, and `src/stream.ts`: logging, context helpers, and streaming.
 - `src/types.ts`: shared types.
+
+Pi controls context compaction. The router exposes the smallest known configured or catalog context window across its candidates and never silently truncates delegated messages. Missing or inaccurate catalog limits cannot be guaranteed.
 
 ## State and reliability
 
-Router state (random selections) is stored on the session branch by pi and restored automatically. Debug history and the last routing decision live in extension memory for the session. Credential and model availability are checked before a candidate is returned, so a broken candidate is skipped without failing the turn. Pi's automatic retries use `settings.retry`; after they finish, pre-output fallback can continue to remaining candidates.
+The extension persists `router-state` custom entries via `pi.appendEntry`, including the active router, costs, and random selections. Random selections are restored only when the stored session ID matches the current session. Invalid stored selection values are ignored.
 
-The fallback is a session event handler, so it only exists where the extension is loaded. A child session that inherits the parent's providers without loading the extension has routing but no fallback; load the extension in the child to close that gap.
+The model list is also the fallback chain. Pre-stream failures can trigger the next candidate; failures remembered by the router are skipped according to their failure type. Delegated references expand to their target models before fallback selection. Failure memory is kept in memory per session and chain.

@@ -1,27 +1,80 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerCommands } from "../commands";
 import { createRouterState } from "../state";
+import { updateStatus } from "../ui";
 import { createRouterActions } from "./actions";
-import { handleSessionStart } from "./handlers";
-import { recoverFallback } from "./recovery";
+import { handleModelSelect, handleSessionStart, handleTurnEnd, handleTurnStart } from "./handlers";
 
 export const createExtensionState = createRouterState;
+export { handleSessionStart, handleModelSelect, handleTurnStart, handleTurnEnd };
 
 const routerExtension = (pi: ExtensionAPI): void => {
   const state = createRouterState();
   const actions = createRouterActions(pi, state);
   actions.reloadConfig();
-  registerCommands(pi, state, actions);
-  pi.on("session_start", (event, ctx) => {
-    state.fallbackFailures.clear();
-    state.fallbackPending = false;
-    handleSessionStart(event, ctx, state, actions);
-  });
-  pi.on("agent_before_settle", (event, ctx) => recoverFallback(event, ctx, state));
-  pi.on("agent_settled", () => {
-    state.fallbackFailures.clear();
-    state.fallbackPending = false;
-  });
+
+  registerCommands(
+    pi,
+    {
+      get currentConfig() {
+        return state.currentConfig;
+      },
+      get routerEnabled() {
+        return state.routerEnabled;
+      },
+      set routerEnabled(v) {
+        state.routerEnabled = v;
+      },
+      get selectedRouter() {
+        return state.selectedRouter;
+      },
+      set selectedRouter(v) {
+        state.selectedRouter = v;
+      },
+      get lastDecision() {
+        return state.lastDecision;
+      },
+      get lastNonRouterModel() {
+        return state.lastNonRouterModel;
+      },
+      set lastNonRouterModel(v) {
+        state.lastNonRouterModel = v;
+      },
+      get accumulatedCost() {
+        return state.accumulatedCost;
+      },
+      get debugEnabled() {
+        return state.debugEnabled;
+      },
+      set debugEnabled(v) {
+        state.debugEnabled = v;
+      },
+      get debugHistory() {
+        return state.debugHistory;
+      },
+      set debugHistory(v) {
+        state.debugHistory = v;
+      },
+      get lastConfigWarnings() {
+        return state.lastConfigWarnings;
+      },
+      get failedByChain() {
+        return state.failedByChain;
+      },
+    },
+    {
+      persistState: actions.persistState,
+      updateStatus: (ctx) =>
+        updateStatus(ctx, state.routerEnabled, state.selectedRouter, state.lastDecision),
+      reloadConfig: actions.reloadConfig,
+      ensureValidActiveRouter: actions.ensureValidActiveRouter,
+    },
+  );
+
+  pi.on("session_start", (event, ctx) => handleSessionStart(event, ctx, state, actions));
+  pi.on("turn_start", (event, ctx) => handleTurnStart(event, ctx, state, actions));
+  pi.on("model_select", (event, ctx) => handleModelSelect(event, ctx, state, actions));
+  pi.on("turn_end", (event, ctx) => handleTurnEnd(event, ctx, state, actions));
 };
 
 export default routerExtension;

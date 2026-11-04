@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { mergeTier, resolveAvailableTier } from "../../src/config/tier";
+import {
+  buildRoutingDecisionLive,
+  resolveAvailableTier as resolveAvailableTierFromRouting,
+} from "../../src/routing";
 import { normalizeConfig } from "../../src/config/normalize";
 import { dereferenceTier, resolveAvailableTierLive, resolvableTiers } from "../../src/config/ref";
 import { parseDelegatedRef } from "../../src/config/modelRef";
@@ -150,9 +154,7 @@ describe("위임 models 확장을 검증함", () => {
           glm: { models: ["ollama-cloud/glm-5.3"], medium: { effort: "high" } },
         },
       });
-      expect(dereferenceTier(config.routers, "auto", "medium")?.config.models).toEqual([
-        "ollama-cloud/glm-5.3#off",
-      ]);
+      expect(buildRoutingDecisionLive(config.routers, "auto", "medium", "test").effort).toBe("off");
     });
     it("위임 참조의 #effort가 대상 tier 강제값보다 우선함을 검증함", () => {
       const routers = makeDelegationRouters();
@@ -389,6 +391,9 @@ describe("위임 models 확장을 검증함", () => {
   });
 
   describe("가까운 tier 폴백 공유를 검증함", () => {
+    it("라우팅과 같은 함수를 공유함을 검증함", () => {
+      expect(resolveAvailableTier).toBe(resolveAvailableTierFromRouting);
+    });
     it("structuredClone 유무와 무관하게 동작함을 검증함", () => {
       vi.stubGlobal("structuredClone", undefined);
       try {
@@ -397,6 +402,87 @@ describe("위임 models 확장을 검증함", () => {
       } finally {
         vi.unstubAllGlobals();
       }
+    });
+  });
+
+  describe("라우팅 결정을 검증함", () => {
+    it("buildRoutingDecisionLive가 위임 확장 모델과 강제 effort를 사용함을 검증함", () => {
+      const routers: Record<string, Router> = {
+        auto: { low: { models: ["@deepseek-flash#low#off"] } },
+        "deepseek-flash": { low: { models: ["ollama-cloud/deepseek-v4.1-flash"] } },
+      };
+      const decision = buildRoutingDecisionLive(routers, "auto", "low", "test");
+      expect(decision.targetProvider).toBe("ollama-cloud");
+      expect(decision.targetModelId).toBe("deepseek-v4.1-flash");
+      expect(decision.targetLabel).toBe("ollama-cloud/deepseek-v4.1-flash");
+      expect(decision.effort).toBe("off");
+      expect(decision.reasoning).toContain("[ref: auto#low -> deepseek-flash#low]");
+    });
+    it("중간 tier effort 대신 최종 위임 대상의 tier effort로 라우팅함을 검증함", () => {
+      const { config } = normalizeConfig({
+        routers: {
+          auto: { medium: { models: ["@expensive#medium"] } },
+          expensive: { medium: { models: ["@glm"], effort: "medium" } },
+          glm: { models: ["ollama-cloud/glm-5.3"], medium: { effort: "high" } },
+        },
+      });
+      const decision = buildRoutingDecisionLive(config.routers, "auto", "medium", "test");
+      expect(decision.targetLabel).toBe("ollama-cloud/glm-5.3");
+      expect(decision.effort).toBe("high");
+      expect(decision.reasoning).toContain("[ref: auto#medium -> expensive#medium -> glm#medium]");
+    });
+    it("위임 참조에 effort를 직접 지정하면 대상 tier effort보다 우선함을 검증함", () => {
+      const { config } = normalizeConfig({
+        routers: {
+          auto: { medium: { models: ["@expensive#medium"] } },
+          expensive: { medium: { models: ["@glm#medium#medium"], effort: "low" } },
+          glm: { models: ["ollama-cloud/glm-5.3"], medium: { effort: "high" } },
+        },
+      });
+      const decision = buildRoutingDecisionLive(config.routers, "auto", "medium", "test");
+      expect(decision.effort).toBe("medium");
+    });
+    it("위임을 먼저 나열해도 표시 effort는 상위 tier가 아니라 실제 선택 모델을 따름을 검증함", () => {
+      const { config } = normalizeConfig({
+        routers: {
+          auto: { medium: { models: ["@glm", "openai/direct"], effort: "low" } },
+          glm: { models: ["ollama-cloud/glm-5.3"], medium: { effort: "high" } },
+        },
+      });
+      const decision = buildRoutingDecisionLive(config.routers, "auto", "medium", "test");
+      expect(decision.effort).toBe("high");
+      expect(dereferenceTier(config.routers, "auto", "medium")?.config.models).toEqual([
+        "ollama-cloud/glm-5.3#high",
+        "openai/direct#low",
+      ]);
+    });
+    it("위임 대상에 강제 effort가 없으면 바깥 tier의 effort를 물려받지 않음을 검증함", () => {
+      const { config } = normalizeConfig({
+        routers: {
+          auto: { medium: { models: ["@glm"], effort: "medium" } },
+          glm: { medium: { models: ["ollama-cloud/glm-5.3"] } },
+        },
+      });
+      const decision = buildRoutingDecisionLive(config.routers, "auto", "medium", "test");
+      expect(decision.effort).toBeUndefined();
+    });
+    it("tier 강제 effort가 모델별 #보다 우선해 결정에 반영됨을 검증함", () => {
+      const routers: Record<string, Router> = {
+        auto: { low: { models: ["ollama-cloud/deepseek-v4.1-flash#high"], effort: "off" } },
+      };
+      const decision = buildRoutingDecisionLive(routers, "auto", "low", "test");
+      expect(decision.effort).toBe("off");
+    });
+    it("normalizeConfig 통합으로 위임 models가 로드됨을 검증함", () => {
+      const { config, warnings } = normalizeConfig({
+        routers: {
+          auto: { low: { models: ["@deepseek#low#off"] } },
+          deepseek: { low: { models: ["x/m"] } },
+        },
+      });
+      expect(warnings).toEqual([]);
+      expect(config.routers.auto!.low?.models).toEqual(["@deepseek#low#off"]);
+      expect(dereferenceTier(config.routers, "auto", "low")?.config.models).toEqual(["x/m#off"]);
     });
   });
 });

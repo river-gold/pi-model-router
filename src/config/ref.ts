@@ -14,7 +14,7 @@ export interface ResolvedTier {
   /** 요청한 원본 tier (가까운 tier로 폴백되면 폴백된 tier) */
   tier: RouterTier;
   /** models는 위임을 실시간으로 펼친 최종 모델 목록 */
-  config: RoutedTierConfig & { models: string[] };
+  config: RoutedTierConfig;
   /** 거친 위임 경로 ("cheap#low -> glm-flash#medium") */
   chain: string[];
 }

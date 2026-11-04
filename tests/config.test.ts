@@ -7,8 +7,10 @@ import {
   normalizeTierConfig,
   parseCanonicalModelRef,
   parseConfigFile,
+  resolveDelegatedReasoning,
 } from "../src/config";
 import type { RouterConfig } from "../src/types";
+import { makeFakeModel } from "./helpers";
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   getAgentDir: () => "/mock/agent/dir",
@@ -226,22 +228,16 @@ describe("config.ts 설정은", () => {
       expect(config.routers.p.high?.models).toEqual(["openai/gpt-4o"]);
       expect(warnings.some((x) => x.includes('router-level "models"'))).toBe(true);
     });
-    it("모든 tier 키를 보존한다", () => {
-      const { config, warnings } = normalizeConfig({
-        routers: {
-          full: {
-            max: { models: ["openai/gpt-4o"] },
-            xhigh: { models: ["openai/gpt-4o"] },
-            minimal: { models: ["openai/gpt-4o"] },
-            off: { models: ["openai/gpt-4o"] },
-          },
-        },
-      });
-      expect(warnings).toEqual([]);
-      expect(config.routers.full.max?.models).toEqual(["openai/gpt-4o"]);
-      expect(config.routers.full.xhigh?.models).toEqual(["openai/gpt-4o"]);
-      expect(config.routers.full.minimal?.models).toEqual(["openai/gpt-4o"]);
-      expect(config.routers.full.off?.models).toEqual(["openai/gpt-4o"]);
+  });
+  describe("resolveDelegatedReasoning 위임 추론은", () => {
+    it("값을 resolve한다", () => {
+      expect(resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "off")).toBeUndefined();
+      expect(resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "high")).toBe("high");
+    });
+    it("유효하지 않은 thinking은 undefined를 반환한다", () => {
+      expect(
+        resolveDelegatedReasoning(makeFakeModel({ reasoning: true }), "turbo"),
+      ).toBeUndefined();
     });
   });
 });
